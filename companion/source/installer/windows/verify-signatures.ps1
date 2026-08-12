@@ -3,6 +3,7 @@ $Build = Join-Path $PSScriptRoot 'build'
 $Files = @(
     (Join-Path $Build 'payload\KeystoneLens.exe'),
     (Join-Path $Build 'payload\KeystoneLens-Uninstall.exe'),
+    (Join-Path $Build 'payload\KeystoneLens-WoW-Watcher.exe'),
     (Join-Path $Build 'KeystoneLens-Setup.exe')
 )
 foreach ($file in $Files) {
