@@ -29,16 +29,17 @@ jobs:
         with:
           python-version: '3.13.5'
 
-      - name: Apply verified source update
+      - name: Apply verified source update when staged
         shell: bash
         run: |
           set -euo pipefail
-          test -f .release-update/part-00
-          cat .release-update/part-* > /tmp/keystonelens-update.b64
-          base64 -d /tmp/keystonelens-update.b64 > /tmp/keystonelens-update.tar.gz
-          echo '25391c9f8fe86238069b98ac9e6fd3813c8526a6c188ae0a91bf6bb4bb640eb8  /tmp/keystonelens-update.tar.gz' | sha256sum -c -
-          tar -xzf /tmp/keystonelens-update.tar.gz -C .
-          rm -rf .release-update
+          if test -f .release-update/part-00; then
+            cat .release-update/part-* > /tmp/keystonelens-update.b64
+            base64 -d /tmp/keystonelens-update.b64 > /tmp/keystonelens-update.tar.gz
+            echo '25391c9f8fe86238069b98ac9e6fd3813c8526a6c188ae0a91bf6bb4bb640eb8  /tmp/keystonelens-update.tar.gz' | sha256sum -c -
+            tar -xzf /tmp/keystonelens-update.tar.gz -C .
+          fi
+          rm -rf .release-update .keystonelens-publish
 
       - name: Run installer contract tests
         shell: bash
@@ -107,14 +108,15 @@ jobs:
           set -euo pipefail
           rm -rf companion/source/installer/windows/build
           rm -f companion/source/installer/windows/bootstrap/payload.zip
-          find . -type f \
-            ! -path './.git/*' \
-            ! -path './.github/*' \
-            ! -path './.release-update/*' \
-            ! -name 'SHA256SUMS.txt' \
-            -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
-          grep 'executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' SHA256SUMS.txt
-          grep 'companion/KeystoneLens-Source-0.12.7.zip' SHA256SUMS.txt
+          find companion/source -type d -name '__pycache__' -prune -exec rm -rf '{}' +
+          rm -rf companion/source/.pytest_cache
+          find README.md addon companion executable -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          echo 'b5dbf55a39ed277e0e00c57b8753ded9841135e254c9136601fb227d508ca643  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | grep -Fxf - SHA256SUMS.txt
+          echo 'b110143724d1f4b2b8309db33f582396f7bb68476ab0273f155329553a23dc88  companion/KeystoneLens-Source-0.12.7.zip' | grep -Fxf - SHA256SUMS.txt
+          if grep -Eq '__pycache__|\.pytest_cache|\.keystonelens-publish|\.release-update' SHA256SUMS.txt; then
+            echo 'Unexpected temporary path in checksum manifest.' >&2
+            exit 1
+          fi
 
       - name: Commit rebuilt 0.12.7 artifacts
         shell: bash
