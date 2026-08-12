@@ -1,0 +1,57 @@
+
+def test_windows_launcher_and_uninstaller_are_gui_subsystem_and_sanitized():
+    launcher = _text(ROOT / "installer" / "windows" / "launcher" / "main.go")
+    build = _text(WIN_BUILD)
+    assert "-H=windowsgui" in build
+    assert "PYTHONPATH" in launcher and "PYTHONHOME" in launcher and "PYTHONUSERBASE" in launcher
+    assert "PYTHONNOUSERSITE=1" in launcher
+    assert "Local\\KeystoneLens.Companion.Singleton" in launcher
+
+
+def test_uninstaller_uses_exact_path_process_shutdown_not_name_only_taskkill():
+    uninstall = _text(UNINSTALLER)
+    assert "terminateExactExecutable" in uninstall
+    assert "QueryFullProcessImageNameW" in uninstall
+    assert "strings.EqualFold(filepath.Clean(actualAbs), filepath.Clean(target))" in uninstall
+    assert "taskkill" not in uninstall.lower()
+
+
+def test_installer_registers_per_user_repair_and_uninstall_metadata():
+    ps1 = _text(SETUP_PS1)
+    assert r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\KeystoneLens" in ps1
+    assert "QuietUninstallString" in ps1
+    assert "ModifyPath" in ps1
+    assert "DisplayVersion" in ps1
+    assert "InstallLocation" in ps1
+    assert "InstallAllUsers=0" in ps1
+
+
+def test_release_source_archive_excludes_generated_payload_and_binaries_by_contract():
+    release = _text(RELEASE_BUILD)
+    assert "bootstrap/payload.zip" in release
+    assert "path.suffix in {'.pyc', '.pyo', '.exe', '.zip'}" in release
+    assert "pytest -q" in release
+    assert "compileall -q" in release
+
+
+def test_signing_pipeline_signs_embedded_payload_before_setup():
+    sign = _text(SIGN_SCRIPT)
+    launcher_at = sign.index("Invoke-Sign $Launcher")
+    uninstaller_at = sign.index("Invoke-Sign $Uninstaller")
+    watcher_at = sign.index("Invoke-Sign $WoWWatcher")
+    payload_at = sign.index("make_payload_zip.py")
+    setup_at = sign.rindex("Invoke-Sign $Setup")
+    assert launcher_at < payload_at
+    assert uninstaller_at < payload_at
+    assert watcher_at < payload_at < setup_at
+    assert "signtool.exe verify /pa /all" in sign
+
+
+def test_release_notes_document_installer_ux_and_target_runtime_gate():
+    notes = _text(RELEASE_NOTES)
+    assert "start when World of Warcraft Retail starts" in notes
+    assert "progress" in notes.lower()
+    assert "Cancel" in notes
+    assert "install.log" in notes
+    assert "WINDOWS/WOW RUNTIME TEST REQUIRED" in notes
+    assert "Authenticode" in notes
