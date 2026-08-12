@@ -23,6 +23,7 @@ pytest >/dev/null
 python3 -m compileall -q app/keystonelens_companion
 python3 "$ROOT/installer/windows/verify_pe_resources.py" --exe "$ROOT/installer/windows/build/payload/KeystoneLens.exe" --version 0.12.7.0 --description "KeystoneLens Companion" >/dev/null
 python3 "$ROOT/installer/windows/verify_pe_resources.py" --exe "$ROOT/installer/windows/build/payload/KeystoneLens-Uninstall.exe" --version 0.12.7.0 --description "KeystoneLens Companion Uninstaller" >/dev/null
+python3 "$ROOT/installer/windows/verify_pe_resources.py" --exe "$ROOT/installer/windows/build/payload/KeystoneLens-WoW-Watcher.exe" --version 0.12.7.0 --description "KeystoneLens WoW Launch Watcher" >/dev/null
 python3 "$ROOT/installer/windows/verify_pe_resources.py" --exe "$SETUP_SRC" --version 0.12.7.0 --description "KeystoneLens Companion Setup" >/dev/null
 if grep -Rqi 'pyzbar' "$ROOT/app/keystonelens_companion" "$ROOT/app/requirements.txt" "$ROOT/installer/windows/requirements-runtime.txt" "$ROOT/installer/windows/requirements-runtime.lock"; then
   echo "ERROR: obsolete pyzbar runtime reference remains" >&2
