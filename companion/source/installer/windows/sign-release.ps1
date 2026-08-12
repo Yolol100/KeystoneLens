@@ -11,11 +11,12 @@ $Payload = Join-Path $Build 'payload'
 $Setup = Join-Path $Build 'KeystoneLens-Setup.exe'
 $Launcher = Join-Path $Payload 'KeystoneLens.exe'
 $Uninstaller = Join-Path $Payload 'KeystoneLens-Uninstall.exe'
+$WoWWatcher = Join-Path $Payload 'KeystoneLens-WoW-Watcher.exe'
 
 if (-not (Get-Command signtool.exe -ErrorAction SilentlyContinue)) { throw 'signtool.exe is required from the Windows SDK.' }
 if (-not (Get-Command go.exe -ErrorAction SilentlyContinue)) { throw 'Go is required to rebuild the signed bootstrap.' }
 if (-not (Get-Command python.exe -ErrorAction SilentlyContinue)) { throw 'Python is required for deterministic packaging/resource embedding.' }
-if (-not (Test-Path $Launcher) -or -not (Test-Path $Uninstaller)) { throw 'Run installer/windows/build.sh before signing.' }
+if (-not (Test-Path $Launcher) -or -not (Test-Path $Uninstaller) -or -not (Test-Path $WoWWatcher)) { throw 'Run installer/windows/build.sh before signing.' }
 if (-not $CertThumbprint -and -not $PfxPath) { throw 'Provide -CertThumbprint or -PfxPath.' }
 
 function Invoke-Sign([string]$Path) {
@@ -34,6 +35,7 @@ function Invoke-Sign([string]$Path) {
 # The binaries inside the embedded payload must be signed before Setup itself.
 Invoke-Sign $Launcher
 Invoke-Sign $Uninstaller
+Invoke-Sign $WoWWatcher
 & python.exe (Join-Path $PSScriptRoot 'make_payload_zip.py') --root $Payload --out (Join-Path $Build 'payload.zip')
 if ($LASTEXITCODE -ne 0) { throw 'Could not rebuild signed payload.zip.' }
 Copy-Item (Join-Path $Build 'payload.zip') (Join-Path $PSScriptRoot 'bootstrap\payload.zip') -Force
@@ -45,7 +47,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not rebuild Setup with signed payload.' 
 if ($LASTEXITCODE -ne 0) { throw 'Could not embed Setup resources.' }
 Invoke-Sign $Setup
 
-foreach ($file in @($Launcher,$Uninstaller,$Setup)) {
+foreach ($file in @($Launcher,$Uninstaller,$WoWWatcher,$Setup)) {
     & signtool.exe verify /pa /all $file
     if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $file" }
 }
