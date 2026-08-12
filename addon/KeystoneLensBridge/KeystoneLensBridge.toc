@@ -1,0 +1,17 @@
+## Interface: 120007, 120100
+## Title: |cff5da8ffKeystoneLens Bridge|r
+## Notes: Mythic+ Group Finder bridge for the KeystoneLens Companion, with cached WCL lines below Raider.IO tooltips.
+## Author: KeystoneLens (transport fork based on ApplicantScout by Antrakt)
+## Version: 0.12.7
+## IconTexture: Interface\AddOns\KeystoneLensBridge\Media\KeystoneLensIcon
+## SavedVariables: KeystoneLensBridgeDB
+## OptionalDeps: RaiderIO, KeystoneLensCompanionData, LibKeystone
+## DefaultState: enabled
+## X-Category: Data Export
+## X-License: MIT; bundled qrencode.lua is BSD-3-Clause
+
+Libs\qrencode.lua
+Core\CapturePolicy.lua
+Core\ScreenshotController.lua
+Core\Transport.lua
+Core\Tooltip.lua
