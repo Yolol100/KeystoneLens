@@ -1,0 +1,5 @@
+# Direct runtime requirements for development/readability.
+# The Windows installer uses requirements-runtime.lock with --require-hashes.
+requests==2.34.2
+Pillow==12.3.0
+zxing-cpp==3.1.1
