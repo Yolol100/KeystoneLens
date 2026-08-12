@@ -19,11 +19,14 @@ GOFLAGS=(-trimpath -ldflags=-H=windowsgui\ -s\ -w\ -buildid=)
 # vetted later because its //go:embed payload.zip is generated below.
 go vet "$WIN/launcher/main.go"
 go vet "$WIN/uninstall/main.go"
+go vet "$WIN/wowwatcher/main.go"
 
 go build "${GOFLAGS[@]}" -o "$PAYLOAD/KeystoneLens.exe" "$WIN/launcher/main.go"
 go build "${GOFLAGS[@]}" -o "$PAYLOAD/KeystoneLens-Uninstall.exe" "$WIN/uninstall/main.go"
+go build "${GOFLAGS[@]}" -o "$PAYLOAD/KeystoneLens-WoW-Watcher.exe" "$WIN/wowwatcher/main.go"
 python3 "$WIN/embed_pe_resources.py" --exe "$PAYLOAD/KeystoneLens.exe" --ico "$ROOT/app/KeystoneLens.ico" --version 0.12.7 --description "KeystoneLens Companion" --original-filename "KeystoneLens.exe"
 python3 "$WIN/embed_pe_resources.py" --exe "$PAYLOAD/KeystoneLens-Uninstall.exe" --ico "$ROOT/app/KeystoneLens.ico" --version 0.12.7 --description "KeystoneLens Companion Uninstaller" --original-filename "KeystoneLens-Uninstall.exe"
+python3 "$WIN/embed_pe_resources.py" --exe "$PAYLOAD/KeystoneLens-WoW-Watcher.exe" --ico "$ROOT/app/KeystoneLens.ico" --version 0.12.7 --description "KeystoneLens WoW Launch Watcher" --original-filename "KeystoneLens-WoW-Watcher.exe"
 
 cp "$ROOT/app/KeystoneLens.ico" "$PAYLOAD/KeystoneLens.ico"
 cp "$WIN/requirements-runtime.txt" "$PAYLOAD/requirements-runtime.txt"
@@ -41,8 +44,9 @@ go build "${GOFLAGS[@]}" -o "$BUILD/KeystoneLens-Setup.exe" "$WIN/bootstrap/main
 python3 "$WIN/embed_pe_resources.py" --exe "$BUILD/KeystoneLens-Setup.exe" --ico "$ROOT/app/KeystoneLens.ico" --version 0.12.7 --description "KeystoneLens Companion Setup" --original-filename "KeystoneLens-Setup.exe"
 python3 "$WIN/verify_pe_resources.py" --exe "$PAYLOAD/KeystoneLens.exe" --version 0.12.7.0 --description "KeystoneLens Companion"
 python3 "$WIN/verify_pe_resources.py" --exe "$PAYLOAD/KeystoneLens-Uninstall.exe" --version 0.12.7.0 --description "KeystoneLens Companion Uninstaller"
+python3 "$WIN/verify_pe_resources.py" --exe "$PAYLOAD/KeystoneLens-WoW-Watcher.exe" --version 0.12.7.0 --description "KeystoneLens WoW Launch Watcher"
 python3 "$WIN/verify_pe_resources.py" --exe "$BUILD/KeystoneLens-Setup.exe" --version 0.12.7.0 --description "KeystoneLens Companion Setup"
 cp "$BUILD/payload.zip" "$WIN/bootstrap/payload.zip"
 
-file "$BUILD/KeystoneLens-Setup.exe" "$PAYLOAD/KeystoneLens.exe" "$PAYLOAD/KeystoneLens-Uninstall.exe"
-sha256sum "$BUILD/KeystoneLens-Setup.exe" "$PAYLOAD/KeystoneLens.exe" "$PAYLOAD/KeystoneLens-Uninstall.exe"
+file "$BUILD/KeystoneLens-Setup.exe" "$PAYLOAD/KeystoneLens.exe" "$PAYLOAD/KeystoneLens-Uninstall.exe" "$PAYLOAD/KeystoneLens-WoW-Watcher.exe"
+sha256sum "$BUILD/KeystoneLens-Setup.exe" "$PAYLOAD/KeystoneLens.exe" "$PAYLOAD/KeystoneLens-Uninstall.exe" "$PAYLOAD/KeystoneLens-WoW-Watcher.exe"
