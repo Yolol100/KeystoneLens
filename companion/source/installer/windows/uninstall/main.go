@@ -327,13 +327,15 @@ func main() {
 	installerCache := filepath.Join(local, "Programs", "KeystoneLensInstaller")
 	userData := filepath.Join(local, "KeystoneLens")
 
-	// Stop only this installation's launcher/dedicated Python runtime. The launcher
-	// uses a kill-on-close Job Object in 0.12.2+, while the Python path check also
-	// cleans up an older pre-job-object Companion during an upgrade/uninstall.
+	// Stop only processes that belong to this installation. The launcher owns its
+	// Python child through a Job Object; the WoW watcher is a separate lightweight
+	// helper that must also be stopped before the installation directory is removed.
 	terminateExactExecutable(filepath.Join(root, "KeystoneLens.exe"))
+	terminateExactExecutable(filepath.Join(root, "KeystoneLens-WoW-Watcher.exe"))
 	terminateExactExecutable(pythonW)
 
 	_ = os.Remove(filepath.Join(startup, "KeystoneLens.lnk"))
+	_ = os.Remove(filepath.Join(startup, "KeystoneLens-WoW-Watcher.lnk"))
 	_ = os.Remove(filepath.Join(programs, "KeystoneLens.lnk"))
 	if desktop != "" && filepath.IsAbs(desktop) {
 		_ = os.Remove(filepath.Join(desktop, "KeystoneLens.lnk"))
