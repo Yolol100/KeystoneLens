@@ -1,0 +1,152 @@
+name: KeystoneLens verified direct publish
+
+on:
+  push:
+    paths:
+      - '.github/workflows/keystonelens-direct-publish.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Reconstruct, test, build and publish KeystoneLens 0.12.7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+
+          cat .keystonelens-publish/installer00.ps1part .keystonelens-publish/installer01.ps1part .keystonelens-publish/installer02.ps1part .keystonelens-publish/installer03.ps1part > companion/source/installer/windows/bootstrap/installer.ps1
+          cat .keystonelens-publish/test00.pypart .keystonelens-publish/test01.pypart > companion/source/app/tests/test_release_contract.py
+
+          test "$(git hash-object companion/source/installer/windows/bootstrap/installer.ps1)" = "f105a353d79952397a916707347630b267c6aa87"
+          test "$(git hash-object companion/source/app/tests/test_release_contract.py)" = "702d651b1789452dabada896160518688dbb63cc"
+          test "$(git hash-object companion/source/installer/windows/bootstrap/main.go)" = "77181635eca6769c24cf0a5e18eb0614b36d505b"
+          test "$(git hash-object companion/source/installer/windows/build.sh)" = "fa7f82f5967cb256430383e0682f366838c89819"
+          test "$(git hash-object companion/source/installer/windows/sign-release.ps1)" = "ad5e7aa05b00fc7911912cff05dc057093db2ea8"
+          test "$(git hash-object companion/source/installer/windows/uninstall/main.go)" = "a03f9a7253e1e8d45a2b5e707267f1b98340e46e"
+          test "$(git hash-object companion/source/installer/windows/verify-signatures.ps1)" = "31d08934f897f2cd8c626170d7bfad44b64bd925"
+          test "$(git hash-object companion/source/installer/windows/wowwatcher/main.go)" = "71258320a82cb19f15fbcbe92ac5e3326a15718b"
+          test "$(git hash-object companion/source/scripts/BUILD-RELEASE.sh)" = "12fa60f6dd4abdfacc63c323d32934c0a9a01b09"
+          echo "1979233b978a27d8dda111a85ea2ec906da24bb35dfc4da27739c1822a9cbcb5  companion/source/installer/windows/bootstrap/installer.ps1" | sha256sum --check --strict
+          echo "8360a4a50a2f957d960859dcc25fcdb6ef984b29bdc81e26277aa08c8ed43b75  companion/source/app/tests/test_release_contract.py" | sha256sum --check --strict
+
+          cat >> companion/source/README-NL.md <<'EOF'
+
+## Windows Setup 0.12.7
+
+De Windows-installer gebruikt een KeystoneLens WPF-flow met keuze vooraf, zichtbare voortgang, details, veilige cancelmomenten, installatielogging en een duidelijk succes-/foutscherm. Startgedrag is exclusief: handmatig, met Windows, of wanneer een echte World of Warcraft Retail (`_retail_\\Wow.exe`) sessie start. Een desktopsnelkoppeling is opt-in; starten na installatie staat standaard aan. De WoW-watcher leest geen procesgeheugen en automatiseert geen gameplay.
+
+De exacte native Windows 10/11-installatie, Startup-folderintegratie, SmartScreen/Authenticode en echte WoW Retail-detectie blijven doelruntimechecks. Formele status: `WINDOWS/WOW RUNTIME TEST REQUIRED`.
+EOF
+
+          cat >> companion/source/docs/CHANGELOG.md <<'EOF'
+
+### 0.12.7 — Windows installer UX hardening
+- branded decision → progress → result installerflow
+- mutually exclusive Manual / Windows / WoW Retail launch modes
+- opt-in desktop shortcut and launch-after-install
+- real runtime download byte progress, expandable details and bounded install.log
+- safe cancellation and duplicate bootstrap-error suppression
+- low-privilege exact-path WoW Retail launch watcher
+- watcher included in build, PE metadata, signing verification and uninstall cleanup
+- strict XAML namespace regression plus expanded installer contract tests
+EOF
+
+          cat >> companion/source/docs/RELEASE-NOTES-0.12.7.md <<'EOF'
+
+## Windows installer experience
+0.12.7 now includes a KeystoneLens-styled installer with pre-install choices, progress/details, cancel support, install logging and a dedicated result screen. Users can choose manual start, start with Windows, or start when World of Warcraft Retail starts. The WoW mode uses a lightweight watcher that validates a real `_retail_\\Wow.exe` path and launches the sibling Companion only; it does not read game memory, inject code or automate input.
+
+The desktop shortcut is opt-in and launch-after-install is enabled by default. Build/sign/uninstall contracts include the watcher. Native Windows/WoW acceptance and Authenticode signing remain external gates; status remains `WINDOWS/WOW RUNTIME TEST REQUIRED`.
+EOF
+
+          cat >> companion/source/docs/AUDIT-REPORT.md <<'EOF'
+
+## Installer UX implementation addendum
+Confirmed in source/build scope: branded WPF decision/progress/success/error flow, real download byte progress, Details panel, bounded install.log, safe cancel points, mutually exclusive launch modes, opt-in desktop shortcut, launch-after-install, exact-path WoW Retail watcher, watcher build/sign/uninstall coverage, bootstrap result marker and strict XAML namespace validation. Regression suite expanded to 104 tests in the implementation workspace.
+
+Target-runtime boundary remains unchanged: a real Windows 10/11 install/update/uninstall plus real WoW Retail launch observation and Authenticode/SmartScreen validation are still required before a native-runtime GO claim.
+EOF
+
+          cat >> companion/source/docs/SIGNING-REQUIRED.md <<'EOF'
+
+The signing pipeline also signs and verifies `KeystoneLens-WoW-Watcher.exe` before rebuilding the embedded Setup payload. Public release signing still requires the publisher's real Authenticode certificate and timestamping credentials.
+EOF
+
+          cat >> companion/source/docs/TESTSCENARIOS.md <<'EOF'
+
+## Installer UX / WoW watcher target-runtime scenarios
+1. Fresh Windows 10/11 install: decision screen, icon, progress, Details, Cancel and success screen render correctly.
+2. Verify Manual / Start with Windows / Start with WoW Retail are mutually exclusive and persist across repair/update.
+3. Verify desktop shortcut is opt-in and launch-after-install behaves as selected.
+4. Exercise cancel during download/dependency installation and during the non-cancelable atomic apply boundary.
+5. Verify install.log rotation and Copy diagnostics on a forced failure.
+6. WoW mode: start a real `_retail_\\Wow.exe`, confirm one Companion launch per new WoW process and correct behavior after a WoW restart.
+7. Confirm Classic/non-retail Wow.exe paths do not trigger the Companion.
+8. Verify uninstall stops/removes the watcher and both Startup shortcuts.
+9. Verify signed public binaries under SmartScreen once the real Authenticode certificate is available.
+EOF
+
+          cat >> README.md <<'EOF'
+
+## Windows installer
+The 0.12.7 Companion Setup includes a branded progress UI, safe cancellation, diagnostics, optional desktop shortcut, launch-after-install, and three exclusive start modes: manual, with Windows, or with World of Warcraft Retail. Native Windows/WoW acceptance is still required before a full runtime release claim.
+EOF
+          cat >> companion/README.md <<'EOF'
+
+The 0.12.7 source includes the branded Windows Setup and the low-privilege WoW Retail launch watcher. See `source/docs/RELEASE-NOTES-0.12.7.md` and `source/docs/TESTSCENARIOS.md`.
+EOF
+          cat >> executable/README.md <<'EOF'
+
+`KeystoneLens-Setup-v0.12.7-Windows-x64.exe` is rebuilt from the repository source during the verified publish job. Public distribution still requires real Authenticode signing and native Windows acceptance.
+EOF
+
+          curl --fail --location --silent --show-error https://go.dev/dl/go1.23.2.linux-amd64.tar.gz --output /tmp/go1.23.2.linux-amd64.tar.gz
+          echo "542d3c1705f1c6a1c5a80d5dc62e2e45171af291e755d591c5e6531ef63b454e  /tmp/go1.23.2.linux-amd64.tar.gz" | sha256sum --check --strict
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf /tmp/go1.23.2.linux-amd64.tar.gz
+          export PATH="/usr/local/go/bin:${PATH}"
+          go version
+
+          python3 -m venv /tmp/kl-venv
+          . /tmp/kl-venv/bin/activate
+          python -m pip install --disable-pip-version-check --quiet pytest==9.0.2
+
+          rm -rf companion/source/addon
+          mkdir -p companion/source/addon
+          cp -a addon/KeystoneLensBridge companion/source/addon/
+          chmod +x companion/source/installer/windows/build.sh companion/source/scripts/BUILD-RELEASE.sh
+
+          cd companion/source
+          pytest -q
+          python3 -m compileall -q app/keystonelens_companion
+          ./scripts/BUILD-RELEASE.sh
+          echo "85917b726849caa2f2930d10b6fbe761c33390b65c83493a043afb2ee3e19038  release/KeystoneLens-Setup-0.12.7.exe" | sha256sum --check --strict
+          echo "ce3da2e9c18b16deb735ef5be5a164930c9a0eb191753ab83ea4d939319c7ccc  release/KeystoneLensBridge-0.12.7-CurseForge.zip" | sha256sum --check --strict
+
+          cp release/KeystoneLens-Setup-0.12.7.exe ../../executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
+          cp release/KeystoneLens-Source-0.12.7.zip ../../companion/KeystoneLens-Source-0.12.7.zip
+          cp release/KeystoneLensBridge-0.12.7-CurseForge.zip ../../addon/KeystoneLensBridge-0.12.7-CurseForge.zip
+          cp docs/AUDIT-REPORT.md ../../companion/KeystoneLens-Audit-0.12.7.md
+
+          cd ../..
+          rm -rf companion/source/addon
+          rm -rf .keystonelens-publish
+          rm -f .github/workflows/keystonelens-one-shot.yml .github/workflows/keystonelens-direct-publish.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+
+          find README.md addon companion executable -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Improve KeystoneLens 0.12.7 installer experience'
+          git push origin HEAD:main
