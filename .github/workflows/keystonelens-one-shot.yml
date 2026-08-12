@@ -30,10 +30,12 @@ jobs:
           cat \
             .keystonelens-publish/part00 \
             .keystonelens-publish/part01 \
-            .keystonelens-publish/part02_03 \
+            .keystonelens-publish/part02 \
+            .keystonelens-publish/part03 \
             .keystonelens-publish/part04_05 \
             .keystonelens-publish/part06_07 \
             > /tmp/keystonelens-patch.b64
+          test "$(wc -c < /tmp/keystonelens-patch.b64)" -eq 61924
           base64 --decode /tmp/keystonelens-patch.b64 > /tmp/keystonelens-patch.tar.gz
           echo "${EXPECTED_PATCH_SHA256}  /tmp/keystonelens-patch.tar.gz" | sha256sum --check --strict
           tar -xzf /tmp/keystonelens-patch.tar.gz -C .
