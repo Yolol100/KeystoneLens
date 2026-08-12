@@ -1,0 +1,87 @@
+name: KeystoneLens one-shot publish
+
+on:
+  push:
+    paths:
+      - '.github/workflows/keystonelens-one-shot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Build, verify and publish exact 0.12.7 artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_PATCH_SHA256: 43045f7b712355699ad3902f1d6c03e849c7de724d4f355922b82e052f72a0df
+          EXPECTED_GO_SHA256: 542d3c1705f1c6a1c5a80d5dc62e2e45171af291e755d591c5e6531ef63b454e
+          EXPECTED_SETUP_SHA256: 85917b726849caa2f2930d10b6fbe761c33390b65c83493a043afb2ee3e19038
+          EXPECTED_SOURCE_SHA256: f3a072839536848c576eec4905d053d158190924356425297548a89b1f176cd4
+          EXPECTED_ADDON_SHA256: ce3da2e9c18b16deb735ef5be5a164930c9a0eb191753ab83ea4d939319c7ccc
+        run: |
+          set -euo pipefail
+
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+
+          cat \
+            .keystonelens-publish/part00 \
+            .keystonelens-publish/part01 \
+            .keystonelens-publish/part02_03 \
+            .keystonelens-publish/part04_05 \
+            .keystonelens-publish/part06_07 \
+            > /tmp/keystonelens-patch.b64
+          base64 --decode /tmp/keystonelens-patch.b64 > /tmp/keystonelens-patch.tar.gz
+          echo "${EXPECTED_PATCH_SHA256}  /tmp/keystonelens-patch.tar.gz" | sha256sum --check --strict
+          tar -xzf /tmp/keystonelens-patch.tar.gz -C .
+
+          curl --fail --location --silent --show-error \
+            https://go.dev/dl/go1.23.2.linux-amd64.tar.gz \
+            --output /tmp/go1.23.2.linux-amd64.tar.gz
+          echo "${EXPECTED_GO_SHA256}  /tmp/go1.23.2.linux-amd64.tar.gz" | sha256sum --check --strict
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf /tmp/go1.23.2.linux-amd64.tar.gz
+          export PATH="/usr/local/go/bin:${PATH}"
+          go version
+
+          python3 -m venv /tmp/kl-venv
+          . /tmp/kl-venv/bin/activate
+          python -m pip install --disable-pip-version-check --quiet pytest==9.0.2
+
+          rm -rf companion/source/addon
+          mkdir -p companion/source/addon
+          cp -a addon/KeystoneLensBridge companion/source/addon/
+          chmod +x companion/source/installer/windows/build.sh companion/source/scripts/BUILD-RELEASE.sh
+
+          cd companion/source
+          pytest -q
+          python3 -m compileall -q app/keystonelens_companion
+          ./scripts/BUILD-RELEASE.sh
+
+          echo "${EXPECTED_SETUP_SHA256}  release/KeystoneLens-Setup-0.12.7.exe" | sha256sum --check --strict
+          echo "${EXPECTED_SOURCE_SHA256}  release/KeystoneLens-Source-0.12.7.zip" | sha256sum --check --strict
+          echo "${EXPECTED_ADDON_SHA256}  release/KeystoneLensBridge-0.12.7-CurseForge.zip" | sha256sum --check --strict
+
+          cp release/KeystoneLens-Setup-0.12.7.exe ../../executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
+          cp release/KeystoneLens-Source-0.12.7.zip ../../companion/KeystoneLens-Source-0.12.7.zip
+          cp release/KeystoneLensBridge-0.12.7-CurseForge.zip ../../addon/KeystoneLensBridge-0.12.7-CurseForge.zip
+          cp docs/AUDIT-REPORT.md ../../companion/KeystoneLens-Audit-0.12.7.md
+
+          cd ../..
+          rm -rf companion/source/addon
+          rm -rf .keystonelens-publish
+
+          find README.md addon companion executable -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS.txt
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git status --short
+          git diff --cached --check
+          git commit -m 'Improve KeystoneLens 0.12.7 installer experience'
+          git push origin HEAD:main
