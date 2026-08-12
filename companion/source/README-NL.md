@@ -62,11 +62,11 @@ Het kruisje in de Windows Companion stopt de lokale screenshotwatcher, Raider.IO
 ### Companion
 
 1. Start `KeystoneLens-Setup.exe`.
-2. Volg de installatievoortgang. De installer haalt de benodigde Windows-runtime en Python-packages automatisch op.
-   De runtime wordt per gebruiker in een eigen KeystoneLens-runtimepad geplaatst; packages worden met vastgezette SHA-256-hashes gecontroleerd.
-3. Kies na afloop eventueel `Start KeystoneLens`, `Create desktop shortcut` en `Start with Windows`. Autostart staat standaard uit.
-4. Open Settings en kies `_retail_\Screenshots`.
-5. Vul voor de volledige score optioneel je Warcraft Logs Client ID/Secret in.
+2. Kies vóór installatie hoe de Companion moet starten: handmatig, met Windows, of wanneer een echte WoW Retail `...\_retail_\Wow.exe` start. Een desktopsnelkoppeling is optioneel en staat standaard uit.
+3. Volg de KeystoneLens-installatievoortgang. De installer toont de actieve stap, echte downloadvoortgang voor de Python-runtime en een inklapbaar Details-overzicht. De runtime wordt per gebruiker in een eigen KeystoneLens-runtimepad geplaatst; packages worden met vastgezette SHA-256-hashes gecontroleerd.
+4. Na een geslaagde installatie kan KeystoneLens direct worden geopend. De Startmenu-snelkoppeling en Windows repair/uninstall-registratie worden automatisch ingericht.
+5. Open Settings en kies `_retail_\Screenshots`.
+6. Vul voor de volledige score optioneel je Warcraft Logs Client ID/Secret in.
 
 ### WoW addon
 

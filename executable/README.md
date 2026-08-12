@@ -4,6 +4,7 @@ Installer voor KeystoneLens 0.12.7.
 
 Bestandsnaam: `KeystoneLens-Setup-v0.12.7-Windows-x64.exe`
 
-SHA-256: `b15ddd92e18845c5f60ec7f0e00b9e590839498abea2da4ba94619b1dd7881e7`
+Verwachte SHA-256 van de gecontroleerde build:
+`b5dbf55a39ed277e0e00c57b8753ded9841135e254c9136601fb227d508ca643`
 
-Deze repositorymap is voorbereid voor het geteste Windows-installatiebestand. De huidige GitHub-koppeling kan geen lokaal binair `.exe`-bestand uploaden; alleen de binaire upload zelf moet daarom nog handmatig worden toegevoegd.
+De installer bevat de branded setupflow, progress/details, desktopkeuze, Windows-autostart, optionele WoW Retail-startmodus, repair en uninstall. Authenticode signing blijft een aparte externe releasepoort totdat een echte publisher certificate/private key beschikbaar is.

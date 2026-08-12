@@ -76,3 +76,19 @@
 - Start a second Companion instance and verify the existing per-user instance remains authoritative.
 - Attempt overlapping Setup/Repair/Uninstall and verify the maintenance mutex rejects the second destructive operation.
 - Repair an installed copy using the cached Setup executable and verify Setup never copies the repair executable onto itself.
+
+## Windows Setup UX / launch modes
+
+1. Fresh install: Setup starts on a KeystoneLens decision page with exactly one of `Start manually`, `Start with Windows`, or `Start when World of Warcraft Retail starts` selectable. Manual is the fresh default.
+2. Fresh install: `Create desktop shortcut` is off by default; `Launch KeystoneLens after installation` is on by default.
+3. During Python runtime download, verify the status shows transferred bytes/total bytes when the server provides Content-Length and the shared progress bar never restarts.
+4. Expand `Details` and verify preparation, runtime verification, pinned dependency names, staged verification, Windows integration and selected launch behavior are visible. No WCL credentials or other secrets may be logged.
+5. Cancel during download or dependency installation: the new application tree is not committed. Cancel during the atomic apply phase is disabled until the verified swap completes.
+6. Select `Start with Windows`: only `Startup\KeystoneLens.lnk` is present for KeystoneLens launch behavior.
+7. Select `Start when World of Warcraft Retail starts`: only `Startup\KeystoneLens-WoW-Watcher.lnk` is present; the watcher starts the Companion for a new `Wow.exe` whose full path contains a `_retail_` path component.
+8. Launch an unrelated `Wow.exe` outside `_retail_`: the watcher must ignore it.
+9. Restart WoW Retail with a new process ID while the watcher remains running: it may trigger the Companion again; the Companion singleton prevents duplicate live instances.
+10. Update/repair preserves the previously selected launch mode and current desktop-shortcut preference unless the user changes them.
+11. Force a normal Setup error after the WPF UI has loaded: show one branded error page, not a second generic bootstrap MessageBox.
+12. Uninstall removes both possible Startup shortcuts, stops the exact installed WoW watcher, and removes the new helper with the installation tree.
+13. Verify Setup, launcher, uninstaller and WoW watcher PE resources all report version `0.12.7.0`. Public direct-download signing remains a separate external gate.

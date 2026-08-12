@@ -3,6 +3,13 @@
 
 ## 0.12.7 — Package consistency, crash-safe update recovery and API hardening
 
+- Reworked Windows Setup into a KeystoneLens-styled decision/progress/completion flow with one launch-mode choice, real runtime-download byte progress, expandable installation details and a bounded install log.
+- Added optional `Start when World of Warcraft Retail starts` behavior through a path-validated lightweight Windows watcher; no game memory access, injection or gameplay automation is used.
+- Desktop shortcut creation now defaults off on a fresh install; Start menu registration remains automatic.
+- Added safe cancel handling before the atomic commit phase and removed duplicate normal error popups between WPF Setup and the Go bootstrap.
+- Added the WoW watcher to build, PE-resource, uninstall and Authenticode signing/verification pipelines; it now suppresses redundant Companion launches when the exact installed Companion is already running.
+- Closing Setup from the initial decision screen is treated as an explicit cancellation instead of a successful installer exit.
+- Fixed embedded Windows PowerShell script encoding by writing a UTF-8 BOM before execution.
 - Fixed the dynamically generated `KeystoneLensCompanionData.toc`: it no longer declares an `IconTexture` asset that the Companion does not materialize at runtime.
 - Added a regression test that keeps generated TOC metadata limited to files the runtime actually installs.
 - Fixed interrupted Setup recovery so an `.old` rollback tree is restored when the active install directory is missing, instead of being discarded on the next run.

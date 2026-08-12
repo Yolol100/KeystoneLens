@@ -6,9 +6,10 @@ Before public direct-download distribution, Authenticode-sign and timestamp:
 
 - installed `KeystoneLens.exe`;
 - installed `KeystoneLens-Uninstall.exe`;
+- installed `KeystoneLens-WoW-Watcher.exe`;
 - final `KeystoneLens-Setup.exe` after the signed payload has been embedded.
 
-`installer/windows/sign-release.ps1` implements that signing order with Windows SDK `signtool.exe`, rebuilds Setup after signing the embedded launcher/uninstaller, and verifies all three signatures. It accepts either a certificate thumbprint or PFX. For PFX use, supply the password through `KEYSTONELENS_PFX_PASSWORD` rather than committing it to source.
+`installer/windows/sign-release.ps1` implements that signing order with Windows SDK `signtool.exe`, rebuilds Setup after signing the embedded launcher/uninstaller/WoW watcher, and verifies all four signatures. It accepts either a certificate thumbprint or PFX. For PFX use, supply the password through `KEYSTONELENS_PFX_PASSWORD` rather than committing it to source.
 
 After signing, package without rebuilding the unsigned Windows binaries:
 

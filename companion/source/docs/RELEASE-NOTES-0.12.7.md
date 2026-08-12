@@ -19,6 +19,20 @@
 - Added atomic config/CompanionData write-failure tests and custom-drive/Unicode/manual WoW path tests.
 - Existing APS1, lifecycle, cache-boundary, release-contract and package tests remain required.
 
+## Installer experience hardening
+
+- Setup now uses a clear decision → progress → completion flow in the existing KeystoneLens dark palette.
+- Fresh installs choose exactly one launch mode: manual, with Windows, or when a path-validated WoW Retail `Wow.exe` starts.
+- Added a lightweight `KeystoneLens-WoW-Watcher.exe` that only accepts `Wow.exe` processes whose full executable path contains the `_retail_` directory. It does not read game memory, inject code or automate gameplay.
+- Desktop shortcut creation is optional and defaults off; the Start menu entry remains automatic.
+- Runtime download progress now reports real transferred bytes when Content-Length is available, while installation phases share one 0–100 progress bar.
+- Added an expandable Details view and a bounded `%LOCALAPPDATA%\KeystoneLens\install.log` containing installation steps and dependency names without credentials.
+- Cancel remains available during safe preparation/download/dependency phases and is disabled only for the verified atomic commit phase.
+- Normal installer failures are shown in the branded setup flow; the Go bootstrap only falls back to an emergency MessageBox when the PowerShell UI could not report a result.
+- The signing and uninstall pipelines now include the WoW launch watcher, and the watcher avoids relaunching the exact installed Companion when it is already running.
+- Closing the initial Setup decision screen is reported as cancellation rather than success.
+- The embedded PowerShell script is written with a UTF-8 BOM so Windows PowerShell 5.1 renders branded Unicode text deterministically.
+
 ## Compatibility
 
 - APS1 wire format and snapshot versions are unchanged.

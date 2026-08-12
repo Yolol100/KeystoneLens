@@ -2,6 +2,6 @@
 
 Windows Companion-bron voor KeystoneLens 0.12.7.
 
-Voorbereid bronpakket: `KeystoneLens-Companion-Source-0.12.7.zip`
+De Companion-installer biedt een KeystoneLens-stijl installatieflow met voortgang, details/logging, veilige annulering, repair/uninstall en drie startmodi: handmatig, met Windows, of wanneer World of Warcraft Retail start.
 
-SHA-256: `1fe1a0e9de3dd3def6a8054b517d8403e79395989cc06186ca20c13232c4a894`
+`KeystoneLens-Source-0.12.7.zip` bevat de reproduceerbare bronbundel van deze release.
