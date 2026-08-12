@@ -1,3 +1,4 @@
+# Transfer payload repaired; run only from a commit that contains all verified chunks.
 name: KeystoneLens one-shot publish
 
 on:
