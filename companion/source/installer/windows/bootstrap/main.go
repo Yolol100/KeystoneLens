@@ -103,12 +103,16 @@ func main() {
 
 	payloadPath := filepath.Join(temp, "payload.zip")
 	scriptPath := filepath.Join(temp, "installer.ps1")
-	if os.WriteFile(payloadPath, payload, 0600) != nil || os.WriteFile(scriptPath, installer, 0600) != nil {
+	resultPath := filepath.Join(temp, "result.txt")
+	// Windows PowerShell 5.1 treats BOM-less scripts as the active ANSI code page.
+	// Prefix UTF-8 BOM so branded Unicode UI text is decoded deterministically.
+	scriptBytes := append([]byte{0xEF, 0xBB, 0xBF}, installer...)
+	if os.WriteFile(payloadPath, payload, 0600) != nil || os.WriteFile(scriptPath, scriptBytes, 0600) != nil {
 		fail(temp, "Setup could not prepare its installation files.", silent)
 	}
 
 	setupSource, _ := os.Executable()
-	args := []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", scriptPath, "-Payload", payloadPath, "-SetupSource", setupSource}
+	args := []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", scriptPath, "-Payload", payloadPath, "-SetupSource", setupSource, "-ResultFile", resultPath}
 	for _, arg := range os.Args[1:] {
 		switch arg {
 		case "--silent", "/S", "/silent":
@@ -124,7 +128,19 @@ func main() {
 	}
 	cmd := exec.Command(powershell, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
-	if err := cmd.Run(); err != nil {
-		fail(temp, "KeystoneLens Setup could not finish. Your previous installed version was preserved when possible. Please retry the installer.", silent)
+	err = cmd.Run()
+	result, _ := os.ReadFile(resultPath)
+	status := strings.TrimSpace(string(result))
+	if err != nil {
+		// Normal installer failures and user cancellation are already presented
+		// inside the branded WPF flow. Only show the emergency bootstrap dialog
+		// when PowerShell failed before it could write a normal result marker.
+		if status == "failed" {
+			os.Exit(1)
+		}
+		if status == "canceled" {
+			os.Exit(2)
+		}
+		fail(temp, "KeystoneLens Setup could not start or finish its installer UI. Your previous installed version was preserved when possible. Please retry the installer.", silent)
 	}
 }
