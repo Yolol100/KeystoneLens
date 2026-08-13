@@ -13,7 +13,7 @@
 -- Midnight 12.x. Screenshot() is used as the addon-safe optical handoff to the
 -- local companion, with no chat anti-spam or chat-log buffering. KeystoneLens
 -- takes a short PNG-format lease so the transport QR stays lossless and can be
--- rendered as a compact one-physical-pixel-per-module QR.
+-- rendered at a three-physical-pixels-per-module reliability baseline.
 --
 -- WHY QR over custom pixel marker: Reed-Solomon ECC built in (15% recovery at
 -- level M); industry-standard finder/alignment patterns survive any DPI scale,
