@@ -578,12 +578,15 @@ function Start-Installation {
         $script:InstallSucceeded = $true
 
         try { Apply-LaunchPreferences } catch { $script:FinishWarningText = 'KeystoneLens installed, but one or more shortcut/startup preferences could not be applied. Run Setup again to retry.'; Add-Detail ('Preference warning: ' + $_.Exception.Message) }
-        Start-WoWWatcherIfRequested
 
         Update-Step 100 'Ready' ('KeystoneLens Companion ' + $Version + ' is ready.')
         if ($script:LaunchAfterInstall -and (Test-Path (Join-Path $InstallDir 'KeystoneLens.exe'))) {
             try { Start-Process (Join-Path $InstallDir 'KeystoneLens.exe'); $finishDetail.Text = 'The Companion was installed successfully and has been opened.'; Add-Detail 'Companion launched after installation.' } catch { $script:FinishWarningText = 'KeystoneLens installed successfully, but could not be opened automatically.' }
         }
+        # Start the optional WoW watcher only after the direct post-install launch.
+        # If WoW is already running, the watcher then sees the Companion process
+        # and does not race Setup into a second launcher invocation.
+        Start-WoWWatcherIfRequested
         if ($Silent) { $window.Close(); return }
         Show-FinishPage
     } catch [System.OperationCanceledException] {

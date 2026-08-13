@@ -270,3 +270,30 @@ def test_installer_xaml_is_well_formed_xml_with_x_namespace():
     root = ET.fromstring(xaml)
     assert root.tag.endswith("Window")
     assert 'xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"' in xaml
+
+
+def test_setup_launches_companion_before_starting_wow_watcher_to_avoid_double_start_race():
+    installer = (ROOT / "installer/windows/bootstrap/installer.ps1").read_text(encoding="utf-8")
+    success = installer.index("$script:InstallSucceeded = $true")
+    launch_after = installer.index("if ($script:LaunchAfterInstall", success)
+    watcher_start = installer.index("Start-WoWWatcherIfRequested", success)
+    assert launch_after < watcher_start
+
+
+def test_settings_exposes_user_visible_raider_io_attribution_link():
+    from keystonelens_companion import ui
+
+    assert ui.RAIDER_IO_URL == "https://raider.io"
+    opened = []
+    original = ui.webbrowser.open_new_tab
+    try:
+        ui.webbrowser.open_new_tab = lambda url: opened.append(url) or True
+        assert ui.open_raider_io() is True
+    finally:
+        ui.webbrowser.open_new_tab = original
+    assert opened == ["https://raider.io"]
+
+    source = Path(ui.__file__).read_text(encoding="utf-8")
+    assert 'text="Data by Raider.IO • raider.io"' in source
+    assert 'cursor="hand2"' in source
+    assert 'bind("<Button-1>", lambda _event: open_raider_io())' in source

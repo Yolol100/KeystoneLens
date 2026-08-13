@@ -3,6 +3,7 @@ from dataclasses import replace
 import ctypes
 import os
 import re
+import webbrowser
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog
@@ -21,6 +22,16 @@ from .models import ApplicantView, EngineState
 from .scoring import wcl_metric_scores
 
 FONT = "Segoe UI"
+RAIDER_IO_URL = "https://raider.io"
+
+
+def open_raider_io() -> bool:
+    """Open the fixed Raider.IO attribution URL without accepting user input."""
+    try:
+        return bool(webbrowser.open_new_tab(RAIDER_IO_URL))
+    except Exception:
+        return False
+
 
 # Settings-only text roles keep the overlay palette intact while improving form legibility.
 DIALOG_MUTED = "#aab3c0"
@@ -533,6 +544,13 @@ class SetupDialog(tk.Toplevel):
             anchor="w", justify="left", wraplength=440,
         )
         self.error_label.pack(fill="x", pady=(6, 0))
+
+        attribution = tk.Label(
+            content, text="Data by Raider.IO • raider.io", bg=BG, fg=ACCENT,
+            font=(FONT, 8, "underline"), cursor="hand2", anchor="w",
+        )
+        attribution.pack(fill="x", pady=(7, 0))
+        attribution.bind("<Button-1>", lambda _event: open_raider_io())
 
         # Footer is outside the scrollable/content area so the primary action can never
         # be pushed below the visible dialog on short desktops.

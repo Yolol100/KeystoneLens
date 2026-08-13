@@ -19,6 +19,11 @@
 - WoW Screenshots autodetection now refuses ambiguous multiple known Retail installs and requires an explicit folder choice instead of silently selecting the first one.
 - Crash logging now records timestamp, FATAL severity, component and product version while retaining its size bound.
 - Added atomic write-failure regression coverage for config and generated CompanionData files.
+- Fixed stale-snapshot delivery semantics so a deliberately rejected old listing frame cannot clear pending fragments for the newer listing generation.
+- Fixed screenshot retry classification: Windows sharing/lock violations remain retryable, while permanent access-denied failures still retire after the bounded decode-failure threshold.
+- Fixed the post-install launch order so the Companion opens before the optional WoW watcher starts, preventing an avoidable duplicate-start race when WoW is already running.
+- Added a visible, fixed HTTPS Raider.IO attribution link in Settings to satisfy the public API attribution contract.
+- Expanded the regression suite to 110 tests and the APS1 adversarial pass to 100,000 random raw payloads plus 65,448 parsed production-route fragment pushes and explicit version/boundary checks.
 - Kept APS1 transport/schema, Season 2 registry, scoring behavior and the published `KeystoneLensBridge` addon contents unchanged apart from release metadata.
 
 ## 0.12.6 — State continuity and Windows trust hardening

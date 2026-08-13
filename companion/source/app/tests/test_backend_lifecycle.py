@@ -361,3 +361,41 @@ def test_listing_title_edit_does_not_invalidate_same_dungeon_enrichment_context(
         assert updated.wcl is not None and updated.rio is not None
     finally:
         engine.stop()
+
+
+def test_stale_snapshot_rejection_preserves_newer_pending_fragments(tmp_path, monkeypatch):
+    from keystonelens_companion import watcher as watcher_module
+    from keystonelens_companion.watcher import ScreenshotWatcher
+
+    updates = []
+    engine = ApplicantEngine(None, updates.append, rio=None)
+    try:
+        listing = Listing(activity_id=1, key_level=10, dungeon_name="Dungeon")
+        current = Applicant(2, 1, 1, 71, 600, 0, 0, 2, "Current-Realm")
+        stale = Applicant(1, 1, 1, 71, 600, 0, 0, 2, "Stale-Realm")
+        engine.handle_snapshot(Snapshot(listing, None, (current,), listing_generation=2))
+
+        pending = tmp_path / "newer-fragment.png"
+        pending.write_bytes(b"newer fragment")
+        stale_file = tmp_path / "stale-complete.png"
+        stale_file.write_bytes(b"stale complete")
+
+        watcher = ScreenshotWatcher(tmp_path, engine.handle_snapshot)
+        pending_sig = watcher.files.signature(pending)
+        stale_sig = watcher.files.signature(stale_file)
+        watcher.files.retain_fragment(pending, pending_sig)
+
+        stale_snapshot = Snapshot(listing, None, (stale,), listing_generation=1)
+        monkeypatch.setattr(
+            watcher_module,
+            "decode_image_result",
+            lambda _path, _assembler: (True, True, stale_snapshot),
+        )
+
+        watcher._consume(stale_file, stale_sig, backfill=False)
+
+        assert [row.applicant.name for row in updates[-1].rows] == ["Current-Realm"]
+        assert pending.exists(), "rejecting a stale snapshot must not delete newer fragments"
+        assert str(pending) in watcher.files.pending_fragment_files
+    finally:
+        engine.stop()

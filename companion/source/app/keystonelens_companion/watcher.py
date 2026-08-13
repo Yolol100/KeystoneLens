@@ -18,6 +18,13 @@ FILE_SETTLE_SECONDS = 0.08
 POLL_SECONDS = 0.35
 BACKFILL_STABLE_AGE_NS = 500_000_000
 
+def _is_transient_decode_error(exc: Exception) -> bool:
+    if isinstance(exc, BlockingIOError):
+        return True
+    # Windows sharing/lock violations are transient. Generic access-denied
+    # failures (for example ACL error 5) stay on the bounded failure path.
+    return isinstance(exc, OSError) and getattr(exc, "winerror", None) in {32, 33}
+
 
 class ScreenshotWatcher:
     """Poll WoW screenshots and feed complete APS1 snapshots to the engine.
@@ -30,7 +37,7 @@ class ScreenshotWatcher:
     def __init__(
         self,
         folder: Path,
-        on_snapshot: Callable[[Snapshot], None],
+        on_snapshot: Callable[[Snapshot], bool | None],
         on_status: Callable[[str], None] | None = None,
     ):
         self.folder = folder
@@ -109,6 +116,12 @@ class ScreenshotWatcher:
             owned, consumed, snapshot = decode_image_result(path, self.assembler)
         except Exception as exc:
             self.on_status(f"Transport • QR decode: {type(exc).__name__} • retry")
+            if _is_transient_decode_error(exc):
+                # Windows sharing violations and temporary permission locks are
+                # recoverable. Never retire an otherwise unchanged screenshot
+                # merely because WoW or another process still owns the handle.
+                self.files.clear_decode_failure(path)
+                return False
             if self.files.mark_decode_failure(path, sig):
                 self.files.mark_seen(path, sig)
                 self.files.clear_decode_failure(path)
@@ -129,9 +142,18 @@ class ScreenshotWatcher:
             # the screenshot unconsumed so the watcher can retry instead of
             # deleting the only authoritative transport frame.
             try:
-                self.on_snapshot(snapshot)
+                accepted = self.on_snapshot(snapshot)
             except Exception as exc:
                 self.on_status(f"Transport • snapshot verwerken: {type(exc).__name__} • retry")
+                return False
+            if accepted is False:
+                # A deliberately rejected stale snapshot is obsolete, not a
+                # delivery commit. Retire only this frame; never clear pending
+                # fragments that may belong to the newer listing generation.
+                self.files.mark_seen(path, sig)
+                if owned and consumed:
+                    self.files.delete_if_unchanged(path, sig)
+                self.on_status("Transport • stale snapshot ignored")
                 return False
 
         self.files.mark_seen(path, sig)

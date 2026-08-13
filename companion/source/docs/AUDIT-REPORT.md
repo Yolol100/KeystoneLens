@@ -11,10 +11,10 @@ Binnen de daadwerkelijk uitvoerbare source-, controlled-runtime-, build-, packag
 | Component | Confirmed findings | Fixed | Open confirmed | Testniveau |
 | --- | ---: | ---: | ---: | --- |
 | WoW AddOn | 0 | 0 | 0 | source/package/protocol parity; live WoW niet uitgevoerd |
-| Windows companion | 2 | 2 | 0 | 105 tests, compileall, Linux/Xvfb UI-smoke, failure injection |
-| Installer | 2 | 2 | 0 | XAML/source failure model, Go vet/build/PE resources; native Windows niet uitgevoerd |
+| Windows companion | 4 | 4 | 0 | 110 tests, compileall, Linux/Xvfb UI-smoke, failure injection |
+| Installer | 3 | 3 | 0 | XAML/source failure model, Go vet/build/PE resources; native Windows niet uitgevoerd |
 | Updater | 0 apart | n.v.t. | 0 | update/repair is onderdeel van Setup |
-| Integratie | 1 | 1 | 0 | APS1/cache/package contract; echte WoW screenshot roundtrip niet uitgevoerd |
+| Integratie | 2 | 2 | 0 | APS1/cache/watcher/package contract; echte WoW screenshot roundtrip niet uitgevoerd |
 
 ## Confirmed findings and repair evidence
 
@@ -25,8 +25,12 @@ Binnen de daadwerkelijk uitvoerbare source-, controlled-runtime-, build-, packag
 - `KL-003 | Raider.IO enrichment | HTTP 200 invalid JSON / missing character identity was interpreted and cached as legitimate zero-score evidence | fail as retryable malformed-response error and do not cache | RED malformed-200 tests failed before fix; GREEN afterward`
 - `KL-004 | WoW installation discovery | autodetect returned the first known Retail Screenshots directory when multiple known installs existed | autodetect only when exactly one unique valid candidate exists; otherwise require manual selection | RED ambiguity test failed before fix; GREEN afterward`
 - `KL-005 | Windows Setup UI | WPF XAML used x:Name without declaring the required xmlns:x namespace, so strict XML parsing fails before the installer UI can load | declare the XAML x namespace and regression-parse the embedded XAML | pre-fix XAML reproduction fails with unbound prefix; repaired XAML parse PASS`
+- `KL-006 | screenshot/engine integration | a stale but valid snapshot was intentionally rejected by the engine, while the watcher interpreted the non-exception callback as a delivery commit and cleared newer pending fragment files | make snapshot acceptance explicit and retire only the stale frame when the engine returns false | RED stale-generation watcher regression reproduced fragment loss; GREEN after fix`
+- `KL-007 | Windows Setup launch lifecycle | the optional WoW watcher started before the default post-install Companion launch, so an already-running WoW process could race Setup into a redundant second Companion start | launch the Companion first and start the WoW watcher afterward | RED source-order contract failed before fix; GREEN afterward`
+- `KL-008 | screenshot watcher | an unchanged screenshot temporarily locked by WoW/Windows accumulated generic decode failures and could be retired permanently after three polls | retry only actual Windows sharing/lock violations (32/33) without retirement while keeping permanent access-denied errors on the bounded failure path | RED transient-lock reproduction plus self-audit ACL regression; both GREEN afterward`
+- `KL-009 | Raider.IO attribution | public API data had an attribution URL in the HTTP User-Agent but no user-visible link in the application UI | add one fixed HTTPS Raider.IO attribution link to Settings and keep the target non-user-controlled | official API requirement + RED UI contract + Xvfb visibility smoke; GREEN afterward`
 
-Alle vijf staan **CONFIRMED → FIXED**. Er zijn geen open CONFIRMED defects in de uitvoerbare scope.
+Alle negen staan **CONFIRMED → FIXED**. Er zijn geen open CONFIRMED defects in de uitvoerbare scope.
 
 ## Installation and update
 
@@ -60,7 +64,7 @@ Werkelijk gegevenspad:
 - De volledige gepubliceerde `KeystoneLensBridge` codeboom van 0.12.6 naar 0.12.7 verschilt alleen in TOC-release metadata; de Lua transport/consumercode is ongewijzigd.
 - `addon_sync.py` wijzigde in het data-contract alleen door het verwijderen van de niet-bestaande IconTexture metadata; `Data.lua` schema bleef gelijk.
 - Daardoor is 0.12.6 ↔ 0.12.7 source-level wire/cachecompatibiliteit sterk bewezen; echte mixed-version Windows/WoW runtime blijft niet uitgevoerd.
-- 100.000 deterministisch gerandomiseerde APS1-like payloads: 0 onverwachte exceptions.
+- APS1 adversarial pass: 100.000 deterministisch gerandomiseerde raw payloads, 65.448 productie-route fragment pushes en expliciete version/boundary cases: 0 onverwachte exceptions.
 
 ## Network and external API failure matrix
 
@@ -70,6 +74,7 @@ Controlled-runtime tests dekken:
 - Warcraft Logs OAuth: 400/401/403/429/500/502/503 en invalid JSON.
 - Warcraft Logs GraphQL: 400/401/403/404/409/429/500/502/503 en invalid HTTP-200 JSON.
 - HTTPS endpoints en expliciete timeouts zijn aanwezig; geen `verify=False` of equivalente TLS-disable gevonden.
+- Settings bevat nu een vaste, zichtbare HTTPS-attributielink naar Raider.IO; de link is in Xvfb zichtbaarheids-smoke getest.
 - Live serviceacceptatie met echte WCL credentials en post-reset Season 2 data is niet uitgevoerd.
 
 ## Filesystem, concurrency and crash recovery
@@ -79,6 +84,7 @@ Controlled-runtime tests dekken:
 - Generated `Data.lua` replace-failure behoudt aantoonbaar het vorige geldige tooltipbestand en retourneert een foutstatus.
 - Single-instance Companion en single-instance maintenance contract zijn aanwezig.
 - Shutdown/stale-result lifecycletests blijven groen.
+- Een stale engine-reject kan geen nieuwere pending fragmentfiles meer wissen; transient Windows sharing locks (winerror 32/33) blijven retrybaar zonder permanente retirement, terwijl permanent access denied begrensd blijft.
 - Echte NTFS locked-file, antivirus, disk-full, power-loss en Windows shutdown failure injection is niet uitgevoerd.
 
 ## Security and supply chain
@@ -100,17 +106,18 @@ Controlled-runtime tests dekken:
 - Linux/Xvfb Companion demo/UI-smoke start, rendert en sluit gecontroleerd.
 - Settings save-failures geven een veilige foutstatus en vervangen de actieve config niet.
 - Installer-XAML is als XML geregressietest; pre-fix ontbrak de `xmlns:x` namespace en faalde strict parsing, repaired XAML parseert correct.
+- De post-install volgorde start de Companion vóór de optionele WoW-watcher, zodat een reeds draaiende WoW-client geen dubbele launchrace veroorzaakt.
 - Native Windows taskbar, first-start, SmartScreen, installer button/cancel interaction en echte error-dialog UX zijn niet uitgevoerd.
 
 ## Verification
 
-- Python unit/regression tests: **PASS — 105/105**.
+- Python unit/regression tests: **PASS — 110/110**.
 - Python `compileall`: **PASS**.
 - Go formatting: **PASS**.
 - Go vet: **PASS in payload-aware Windows build order**.
 - Windows cross-build/resource verification: **PASS**.
 - Linux/Xvfb Companion UI smoke: **PASS**.
-- APS1 adversarial pass: **PASS — 100,000 cases, 0 unexpected exceptions**.
+- APS1 adversarial pass: **PASS — 100.000 random raw cases + 65.448 parsed fragment pushes + version/boundary matrix, 0 unexpected exceptions**.
 - Network failure matrix: **PASS**.
 - Atomic file-replace failure injection: **PASS**.
 - Multiple-WoW-install ambiguity + custom drive/spaces/Unicode validation: **PASS**.
@@ -141,7 +148,7 @@ Controlled-runtime tests dekken:
 | 21 | Companion UX | CONTROLLED UI SMOKE DONE; NATIVE UX SKIPPED |
 | 22 | logging | DONE WITH CONTROLLED FAILURE TEST |
 | 23 | crash recovery | CONTROLLED DONE; TRUE POWER-LOSS SKIPPED |
-| 24–25 | bug validation + repair loop | DONE for KL-001..KL-004 |
+| 24–25 | bug validation + repair loop | DONE for KL-001..KL-009 |
 | 26 | end-to-end scenarios | SOURCE/CONTRACT PARTIAL; REAL WINDOWS↔WOW E2E SKIPPED |
 | 27 | adversarial pass | CONTROLLED DONE; TARGET-RUNTIME ADVERSARIAL SKIPPED |
 | 28 | clean-room re-audit | SOURCE/BUILD/PACKAGE DONE; TARGET RUNTIME SKIPPED |

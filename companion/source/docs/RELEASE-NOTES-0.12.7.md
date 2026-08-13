@@ -10,6 +10,10 @@
 - Treats Raider.IO HTTP 200 responses with invalid JSON or missing character identity as transient API errors instead of caching fabricated zero-score evidence.
 - Refuses ambiguous automatic WoW Retail screenshot-folder selection when more than one known installation exists; the user must choose the intended `_retail_\Screenshots` folder.
 - Crash logs include timestamp, fatal severity, component and product version while remaining size-bounded.
+- A stale but valid snapshot that the engine rejects can no longer cause the screenshot watcher to clear newer pending fragment files.
+- Screenshots temporarily blocked by Windows sharing/lock violations remain retryable instead of being permanently retired after three polls; permanent access-denied errors remain bounded.
+- Setup launches the Companion before activating the optional WoW watcher, avoiding a redundant double-start race when WoW is already running.
+- Settings now exposes a fixed, visible HTTPS attribution link to Raider.IO for public API data.
 
 ## Verification added
 
@@ -18,6 +22,9 @@
 - Added a regression gate for the interrupted installer swap window.
 - Added atomic config/CompanionData write-failure tests and custom-drive/Unicode/manual WoW path tests.
 - Existing APS1, lifecycle, cache-boundary, release-contract and package tests remain required.
+- Added stale-generation watcher/fragment preservation, transient lock versus permanent ACL handling, installer launch-order and Raider.IO attribution regressions.
+- Expanded the controlled regression suite to 110 tests.
+- Expanded APS1 adversarial verification to 100,000 random raw payloads, 65,448 production-route fragment pushes and explicit wire-version/count/trailing-byte boundaries with zero unexpected exceptions.
 
 ## Installer experience hardening
 

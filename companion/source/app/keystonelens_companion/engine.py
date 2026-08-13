@@ -97,7 +97,7 @@ class ApplicantEngine:
                 self._queue_missing_wcl_locked()
             self._emit_locked()
 
-    def handle_snapshot(self, snapshot: Snapshot) -> None:
+    def handle_snapshot(self, snapshot: Snapshot) -> bool:
         with self._lock:
             incoming_generation = max(0, min(255, int(snapshot.listing_generation or 0)))
 
@@ -111,7 +111,7 @@ class ApplicantEngine:
                     if not _generation_is_newer(incoming_generation, self._listing_generation):
                         # A late screenshot from the previous queue must never
                         # resurrect old applicants after a re-queue.
-                        return
+                        return False
                     self._clear_enrichment_queues_locked()
                     self._views.clear()
                     self._listing = None
@@ -121,7 +121,7 @@ class ApplicantEngine:
                     # We already observed this generation end. A delayed full
                     # frame from the same generation is stale; wait for the
                     # next listing generation instead of restoring its rows.
-                    return
+                    return False
             elif incoming_generation:
                 self._listing_generation = incoming_generation
 
@@ -142,7 +142,7 @@ class ApplicantEngine:
                 self._applicants_unavailable = False
                 self._roster_unavailable = False
                 self._emit_locked()
-                return
+                return True
 
             # If Blizzard temporarily blocks all LFG reads we cannot trust any
             # applicant state. Preserve the last known-good list unchanged.
@@ -152,7 +152,7 @@ class ApplicantEngine:
                 self._roster_unavailable = snapshot.roster_unavailable
                 self._status = "Group Finder temporarily limited • keeping last valid list"
                 self._emit_locked()
-                return
+                return True
 
             listing = snapshot.listing
             if listing:
@@ -299,6 +299,7 @@ class ApplicantEngine:
                 queued = True
             if queued:
                 self._emit_locked()
+            return True
 
     def _queue_missing_rio_locked(self, default_realm: str | None = None) -> None:
         if default_realm is not None:

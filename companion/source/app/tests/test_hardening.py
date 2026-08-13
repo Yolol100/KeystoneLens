@@ -470,3 +470,34 @@ def test_manual_wow_screenshot_path_rejects_wrong_client_variant():
     from keystonelens_companion.ui import validate_settings_values
     error = validate_settings_values("", "", r"D:\\World of Warcraft\\_classic_\\Screenshots")
     assert "_retail_" in error
+
+
+def test_transient_locked_screenshot_is_never_retired_as_permanent_decode_failure(tmp_path):
+    watcher = ScreenshotWatcher(tmp_path, lambda _snapshot: None)
+    path = tmp_path / "locked.png"
+    path.write_bytes(b"still owned by WoW")
+    sig = watcher.files.signature(path)
+
+    locked = PermissionError("sharing violation")
+    locked.winerror = 32
+    with patch("keystonelens_companion.watcher.decode_image_result", side_effect=locked):
+        for _ in range(5):
+            assert watcher._consume(path, sig, False) is False
+
+    assert not watcher.files.is_seen(path, sig)
+    assert str(path) not in watcher.files.decode_failures
+
+
+def test_permanent_access_denied_screenshot_is_eventually_retired(tmp_path):
+    watcher = ScreenshotWatcher(tmp_path, lambda _snapshot: None)
+    path = tmp_path / "denied.png"
+    path.write_bytes(b"not readable by policy")
+    sig = watcher.files.signature(path)
+    denied = PermissionError("access denied")
+    denied.winerror = 5
+
+    with patch("keystonelens_companion.watcher.decode_image_result", side_effect=denied):
+        for _ in range(3):
+            watcher._consume(path, sig, False)
+
+    assert watcher.files.is_seen(path, sig)
