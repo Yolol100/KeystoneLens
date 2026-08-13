@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply exact uploaded Transport diff
+      - name: Apply verified Transport patch
         shell: bash
         env:
           EXPECTED_MAIN: fea9f18ffb1bac3db158b522828dd8c7f9fe6532
@@ -26,40 +26,10 @@ jobs:
           set -euo pipefail
           git fetch origin main
           actual="$(git rev-parse origin/main)"
-          test "$actual" = "$EXPECTED_MAIN" || { echo "main moved: $actual" >&2; exit 1; }
+          test "$actual" = "$EXPECTED_MAIN"
+          cp .sync-upload/apply_transport_patch.py /tmp/apply_transport_patch.py
           git checkout -B main origin/main
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('addon/KeystoneLensBridge/Core/Transport.lua')
-          s = p.read_text()
-          marker = '''local function SafeRoundedNumber(v, default)
-'''
-          helper = '''local function SafeOptionalNumber(v)
-    if IsSecretValue(v) or v == nil then return nil end
-    local tv = type(v)
-    if tv ~= "number" and tv ~= "string" then return nil end
-    local n = tonumber(v)
-    if n == nil or n ~= n or n == math.huge or n == -math.huge then
-        return nil
-    end
-    return n
-end
-
-'''
-          assert 'local function SafeOptionalNumber(v)' not in s
-          assert s.count(marker) == 1
-          s = s.replace(marker, helper + marker, 1)
-          replacements = {
-              'SafeNumber(converted, nil)': 'SafeOptionalNumber(converted)',
-              'SafeNumber(physicalHeight, nil)': 'SafeOptionalNumber(physicalHeight)',
-              'SafeNumber(effectiveScale, nil)': 'SafeOptionalNumber(effectiveScale)',
-              'SafeNumber(rawCount, nil)': 'SafeOptionalNumber(rawCount)',
-          }
-          for old, new in replacements.items():
-              assert s.count(old) == 1, (old, s.count(old))
-              s = s.replace(old, new, 1)
-          p.write_text(s)
-          PY
+          python3 /tmp/apply_transport_patch.py
           test "$(git hash-object addon/KeystoneLensBridge/Core/Transport.lua)" = "$EXPECTED_BLOB"
           git add addon/KeystoneLensBridge/Core/Transport.lua
           git diff --cached --check
