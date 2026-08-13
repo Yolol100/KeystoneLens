@@ -11,14 +11,14 @@ on:
       - 'companion/source/**'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: keystonelens-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  rebuild:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,12 +29,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.2'
+          go-version: '1.26.5'
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13.5'
+          python-version: '3.13.15'
 
       - name: Verify QR reliability baseline and sync addon source
         shell: bash
@@ -80,26 +80,50 @@ jobs:
           find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/keystonelens-release-round2.sha256
           diff -u /tmp/keystonelens-release-round1.sha256 /tmp/keystonelens-release-round2.sha256
 
+      - name: Stage verified publish payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/keystonelens-publish
+          cp companion/source/release/KeystoneLens-Setup-0.12.7.exe /tmp/keystonelens-publish/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
+          cp companion/source/release/KeystoneLens-Source-0.12.7.zip /tmp/keystonelens-publish/KeystoneLens-Source-0.12.7.zip
+          cp companion/source/release/KeystoneLensBridge-0.12.7-CurseForge.zip /tmp/keystonelens-publish/KeystoneLensBridge-0.12.7-CurseForge.zip
+          cp companion/source/docs/AUDIT-REPORT.md /tmp/keystonelens-publish/KeystoneLens-Audit-0.12.7.md
+
+      - name: Upload verified publish payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: keystonelens-verified-publish
+          path: /tmp/keystonelens-publish
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact validated source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Download verified publish payload
+        uses: actions/download-artifact@v4
+        with:
+          name: keystonelens-verified-publish
+          path: /tmp/keystonelens-publish
+
       - name: Publish verified repository artifacts
         shell: bash
         run: |
           set -euo pipefail
-          cp companion/source/release/KeystoneLens-Setup-0.12.7.exe executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
-          cp companion/source/release/KeystoneLens-Source-0.12.7.zip companion/KeystoneLens-Source-0.12.7.zip
-          cp companion/source/release/KeystoneLensBridge-0.12.7-CurseForge.zip addon/KeystoneLensBridge-0.12.7-CurseForge.zip
-          cp companion/source/docs/AUDIT-REPORT.md companion/KeystoneLens-Audit-0.12.7.md
-
-      - name: Clean build-only files and refresh checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf .release-update .keystonelens-publish
-          rm -rf companion/source/addon
-          rm -rf companion/source/release
-          rm -rf companion/source/installer/windows/build
-          rm -f companion/source/installer/windows/bootstrap/payload.zip
-          find companion/source -type d -name '__pycache__' -prune -exec rm -rf '{}' +
-          rm -rf companion/source/.pytest_cache
+          cp /tmp/keystonelens-publish/KeystoneLens-Setup-v0.12.7-Windows-x64.exe executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
+          cp /tmp/keystonelens-publish/KeystoneLens-Source-0.12.7.zip companion/KeystoneLens-Source-0.12.7.zip
+          cp /tmp/keystonelens-publish/KeystoneLensBridge-0.12.7-CurseForge.zip addon/KeystoneLensBridge-0.12.7-CurseForge.zip
+          cp /tmp/keystonelens-publish/KeystoneLens-Audit-0.12.7.md companion/KeystoneLens-Audit-0.12.7.md
           find README.md addon companion executable -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
           if grep -Eq '__pycache__|\.pytest_cache|\.keystonelens-publish|\.release-update|companion/source/release' SHA256SUMS.txt; then
             echo 'Unexpected temporary path in checksum manifest.' >&2
