@@ -110,7 +110,7 @@ local scanDirty = false
 -- ApplicantScout transport and leaves enough contrast for ZXing even when the
 -- user's screenshot settings are restored immediately after completion.
 -- The QR remains transient: it is shown only for the capture window.
-local QR_MODULE_PX = 1                 -- smallest physical-pixel module; visible only during the capture lease
+local QR_MODULE_PX = 3                 -- reliability baseline proven for live screenshot transport
 local QR_RENDER_SETTLE_S = 0.16        -- enough render passes while keeping capture nearly imperceptible
 -- Keep the standard four-module quiet zone. Dense QR captures have proven that
 -- Decoder tolerance for a two-module border is not a delivery guarantee.
