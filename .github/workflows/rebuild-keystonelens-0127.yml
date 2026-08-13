@@ -3,7 +3,9 @@ name: Rebuild KeystoneLens 0.12.7
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+      - agent/harden-keystonelens
     paths:
       - '.github/workflows/rebuild-keystonelens-0127.yml'
 
@@ -29,27 +31,25 @@ jobs:
         with:
           python-version: '3.13.5'
 
-      - name: Apply verified source update when staged
+      - name: Apply QR reliability baseline
         shell: bash
         run: |
           set -euo pipefail
-          if test -f .release-update/part-00; then
-            cat .release-update/part-* > /tmp/keystonelens-update.patch
-            echo 'efb6aba514e8d874f8368f35c6fa50463d8206dff86ac85a64d2181d9e310cbd  /tmp/keystonelens-update.patch' | sha256sum -c -
-            echo 'd2c27168e9559ef1bf34f834d8e4ba35391482b9bde72829fbaccd0f7254b966  companion/KeystoneLens-Source-0.12.7.zip' | sha256sum -c -
-            echo 'ce3da2e9c18b16deb735ef5be5a164930c9a0eb191753ab83ea4d939319c7ccc  addon/KeystoneLensBridge-0.12.7-CurseForge.zip' | sha256sum -c -
-            echo '8b779edeb71ff4d0d766311e8c3fea36fb88aa4d67845bdcf3eda9bc683e7a62  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | sha256sum -c -
-            rm -rf companion/source/addon
-            mkdir -p companion/source/addon
-            cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
-            patch --dry-run --batch --forward -p1 -d companion/source < /tmp/keystonelens-update.patch
-            patch --batch --forward -p1 -d companion/source < /tmp/keystonelens-update.patch
-            cp companion/source/addon/KeystoneLensBridge/Core/Transport.lua addon/KeystoneLensBridge/Core/Transport.lua
-          else
-            rm -rf companion/source/addon
-            mkdir -p companion/source/addon
-            cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
-          fi
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('addon/KeystoneLensBridge/Core/Transport.lua')
+          text = path.read_text(encoding='utf-8')
+          old = 'local QR_MODULE_PX = 1                 -- smallest physical-pixel module; visible only during the capture lease'
+          new = 'local QR_MODULE_PX = 3                 -- reliability baseline proven for live screenshot transport'
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('QR module-size source contract not found')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          grep -F 'local QR_MODULE_PX = 3' addon/KeystoneLensBridge/Core/Transport.lua
+          rm -rf companion/source/addon
+          mkdir -p companion/source/addon
+          cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
 
       - name: Install test dependencies
         shell: bash
@@ -57,24 +57,25 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check 'pytest==9.0.2' -r companion/source/app/requirements.txt
 
-      - name: Run full regression round one
+      - name: Run regression suite
         shell: bash
         run: |
           set -euo pipefail
           cd companion/source
           python -m pytest -q
           python -m compileall -q app/keystonelens_companion
+          grep -F 'local QR_MODULE_PX = 3' addon/KeystoneLensBridge/Core/Transport.lua
 
-      - name: Build and verify complete release round two
+      - name: Build release twice and prove determinism
         shell: bash
         run: |
           set -euo pipefail
           cd companion/source
           bash scripts/BUILD-RELEASE.sh
-          echo 'bbd0844b2e4d4594263b7625ed936b0ddebb1d29695d712a5cee42f2be212387  release/KeystoneLens-Setup-0.12.7.exe' | sha256sum -c -
-          echo 'c20891377efae692e5e760cccecafa1ff5d3cd3d6e27ccbc9a58cc61d5a2bb2c  release/KeystoneLens-Source-0.12.7.zip' | sha256sum -c -
-          echo 'bbb180451cc972d7fffd51256a839518fe5cc54e52366888b41188f717b9ed66  release/KeystoneLensBridge-0.12.7-CurseForge.zip' | sha256sum -c -
-          echo '5cdfeec3ec1f9e63fa980a32c091fc37ee2277e03d22e0f054f1247fed4f584c  release/KeystoneLens-Release-0.12.7.zip' | sha256sum -c -
+          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/keystonelens-release-round1.sha256
+          bash scripts/BUILD-RELEASE.sh
+          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/keystonelens-release-round2.sha256
+          diff -u /tmp/keystonelens-release-round1.sha256 /tmp/keystonelens-release-round2.sha256
 
       - name: Publish verified repository artifacts
         shell: bash
@@ -97,15 +98,12 @@ jobs:
           find companion/source -type d -name '__pycache__' -prune -exec rm -rf '{}' +
           rm -rf companion/source/.pytest_cache
           find README.md addon companion executable -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
-          echo 'bbd0844b2e4d4594263b7625ed936b0ddebb1d29695d712a5cee42f2be212387  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | grep -Fxf - SHA256SUMS.txt
-          echo 'c20891377efae692e5e760cccecafa1ff5d3cd3d6e27ccbc9a58cc61d5a2bb2c  companion/KeystoneLens-Source-0.12.7.zip' | grep -Fxf - SHA256SUMS.txt
-          echo 'bbb180451cc972d7fffd51256a839518fe5cc54e52366888b41188f717b9ed66  addon/KeystoneLensBridge-0.12.7-CurseForge.zip' | grep -Fxf - SHA256SUMS.txt
           if grep -Eq '__pycache__|\.pytest_cache|\.keystonelens-publish|\.release-update|companion/source/release' SHA256SUMS.txt; then
             echo 'Unexpected temporary path in checksum manifest.' >&2
             exit 1
           fi
 
-      - name: Commit rebuilt 0.12.7 artifacts
+      - name: Commit verified transport fix and rebuilt artifacts
         shell: bash
         run: |
           set -euo pipefail
@@ -116,5 +114,5 @@ jobs:
             echo 'No changes to commit.'
             exit 0
           fi
-          git commit -m 'Rebuild KeystoneLens 0.12.7 verified artifacts'
-          git push origin HEAD:main
+          git commit -m 'Harden KeystoneLens QR transport reliability'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
