@@ -5,12 +5,17 @@ on:
   push:
     branches:
       - main
-      - agent/harden-keystonelens
     paths:
       - '.github/workflows/rebuild-keystonelens-0127.yml'
+      - 'addon/KeystoneLensBridge/**'
+      - 'companion/source/**'
 
 permissions:
   contents: write
+
+concurrency:
+  group: keystonelens-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   rebuild:
@@ -31,22 +36,15 @@ jobs:
         with:
           python-version: '3.13.5'
 
-      - name: Apply QR reliability baseline
+      - name: Verify QR reliability baseline and sync addon source
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('addon/KeystoneLensBridge/Core/Transport.lua')
-          text = path.read_text(encoding='utf-8')
-          old = 'local QR_MODULE_PX = 1                 -- smallest physical-pixel module; visible only during the capture lease'
-          new = 'local QR_MODULE_PX = 3                 -- reliability baseline proven for live screenshot transport'
-          if new not in text:
-              if old not in text:
-                  raise SystemExit('QR module-size source contract not found')
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
           grep -F 'local QR_MODULE_PX = 3' addon/KeystoneLensBridge/Core/Transport.lua
+          if grep -Fq 'local QR_MODULE_PX = 1' addon/KeystoneLensBridge/Core/Transport.lua; then
+            echo 'QR module size regressed to the fragile one-pixel baseline.' >&2
+            exit 1
+          fi
           rm -rf companion/source/addon
           mkdir -p companion/source/addon
           cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
@@ -103,7 +101,7 @@ jobs:
             exit 1
           fi
 
-      - name: Commit verified transport fix and rebuilt artifacts
+      - name: Commit verified rebuilt artifacts
         shell: bash
         run: |
           set -euo pipefail
@@ -114,5 +112,5 @@ jobs:
             echo 'No changes to commit.'
             exit 0
           fi
-          git commit -m 'Harden KeystoneLens QR transport reliability'
+          git commit -m 'Rebuild verified KeystoneLens artifacts'
           git push origin "HEAD:${GITHUB_REF_NAME}"
