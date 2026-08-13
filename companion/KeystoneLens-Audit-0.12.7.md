@@ -10,11 +10,11 @@ Binnen de daadwerkelijk uitvoerbare source-, controlled-runtime-, build-, packag
 
 | Component | Confirmed findings | Fixed | Open confirmed | Testniveau |
 | --- | ---: | ---: | ---: | --- |
-| WoW AddOn | 0 | 0 | 0 | source/package/protocol parity; live WoW niet uitgevoerd |
-| Windows companion | 4 | 4 | 0 | 110 tests, compileall, Linux/Xvfb UI-smoke, failure injection |
+| WoW AddOn | 1 | 1 | 0 | source/package/protocol parity + reload-generation regression; live WoW niet uitgevoerd |
+| Windows companion | 5 | 5 | 0 | 115 tests, compileall, Linux/Xvfb UI-smoke, failure injection |
 | Installer | 3 | 3 | 0 | XAML/source failure model, Go vet/build/PE resources; native Windows niet uitgevoerd |
 | Updater | 0 apart | n.v.t. | 0 | update/repair is onderdeel van Setup |
-| Integratie | 2 | 2 | 0 | APS1/cache/watcher/package contract; echte WoW screenshot roundtrip niet uitgevoerd |
+| Integratie | 5 | 5 | 0 | APS1/cache/watcher/generated-addon/package contract; echte WoW screenshot roundtrip niet uitgevoerd |
 
 ## Confirmed findings and repair evidence
 
@@ -29,8 +29,13 @@ Binnen de daadwerkelijk uitvoerbare source-, controlled-runtime-, build-, packag
 - `KL-007 | Windows Setup launch lifecycle | the optional WoW watcher started before the default post-install Companion launch, so an already-running WoW process could race Setup into a redundant second Companion start | launch the Companion first and start the WoW watcher afterward | RED source-order contract failed before fix; GREEN afterward`
 - `KL-008 | screenshot watcher | an unchanged screenshot temporarily locked by WoW/Windows accumulated generic decode failures and could be retired permanently after three polls | retry only actual Windows sharing/lock violations (32/33) without retirement while keeping permanent access-denied errors on the bounded failure path | RED transient-lock reproduction plus self-audit ACL regression; both GREEN afterward`
 - `KL-009 | Raider.IO attribution | public API data had an attribution URL in the HTTP User-Agent but no user-visible link in the application UI | add one fixed HTTPS Raider.IO attribution link to Settings and keep the target non-user-controlled | official API requirement + RED UI contract + Xvfb visibility smoke; GREEN afterward`
+- `KL-010 | Companion tooltip publication status | a failed generated Data.lua/TOC sync returned false but App._poll ignored the result and published the normal runtime status | surface the generated-tooltip sync error in the live Companion status and only show the update notice after a successful write | RED controlled-runtime status regression; GREEN afterward`
+- `KL-011 | generated CompanionData publication | first-use sync created the generated addon TOC before Data.lua had atomically committed, so a failed first Data.lua replace could expose a loadable addon that referenced a missing file | commit Data.lua first and expose/update the TOC only after the data replace succeeds | RED first-write failure injection; GREEN afterward`
+- `KL-012 | generated CompanionData self-healing | a semantic no-op returned success solely from Data.lua hash/mtime and did not verify that the generated TOC still existed and matched the canonical metadata | verify/heal the TOC on no-op and report TOC repair failure instead of a false success | RED missing-TOC no-op regression; GREEN afterward`
+- `KL-013 | multi-stream screenshot recovery | completing one fragment stream globally deleted retained fragment screenshots even while FragmentAssembler still held another incomplete stream, removing restart-recovery evidence for the other stream | keep other retained fragment files while any assembler stream remains pending and retire only the completed frame; normal batch cleanup resumes when no streams remain | RED two-stream recovery regression; GREEN afterward`
+- `KL-014 | WoW Bridge reload continuity | listingGeneration was process-local and reset to 0 on every AddOn load; a Companion that stayed open across /reload could therefore reject the fresh generation 1 snapshot as older than its pre-reload generation | persist and validate the 1..255 listing-generation counter in SavedVariables and update it whenever a new listing generation is created | direct engine rejection reproduction + RED producer source-contract regression; GREEN afterward`
 
-Alle negen staan **CONFIRMED → FIXED**. Er zijn geen open CONFIRMED defects in de uitvoerbare scope.
+Alle veertien staan **CONFIRMED → FIXED**. Er zijn geen open CONFIRMED defects in de uitvoerbare scope.
 
 ## Installation and update
 
@@ -60,11 +65,11 @@ Werkelijk gegevenspad:
 
 - Geen localhost-server, WebSocket, named pipe of WoW-process-memoryintegratie aangetroffen.
 - APS1 parser ondersteunt de actuele v12/v13 snapshotvormen en v10 fragment envelope.
-- `aps1.py` is byte-identiek tussen de aangeleverde 0.12.6 source en 0.12.7; SHA-256: `75f4b6d998358b0cee637ea3d99ce03f9c3aef8bf8f2dde5e6a87087b54b4b71`.
-- De volledige gepubliceerde `KeystoneLensBridge` codeboom van 0.12.6 naar 0.12.7 verschilt alleen in TOC-release metadata; de Lua transport/consumercode is ongewijzigd.
-- `addon_sync.py` wijzigde in het data-contract alleen door het verwijderen van de niet-bestaande IconTexture metadata; `Data.lua` schema bleef gelijk.
-- Daardoor is 0.12.6 ↔ 0.12.7 source-level wire/cachecompatibiliteit sterk bewezen; echte mixed-version Windows/WoW runtime blijft niet uitgevoerd.
-- APS1 adversarial pass: 100.000 deterministisch gerandomiseerde raw payloads, 65.448 productie-route fragment pushes en expliciete version/boundary cases: 0 onverwachte exceptions.
+- De 0.12.6 APS1 parser/wire-layout blijft inhoudelijk gelijk; de huidige `aps1.py` voegt alleen een lifecycle-query voor pending fragmentstreams toe. De 0.12.6 parser-SHA was `75f4b6d998358b0cee637ea3d99ce03f9c3aef8bf8f2dde5e6a87087b54b4b71`.
+- `KeystoneLensBridge/Core/Transport.lua` wijkt nu bewust af van 0.12.6 door alleen de listing-generation lokaal in SavedVariables te laten doorlopen over `/reload`; de APS1 veldvolgorde, wire-versies en fragment-envelope zijn niet gewijzigd.
+- `Data.lua` schema bleef gelijk; generated-addon wijzigingen betreffen publicatievolgorde, foutstatus en TOC self-healing.
+- Daardoor blijft 0.12.6 ↔ 0.12.7 source-level wire/cachecompatibiliteit behouden; echte mixed-version Windows/WoW runtime blijft niet uitgevoerd.
+- Eerdere APS1 adversarial pass: 100.000 deterministisch gerandomiseerde raw payloads, 65.448 productie-route fragment pushes en expliciete version/boundary cases zonder onverwachte exceptions. De onafhankelijke aanvullende pass voegde 50.000 nieuwe random raw cases, 10.000 out-of-order/duplicate fragmentstream-roundtrips en 1.103 truncatiegrenzen toe zonder productroute-exception of roundtrip-afwijking.
 
 ## Network and external API failure matrix
 
@@ -82,9 +87,12 @@ Controlled-runtime tests dekken:
 - Kritieke config-, WCL-cache-, generated TOC- en `Data.lua` writes gebruiken temp + replace waar relevant.
 - Config replace-failure behoudt aantoonbaar het vorige geldige configbestand.
 - Generated `Data.lua` replace-failure behoudt aantoonbaar het vorige geldige tooltipbestand en retourneert een foutstatus.
+- Een eerste Data.lua failure exposeert geen TOC dat naar een ontbrekend bestand verwijst; een later ontbrekend/corrupt generated TOC wordt bij een semantische no-op hersteld of als syncfout gemeld.
 - Single-instance Companion en single-instance maintenance contract zijn aanwezig.
 - Shutdown/stale-result lifecycletests blijven groen.
 - Een stale engine-reject kan geen nieuwere pending fragmentfiles meer wissen; transient Windows sharing locks (winerror 32/33) blijven retrybaar zonder permanente retirement, terwijl permanent access denied begrensd blijft.
+- Een complete fragmentstream wist niet langer de on-disk recoveryframes van een andere nog incomplete stream.
+- De Bridge listing-generation blijft over `/reload` monotonic via SavedVariables, zodat een doorlopende Companion een verse post-reload listing niet als stale classificeert.
 - Echte NTFS locked-file, antivirus, disk-full, power-loss en Windows shutdown failure injection is niet uitgevoerd.
 
 ## Security and supply chain
@@ -111,13 +119,13 @@ Controlled-runtime tests dekken:
 
 ## Verification
 
-- Python unit/regression tests: **PASS — 110/110**.
+- Python unit/regression tests: **PASS — 115/115**.
 - Python `compileall`: **PASS**.
 - Go formatting: **PASS**.
 - Go vet: **PASS in payload-aware Windows build order**.
 - Windows cross-build/resource verification: **PASS**.
 - Linux/Xvfb Companion UI smoke: **PASS**.
-- APS1 adversarial pass: **PASS — 100.000 random raw cases + 65.448 parsed fragment pushes + version/boundary matrix, 0 unexpected exceptions**.
+- APS1 adversarial verification: **PASS — prior 100.000 random raw cases + 65.448 parsed fragment pushes; independent gap pass 50.000 random raw cases + 10.000 fragmentstream roundtrips + 1.103 truncation boundaries, 0 unexpected productroute exceptions**.
 - Network failure matrix: **PASS**.
 - Atomic file-replace failure injection: **PASS**.
 - Multiple-WoW-install ambiguity + custom drive/spaces/Unicode validation: **PASS**.
@@ -148,7 +156,7 @@ Controlled-runtime tests dekken:
 | 21 | Companion UX | CONTROLLED UI SMOKE DONE; NATIVE UX SKIPPED |
 | 22 | logging | DONE WITH CONTROLLED FAILURE TEST |
 | 23 | crash recovery | CONTROLLED DONE; TRUE POWER-LOSS SKIPPED |
-| 24–25 | bug validation + repair loop | DONE for KL-001..KL-009 |
+| 24–25 | bug validation + repair loop | DONE for KL-001..KL-014 |
 | 26 | end-to-end scenarios | SOURCE/CONTRACT PARTIAL; REAL WINDOWS↔WOW E2E SKIPPED |
 | 27 | adversarial pass | CONTROLLED DONE; TARGET-RUNTIME ADVERSARIAL SKIPPED |
 | 28 | clean-room re-audit | SOURCE/BUILD/PACKAGE DONE; TARGET RUNTIME SKIPPED |
@@ -156,6 +164,17 @@ Controlled-runtime tests dekken:
 | 30 | release package verification | DONE for produced unsigned package; install execution skipped |
 | 31 | forbidden fixes | DONE — none used |
 | 32 | final report | DONE |
+
+## GitHub / CI assurance gaps
+
+De repository-automation is aanvullend gecontroleerd. Dit zijn **release-proces/hardeninggaten**, geen bevestigde runtimebugs in de exact geteste productbytes:
+
+- De huidige rebuildworkflow triggert bij `push` alleen wanneer het workflowbestand zelf wijzigt; gewone bronwijzigingen zijn daardoor niet automatisch door deze releaseworkflow gedekt.
+- De GitHub workflow draait alleen `app/tests/test_release_contract.py`; een groene Actions-run bewijst dus niet de volledige 115-test suite.
+- Externe GitHub Actions staan op major tags (`@v4`/`@v5`) in plaats van volledige immutable commit-SHA's.
+- `main` is momenteel niet branch-protected. Dependabot-alerts en secret-scanning konden via de huidige GitHub-integratierechten niet als actieve vulnerability/secret oracle worden uitgelezen.
+
+Deze repository-instellingen zijn in deze audit niet gemuteerd. De huidige releaseclaim steunt daarom op de volledige controlled-runtime suite en reproduceerbare exact-artifactbuild, niet op de groene GitHub badge alleen.
 
 ## Intentionally left outside this environment
 

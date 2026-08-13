@@ -1,9 +1,0 @@
-rijven.
-+- Twee fragmentstreams mogen tegelijk pending zijn; een complete stream verwijdert niet de recovery-screenshot(s) van de andere incomplete stream.
-+- Laat de Companion open, doe in WoW `/reload`, en maak/refresh daarna een listing: de eerstvolgende post-reload generation moet als nieuw worden geaccepteerd en mag niet als stale worden geweigerd.
-+- Forceer een generated `Data.lua` write-failure: de Companion toont een tooltip-syncfout in plaats van een normale live-status.
-+- Forceer die write-failure bij de allereerste generated-addon sync: er mag geen TOC achterblijven dat naar een ontbrekende `Data.lua` verwijst.
-+- Verwijder na een geslaagde sync alleen de generated TOC en voer dezelfde semantische sync opnieuw uit: de TOC wordt hersteld zonder onnodige Data.lua-wijziging.
- 
- ## Protocol / lifecycle hardening
- - Decode a non-empty APS1 v12 and v13 applicant record and verify member count, RIO fields and Blizzard fallback fie

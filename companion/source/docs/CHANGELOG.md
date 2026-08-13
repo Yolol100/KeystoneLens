@@ -23,8 +23,12 @@
 - Fixed screenshot retry classification: Windows sharing/lock violations remain retryable, while permanent access-denied failures still retire after the bounded decode-failure threshold.
 - Fixed the post-install launch order so the Companion opens before the optional WoW watcher starts, preventing an avoidable duplicate-start race when WoW is already running.
 - Added a visible, fixed HTTPS Raider.IO attribution link in Settings to satisfy the public API attribution contract.
-- Expanded the regression suite to 110 tests and the APS1 adversarial pass to 100,000 random raw payloads plus 65,448 parsed production-route fragment pushes and explicit version/boundary checks.
-- Kept APS1 transport/schema, Season 2 registry, scoring behavior and the published `KeystoneLensBridge` addon contents unchanged apart from release metadata.
+- Generated tooltip sync failures are now surfaced in the Companion status instead of being hidden behind a normal live-status message.
+- First-use CompanionData publication now commits `Data.lua` before exposing its generated TOC; semantic no-op sync also repairs a missing/corrupt TOC.
+- Multi-stream QR recovery no longer deletes retained fragment screenshots from a different still-incomplete stream.
+- The Bridge listing-generation counter now persists across `/reload`, preventing a still-running Companion from rejecting fresh post-reload snapshots as stale.
+- Expanded the regression suite to 115 tests. The prior APS1 adversarial pass remains green, and an independent gap-audit pass added 50,000 random raw cases, 10,000 fragmentstream roundtrips and 1,103 truncation boundaries.
+- Kept APS1 wire schema, Season 2 registry, scoring behavior and generated tooltip-cache schema unchanged; Bridge source now additionally persists listing-generation state across reloads.
 
 ## 0.12.6 — State continuity and Windows trust hardening
 

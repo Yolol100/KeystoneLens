@@ -399,3 +399,34 @@ def test_stale_snapshot_rejection_preserves_newer_pending_fragments(tmp_path, mo
         assert str(pending) in watcher.files.pending_fragment_files
     finally:
         engine.stop()
+
+
+def test_completed_snapshot_does_not_delete_another_pending_fragment_stream(tmp_path, monkeypatch):
+    """A complete stream must not consume recovery files owned by another stream."""
+    from keystonelens_companion import watcher as watcher_module
+    from keystonelens_companion.watcher import ScreenshotWatcher
+
+    newer_fragment = tmp_path / "newer-stream-fragment.png"
+    newer_fragment.write_bytes(b"newer fragment")
+    completed_frame = tmp_path / "older-stream-complete.png"
+    completed_frame.write_bytes(b"older complete")
+
+    watcher = ScreenshotWatcher(tmp_path, lambda _snapshot: True)
+    newer_sig = watcher.files.signature(newer_fragment)
+    completed_sig = watcher.files.signature(completed_frame)
+    watcher.files.retain_fragment(newer_fragment, newer_sig)
+    # Model a second, still-incomplete FragmentAssembler stream. The complete
+    # snapshot returned below belongs to another stream.
+    watcher.assembler._streams[(99, 1)] = (time.time(), object(), {})  # type: ignore[assignment]
+
+    snapshot = Snapshot(None, None, (), listing_generation=7)
+    monkeypatch.setattr(
+        watcher_module,
+        "decode_image_result",
+        lambda _path, _assembler: (True, True, snapshot),
+    )
+
+    watcher._consume(completed_frame, completed_sig, backfill=True)
+
+    assert newer_fragment.exists(), "another incomplete stream must remain restart-recoverable"
+    assert str(newer_fragment) in watcher.files.pending_fragment_files

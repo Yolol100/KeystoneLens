@@ -160,15 +160,29 @@ class TooltipCacheSync:
         semantic_hash = hashlib.sha256(semantic.encode("utf-8")).hexdigest()
         if semantic_hash == self.last_hash:
             try:
-                if self.path.stat().st_mtime_ns == self.last_file_mtime_ns:
-                    return True
+                data_unchanged = self.path.stat().st_mtime_ns == self.last_file_mtime_ns
             except OSError:
-                pass
+                data_unchanged = False
+            if data_unchanged:
+                try:
+                    # A no-op is only successful when the complete generated
+                    # addon remains loadable. Heal a missing/corrupt TOC even
+                    # when Data.lua itself did not change.
+                    self._ensure_data_addon()
+                    self.last_error = ""
+                    return True
+                except OSError as exc:
+                    self.last_error = str(exc)
+                    return False
         try:
-            self._ensure_data_addon()
+            # Publish Data.lua before exposing/updating the generated addon TOC.
+            # On a first-write failure WoW must not see a TOC that references a
+            # Data.lua file that was never committed.
+            self.path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_suffix(".tmp")
             tmp.write_text(text, encoding="utf-8")
             tmp.replace(self.path)
+            self._ensure_data_addon()
             self.last_hash = semantic_hash
             self.last_error = ""
             self.last_written_at = time.time()

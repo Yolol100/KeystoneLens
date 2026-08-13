@@ -54,6 +54,11 @@ local DB_DEFAULTS = {
     autoResumePending = false,
     pausedListingSignature = "",
     pausedSawNoListing = false,
+    -- Keep the 1..255 listing-generation ring monotonic across /reload. The
+    -- desktop Companion can remain running while the Bridge reloads; resetting
+    -- this counter to 1 would make a fresh post-reload listing look older than
+    -- the last pre-reload generation and be rejected as stale.
+    listingGeneration = 0,
 }
 
 -- Session lifecycle. INVARIANT: isSessionActive == true means an applicant-
@@ -568,6 +573,14 @@ InitDB = function()
        or type(KeystoneLensBridgeDB.pausedListingSignature) ~= "string" then
         KeystoneLensBridgeDB.pausedListingSignature = ""
     end
+    local savedListingGeneration = math.floor(SafeNumber(
+        KeystoneLensBridgeDB.listingGeneration, 0
+    ))
+    if savedListingGeneration < 0 or savedListingGeneration > 255 then
+        savedListingGeneration = 0
+    end
+    listingGeneration = savedListingGeneration
+    KeystoneLensBridgeDB.listingGeneration = listingGeneration
     -- Never resurrect a visible QR debug mode from a prior session. The
     -- `/klbridge qrvisible` support toggle is deliberately runtime-only.
     KeystoneLensBridgeDB.qrAlwaysVisible = false
@@ -769,6 +782,9 @@ CheckSessionTransition = function(lfgReadsAllowed)
         )
         if confirmedNewListing then
             listingGeneration = (listingGeneration % 255) + 1
+            if KeystoneLensBridgeDB then
+                KeystoneLensBridgeDB.listingGeneration = listingGeneration
+            end
             entryCreationKeyState.listingCreatePending = false
             wasHostingListing = true
             -- A re-queue is a new applicant domain even when every visible

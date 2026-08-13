@@ -322,6 +322,15 @@ class FragmentAssembler:
         self.max_streams = max(1, int(max_streams))
         self._streams: dict[tuple[int, int], tuple[float, Fragment, dict[int, bytes]]] = {}
 
+    def has_pending_streams(self) -> bool:
+        now = time.time()
+        self._streams = {
+            key: value
+            for key, value in self._streams.items()
+            if now - value[0] <= self.ttl
+        }
+        return bool(self._streams)
+
     def push(self, fragment: Fragment) -> bytes | None:
         now = time.time()
         self._streams = {key: value for key, value in self._streams.items() if now - value[0] <= self.ttl}

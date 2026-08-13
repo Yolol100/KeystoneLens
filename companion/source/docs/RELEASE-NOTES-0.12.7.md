@@ -14,6 +14,10 @@
 - Screenshots temporarily blocked by Windows sharing/lock violations remain retryable instead of being permanently retired after three polls; permanent access-denied errors remain bounded.
 - Setup launches the Companion before activating the optional WoW watcher, avoiding a redundant double-start race when WoW is already running.
 - Settings now exposes a fixed, visible HTTPS attribution link to Raider.IO for public API data.
+- Generated tooltip sync failures are visible in the Companion status instead of being silently masked by the normal runtime status.
+- First-use `KeystoneLensCompanionData` publication commits `Data.lua` before publishing its TOC, and no-op sync heals missing/corrupt TOC metadata.
+- Completing one QR fragment stream no longer deletes restart-recovery screenshots belonging to another incomplete stream.
+- The Bridge listing-generation ring persists across `/reload`, so a Companion left running across the reload accepts the fresh listing generation instead of misclassifying it as stale.
 
 ## Verification added
 
@@ -23,8 +27,8 @@
 - Added atomic config/CompanionData write-failure tests and custom-drive/Unicode/manual WoW path tests.
 - Existing APS1, lifecycle, cache-boundary, release-contract and package tests remain required.
 - Added stale-generation watcher/fragment preservation, transient lock versus permanent ACL handling, installer launch-order and Raider.IO attribution regressions.
-- Expanded the controlled regression suite to 110 tests.
-- Expanded APS1 adversarial verification to 100,000 random raw payloads, 65,448 production-route fragment pushes and explicit wire-version/count/trailing-byte boundaries with zero unexpected exceptions.
+- Expanded the controlled regression suite to 115 tests.
+- Kept the prior 100,000-case APS1 adversarial verification and added an independent 50,000-random-input pass, 10,000 out-of-order/duplicate fragmentstream roundtrips and 1,103 truncation boundaries without unexpected productroute exceptions.
 
 ## Installer experience hardening
 

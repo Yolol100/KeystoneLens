@@ -222,13 +222,17 @@ class App:
                         and any(row.wcl_status in {"queued", "loading"} for row in state.rows)
                     )
                     prior_tooltip_write = self.tooltip_sync.last_written_at
-                    self.tooltip_sync.write(list(state.rows))
-                    if self.tooltip_sync.last_written_at > prior_tooltip_write:
+                    tooltip_write_ok = self.tooltip_sync.write(list(state.rows))
+                    if tooltip_write_ok and self.tooltip_sync.last_written_at > prior_tooltip_write:
                         self._tooltip_notice_generation += 1
                         notice_generation = self._tooltip_notice_generation
                         self._tooltip_notice_until = time.monotonic() + 8.0
                         self.root.after(8100, lambda g=notice_generation: self._expire_tooltip_notice(g))
-                    self.ui.update_state(replace(state, status=self._status_text(state.status)))
+                    published_status = state.status
+                    if not tooltip_write_ok:
+                        detail = self.tooltip_sync.last_error or "unknown write error"
+                        published_status = f"Tooltip sync failed: {detail}"
+                    self.ui.update_state(replace(state, status=self._status_text(published_status)))
                 elif kind == "status":
                     self.ui.set_status(self._status_text(str(data)))
                 elif kind == "transport_status":

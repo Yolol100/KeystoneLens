@@ -297,3 +297,11 @@ def test_settings_exposes_user_visible_raider_io_attribution_link():
     assert 'text="Data by Raider.IO • raider.io"' in source
     assert 'cursor="hand2"' in source
     assert 'bind("<Button-1>", lambda _event: open_raider_io())' in source
+
+
+def test_bridge_listing_generation_survives_reload_in_saved_variables():
+    transport = (ROOT / "addon/KeystoneLensBridge/Core/Transport.lua").read_text(encoding="utf-8")
+    assert "listingGeneration = 0," in transport
+    assert "KeystoneLensBridgeDB.listingGeneration" in transport
+    assert "listingGeneration = savedListingGeneration" in transport
+    assert "KeystoneLensBridgeDB.listingGeneration = listingGeneration" in transport

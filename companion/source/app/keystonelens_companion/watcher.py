@@ -163,7 +163,17 @@ class ScreenshotWatcher:
                 self.files.retain_fragment(path, sig)
                 self.on_status("Transport • QR fragment received • waiting for the rest")
             else:
-                self.files.commit_snapshot(path, sig)
+                if self.assembler.has_pending_streams():
+                    # More than one fragment stream can coexist during startup
+                    # recovery (for example across a Bridge reload). A complete
+                    # snapshot from one stream must not delete the only on-disk
+                    # fragments needed to recover another stream after a
+                    # Companion restart. Retire only this completed frame; once
+                    # all assembler streams are complete, commit_snapshot()
+                    # clears the retained fragment batch normally.
+                    self.files.delete_if_unchanged(path, sig)
+                else:
+                    self.files.commit_snapshot(path, sig)
                 self.on_status("Transport • complete snapshot ontvangen")
 
         return backfill and snapshot is not None
