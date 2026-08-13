@@ -1,0 +1,288 @@
+-- KeystoneLens transport (forked from ApplicantScout) — encodes Mythic+ applicant
+-- snapshots as QR frames and triggers Screenshot() for the external companion.
+-- Raider.IO data is read locally in WoW; Warcraft Logs enrichment happens only
+-- in the companion. The QR is normally transient and can be moved for support.
+--
+-- WHY raw frame, not Ace3: Ace3 shares CallbackHandler-1.0 with other addons
+-- (BetterBags, AlterEgo, ...); their taint contaminates our handler stack and
+-- can block protected-mode APIs. Raw frame + NewTicker drains the dirty flag
+-- from a clean C-side scheduler, immune to peer-addon taint propagation.
+--
+-- WHY screenshot transport, not chatlog/SendChatMessage: WoW chatlog delivery
+-- is buffered and unsuitable for real-time addon-to-companion transport in
+-- Midnight 12.x. Screenshot() is used as the addon-safe optical handoff to the
+-- local companion, with no chat anti-spam or chat-log buffering. KeystoneLens
+-- takes a short PNG-format lease so the transport QR stays lossless and can be
+-- rendered at a three-physical-pixels-per-module reliability baseline.
+--
+-- WHY QR over custom pixel marker: Reed-Solomon ECC built in (15% recovery at
+-- level M); industry-standard finder/alignment patterns survive any DPI scale,
+-- rotation, partial occlusion. Custom marker had zero error correction and
+-- broke on dark-terrain backgrounds + non-integer DPI scales.
+
+local addonName, KL = ...
+KL = type(KL) == "table" and KL or {}
+local CapturePolicy = KL.CapturePolicy
+if type(CapturePolicy) ~= "table" then return end
+local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)(addonName, "Version") or "?"
+
+local DB_DEFAULTS = {
+    enabled = true,
+    debug = false,
+    -- Legacy key kept only so old SavedVariables can be normalized away.
+    -- Visual QR support mode is session-only in 0.9.3: an old debug toggle
+    -- must never make the transport stay visible after a reload.
+    qrAlwaysVisible = false,
+    -- One-shot migration sentinel. Existing installs may have `debug=true`
+    -- stuck from a prior `/klbridge debug on` (default flipped from "on-stuck"
+    -- to "off after explicit toggle" in this version). When the key is
+    -- absent we force `debug=false` exactly once, then mark migrated so
+    -- subsequent user toggles persist normally.
+    debugDefaultMigrated = false,
+    -- Pre-capture screenshot CVar values. Each QR screenshot takes a short
+    -- lossless-PNG lease and restores the user's prior value afterwards;
+    -- persistence lets the next load recover if a reload interrupts a lease.
+    -- nil = no value currently owned by KeystoneLens.
+    priorScreenshotQuality = nil,
+    priorScreenshotFormat = nil,
+    -- QR frame position. nil = default TOPLEFT. Stored as canonical top-left
+    -- offsets relative to UIParent: {x=number, y=number}. y is normally <= 0.
+    qrFramePosition = nil,
+    -- `/kl off` pauses all applicant capture/lookups for the current hosting
+    -- session, but arms an automatic resume when a later NEW LFG listing is
+    -- detected. Persist this across /reload so pause semantics stay predictable.
+    autoResumePending = false,
+    pausedListingSignature = "",
+    pausedSawNoListing = false,
+    -- Keep the 1..255 listing-generation ring monotonic across /reload. The
+    -- desktop Companion can remain running while the Bridge reloads; resetting
+    -- this counter to 1 would make a fresh post-reload listing look older than
+    -- the last pre-reload generation and be rejected as stale.
+    listingGeneration = 0,
+}
+
+-- Session lifecycle. INVARIANT: isSessionActive == true means an applicant-
+-- recruitment transport session is active. A party roster by itself no longer
+-- keeps screenshot capture alive after the LFG listing ends.
+local isSessionActive = false
+local sessionGen = 0             -- bumped in StartSession; deferred cleanups verify match
+-- Separate LFG-listing generation. A transport session can stay alive because
+-- the player remains in a party after delisting, so sessionGen alone cannot
+-- distinguish a same-dungeon re-queue. Cycle 1..255; 0 stays reserved for
+-- older Bridges/"unknown" on the Companion side.
+local listingGeneration = 0
+local wasHostingListing = false
+
+-- Set by event handlers (pure boolean assignment; primitives can't carry
+-- taint to readers). Drained by scan-tick from a clean native-scheduler frame.
+local scanDirty = false
+
+-- ───────────────────────────────────────────────────────────
+-- QR Code transport
+--
+-- Companion side decodes via zxing-cpp (current native QR reader with a
+-- Windows x64 ABI3 wheel). Earlier opencv-based decoder was
+-- swapped out: cv2.QRCodeDetector empirically fails on QR Version ≥25 produced
+-- by 30-applicant payloads at typical 3-4 px module sizes; ZXing handles them.
+--
+-- WHY row-RLE rendering: a Version 25 QR has 117x117 = 13689 modules. One
+-- texture per module crashes WoW's renderer (verified empirically with the
+-- prior 23400-tile pixel-marker design — UI hard-froze on Show). Row-based
+-- run-length encoding folds adjacent black modules into single rectangle
+-- textures. Large QR versions with high-entropy byte payloads can still reach
+-- several thousand runs. Matrix analysis and texture painting are therefore
+-- chunked across frames; BuildQRMatrix rejects only modes whose total pooled
+-- texture count would exceed QR_TEXTURE_RENDER_BUDGET.
+--
+-- WHY transient QR uses a settle lease, not alpha-flicker: Screenshot() in the
+-- After(0) callback empirically fired before SetAlpha(1) reached the GPU
+-- framebuffer on real-world WoW setups, capturing alpha=0 (= no QR in the screenshot, no APS1 marker,
+-- companion logs "skip — no APS1 marker" forever). The QR is now
+-- normally hidden, but a changed snapshot Show()s it, waits
+-- QR_RENDER_SETTLE_S, captures, then keeps the lease until Blizzard reports
+-- SCREENSHOT_SUCCEEDED/FAILED. This avoids hiding the QR before an asynchronous
+-- framebuffer capture has actually finished.
+--
+-- Reliability-first capture sizing. One physical pixel per module proved too
+-- fragile on real Retail clients because Screenshot() completion is asynchronous
+-- and the captured framebuffer can be scaled/compressed differently from the UI
+-- paint pass. Three physical pixels per module matches the proven upstream
+-- ApplicantScout transport and leaves enough contrast for ZXing even when the
+-- user's screenshot settings are restored immediately after completion.
+-- The QR remains transient: it is shown only for the capture window.
+local QR_MODULE_PX = 3                 -- reliability baseline proven for live screenshot transport
+local QR_RENDER_SETTLE_S = 0.16        -- enough render passes while keeping capture nearly imperceptible
+-- Keep the standard four-module quiet zone. Dense QR captures have proven that
+-- Decoder tolerance for a two-module border is not a delivery guarantee.
+local QR_QUIET_ZONE = 4                -- modules of white border around QR
+local QR_EC_LEVEL = 2                  -- error correction: 1=L 2=M 3=Q 4=H. M=15% recovery
+
+---@type any
+local qrFrame = nil                    -- containing frame
+local qrTexturePool = {}               -- pool of black-module rectangle textures (reused)
+local qrTextureUsed = 0                -- count of textures CURRENTLY shown (rest hidden)
+local qrFrameCreated = false           -- one-shot init guard
+local qrCurrentSize = 0                -- current frame side length in UI units (0 = unknown)
+
+-- forward-decl locals so helpers and consumers can reference each other regardless
+-- of definition order; assignment via `name = function(...)` lands on the LOCAL slot.
+-- WHY MaybeTriggerScreenshot here: EndSession calls it before MaybeTriggerScreenshot
+-- is defined further down. Without the forward-decl, Lua resolves the name as
+-- _G.MaybeTriggerScreenshot (= nil) and call fails with "attempt to call a nil value".
+local SafeStr, APSPrint, InitDB, StartSession, EndSession, CheckSessionTransition,
+      MarkDirty, MaybeTriggerScreenshot,
+      _SetEnabled, _SetDebug, _PauseUntilNextListing,
+      -- Visibility coordinator + interaction-frame tracking. Replaces direct
+      -- qrFrame:Show/Hide calls so a single function decides visibility from
+      -- three orthogonal axes: isSessionActive (auto), _qrSuppressedByInteraction
+      -- (auto, see below), qrAlwaysVisible (manual debug override).
+      _RefreshQRVisibility, _RefreshQRMouse, _RecomputeInteractionSuppression,
+      _TryHookInfoPanels, _OnInteractionEvent,
+      -- Group Finder entry hooks only capture the host key level. They never
+      -- prefill or submit Blizzard's listing form.
+      _SetupLFGEntryCreationHooks
+-- Forward-decl mutable state used by StartSession/EndSession/reset. WHY: those
+-- functions assign via bare `x = ...`; without forward-decl, the `local` keyword
+-- on declarations later in this file would shadow them and the bare assignments
+-- silently target globals.
+-- qrAlwaysVisible is forward-decl'd here so EndSession (above the slash handler
+-- that owns the toggle) can preserve the user's debug visibility setting when
+-- session ends.
+-- qrMoveMode is opt-in mouse/drag mode. Normal visible QR must not capture
+-- mouse input because it sits over gameplay HUD while hosting.
+-- _qrSuppressedByInteraction: orthogonal to session/debug — true while any
+-- tracked Blizzard interaction frame (vendor, NPC, quest, mail, bank, taxi,
+-- character, map, etc.) is open. Hides QR so user can read those windows
+-- without the QR overlay obscuring text. Companion misses ~10-30s of emits
+-- while user has interaction window open — acceptable per scope.
+-- qrForceVisibleForShot is a transport-only visibility lease for force shots
+-- such as EndSession's final clear while an interaction frame has hidden QR.
+local lastSnapshotHash, lastShotTime, pendingShotDirty,
+      qrAlwaysVisible, qrMoveMode, suppressShotsUntil,
+      _qrSuppressedByInteraction, qrForceVisibleForShot,
+      qrForceVisibleShotGen, lastQREncodeMode, lastQREncodeBytes,
+      lastQREncodeError
+
+local lfgEntryCreationHookState = {
+    hooksSetup = false,
+    hookError = nil,
+}
+local lfgEntryCreationKeyCaptureHooked = setmetatable({}, { __mode = "k" })
+local entryCreationKeyState = {
+    END_SESSION_CLEAR_RETRY_DELAY_S = QR_RENDER_SETTLE_S * 2,
+    TERMINAL_CLEAR_MAX_DISPATCHES = 2,
+    terminalClearDispatchCount = 0,
+    terminalClearSessionGen = nil,
+    terminalClearRetryScheduled = false,
+    DISABLE_CVAR_RESTORE_AFTER_CLEAR_DELAY_S = QR_RENDER_SETTLE_S * 3,
+    entryCreationKeyLevelCache = nil,
+    pendingEntryCreationKeyLevelCache = nil,
+    activeListingCacheContext = nil,
+    activeListingGeneration = 0,
+    activeListingMaybeChanged = false,
+    lfgEntryCreationKeyCapturePending = false,
+    listingCreatePending = false,
+    entryCreationKeyLevelCacheDecision = "none",
+    lastPayloadApplicantCount = 0,
+    lastPayloadRosterCount = 0,
+    lastPayloadRosterIncomplete = false,
+    lastEmittedApplicantCount = 0,
+    rosterChangedSinceLastPayload = false,
+    ROSTER_CHANGE_PREFLIGHT_DEADLINE_S = 2.0,
+    ROSTER_INSPECT_RETRY_COOLDOWN_S = 15.0,
+    ROSTER_INSPECT_MAX_TIMEOUTS_PER_SESSION = 2,
+    -- Retry the expensive roster/RaiderIO builder only on a bounded backoff.
+    -- The 0.5s transport poll must keep listing/applicant state fresh without
+    -- rebuilding a roster surface that is already known to be incomplete.
+    ROSTER_LOAD_RETRY_DELAYS_S = { 0.5, 2.0, 5.0, 15.0 },
+    rosterLoadRetryAttempt = 0,
+    rosterLoadRetryReady = true,
+    rosterLoadRetryExhausted = false,
+    rosterChangePreflightDeadline = nil,
+    rosterChangePreflightToken = 0,
+    pendingTtl = 10,
+    NONTERMINAL_SNAPSHOT_MIN_SENDS = 1,
+    lastDeliverySnapshotHash = nil,
+    lastDeliverySnapshotSendCount = 0,
+    -- Overflow snapshots are transmitted as bounded APS1 v10 fragment
+    -- envelopes containing one frozen, complete logical payload. Keep this state on
+    -- the existing table: the file is close to Lua 5.1's 200-local limit.
+    QR_OVERFLOW_WIRE_VERSION = 0x0A,
+    QR_OVERFLOW_FRAGMENT_BYTES = 320,
+    QR_OVERFLOW_MAX_FRAGMENTS = 128,
+    QR_OVERFLOW_MIN_SENDS = 1,
+    QR_OVERFLOW_SHOT_INTERVAL_S = 0.45,
+    qrOverflowStreamID = nil,
+    qrOverflowGenerationCounter = 0,
+    qrOverflowState = nil,
+    qrOverflowSupersededCount = 0,
+    qrOverflowLastFailure = nil,
+    lastPayloadBuildError = nil,
+    lastPayloadTotalBytes = 0,
+    groupTransportGen = 0,
+    rioMPlusSummaryCache = {},
+    cleanUnknownLabel = nil,
+    cleanUnknownObjectLabel = nil,
+    -- Read-only by convention: payload builders only serialize these zero fields.
+    emptyRaiderIOMPlusSummary = {
+        currentScore = 0,
+        mainScore = 0,
+        hasProfile = false,
+        bestKey = 0,
+        bestDungeonKey = 0,
+        timedAtOrAbove = 0,
+        timedAtOrAboveMinus1 = 0,
+        timedAtOrAboveMinus2 = 0,
+        completedAtOrAboveMinus1 = 0,
+        dungeonCount = 0,
+    },
+    qrPaintJobGen = 0,
+    qrPaintInProgress = false,
+    qrCaptureInProgress = false,
+    qrPaintDirtyDuringPaint = false,
+    qrTransportJobStartedAt = nil,
+    qrTransportJobTerminalClear = false,
+    SCREENSHOT_CVAR_RESTORE_DELAY_S = 0.05,
+    screenshotCVarLeaseGeneration = 0,
+    SCREENSHOT_FAILURE_MAX_ATTEMPTS = 2,
+    screenshotFailureHash = nil,
+    screenshotFailureAttemptCount = 0,
+    screenshotAwaitingResult = false,
+    screenshotAwaitingJobGen = nil,
+    screenshotAwaitingSuperseded = false,
+    screenshotResultHandler = nil,
+    screenshotPendingForce = false,
+    screenshotPendingTerminalClear = false,
+    screenshotPendingSessionGen = nil,
+    screenshotPendingLFGReadsAllowed = true,
+    screenshotLastResult = "never",
+    QR_TRANSPORT_JOB_TIMEOUT_S = 8.0,
+    QR_RECOVERY_NOTICE_COOLDOWN_S = 30,
+    qrTransportRecoveryCount = 0,
+    qrTransportLastRecoveryReason = "never",
+    qrTransportLastRecoveryPrintAt = nil,
+    qrTextureVisibleHighWater = 0,
+    transportDirtyGeneration = 0,
+    LEADER_KEY_TTL_S = 60,
+    LEADER_KEY_REQUEST_THROTTLE_S = 3,
+    LEADER_KEY_REQUEST_RETRY_DELAY_S = 1.0,
+    LEADER_KEY_REQUEST_MAX_RETRIES = 5,
+    leaderKeystone = nil,
+    leaderKeystoneLastRequestAt = 0,
+    leaderKeystoneLastRequestStatus = "never",
+    leaderKeystoneRequestRetryToken = 0,
+    leaderKeystoneRequestRetryDeadline = nil,
+    leaderKeystoneRequestRetryGeneration = nil,
+    leaderKeystoneRefreshToken = 0,
+    leaderKeystoneRefreshDeadline = nil,
+    leaderKeystoneRefreshGeneration = nil,
+    leaderKeystoneContextCombatDeferred = false,
+    leaderKeystoneCallbackRegistered = false,
+    leaderKeystoneLib = nil,
+    leaderKeystoneCallbackOwner = {},
+    libKeystonePrefixRegistered = false,
+    libKeystoneShim = nil,
+    libKeystoneShimCallbacks = {},
+    libKeystoneLastSendStatus = "never",
+    LIB_KEYSTONE_RESPONSE_RETRY_DELAY_S = 1.0,
+    LIB_KEYSTONE_RESPONSE_MAX_RETRIES = 3,
