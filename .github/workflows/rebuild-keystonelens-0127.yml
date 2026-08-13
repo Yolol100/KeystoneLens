@@ -34,86 +34,71 @@ jobs:
         run: |
           set -euo pipefail
           if test -f .release-update/part-00; then
-            cat .release-update/part-* > /tmp/keystonelens-update.b64
-            base64 -d /tmp/keystonelens-update.b64 > /tmp/keystonelens-update.tar.gz
-            echo '5ba841504a8f897b096801a82f7c40b56301b28fc14da621400c259787f6a317  /tmp/keystonelens-update.tar.gz' | sha256sum -c -
-            tar -xzf /tmp/keystonelens-update.tar.gz -C .
+            cat .release-update/part-* > /tmp/keystonelens-update.patch
+            echo 'efb6aba514e8d874f8368f35c6fa50463d8206dff86ac85a64d2181d9e310cbd  /tmp/keystonelens-update.patch' | sha256sum -c -
+            echo 'd2c27168e9559ef1bf34f834d8e4ba35391482b9bde72829fbaccd0f7254b966  companion/KeystoneLens-Source-0.12.7.zip' | sha256sum -c -
+            echo 'ce3da2e9c18b16deb735ef5be5a164930c9a0eb191753ab83ea4d939319c7ccc  addon/KeystoneLensBridge-0.12.7-CurseForge.zip' | sha256sum -c -
+            echo '8b779edeb71ff4d0d766311e8c3fea36fb88aa4d67845bdcf3eda9bc683e7a62  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | sha256sum -c -
+            rm -rf companion/source/addon
+            cp -a addon companion/source/addon
+            patch --dry-run --batch --forward -p1 -d companion/source < /tmp/keystonelens-update.patch
+            patch --batch --forward -p1 -d companion/source < /tmp/keystonelens-update.patch
+            cp companion/source/addon/KeystoneLensBridge/Core/Transport.lua addon/KeystoneLensBridge/Core/Transport.lua
+          else
+            rm -rf companion/source/addon
+            cp -a addon companion/source/addon
           fi
-          rm -rf .release-update .keystonelens-publish
 
-      - name: Run installer contract tests
+      - name: Install test dependencies
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check 'pytest==9.0.2' -r companion/source/app/requirements.txt
-          rm -rf companion/source/addon
-          cp -a addon companion/source/addon
+
+      - name: Run full regression round one
+        shell: bash
+        run: |
+          set -euo pipefail
           cd companion/source
-          python -m pytest -q app/tests/test_release_contract.py
+          python -m pytest -q
           python -m compileall -q app/keystonelens_companion
-          rm -rf addon
 
-      - name: Build verified Windows installer
+      - name: Build and verify complete release round two
         shell: bash
         run: |
           set -euo pipefail
           cd companion/source
-          bash installer/windows/build.sh
-          echo '8b779edeb71ff4d0d766311e8c3fea36fb88aa4d67845bdcf3eda9bc683e7a62  installer/windows/build/KeystoneLens-Setup.exe' | sha256sum -c -
-          cp installer/windows/build/KeystoneLens-Setup.exe ../../executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
+          bash scripts/BUILD-RELEASE.sh
+          echo 'bbd0844b2e4d4594263b7625ed936b0ddebb1d29695d712a5cee42f2be212387  release/KeystoneLens-Setup-0.12.7.exe' | sha256sum -c -
+          echo 'c20891377efae692e5e760cccecafa1ff5d3cd3d6e27ccbc9a58cc61d5a2bb2c  release/KeystoneLens-Source-0.12.7.zip' | sha256sum -c -
+          echo 'bbb180451cc972d7fffd51256a839518fe5cc54e52366888b41188f717b9ed66  release/KeystoneLensBridge-0.12.7-CurseForge.zip' | sha256sum -c -
+          echo '5cdfeec3ec1f9e63fa980a32c091fc37ee2277e03d22e0f054f1247fed4f584c  release/KeystoneLens-Release-0.12.7.zip' | sha256sum -c -
 
-      - name: Build deterministic source archive
+      - name: Publish verified repository artifacts
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf companion/source/addon
-          mkdir -p companion/source/addon
-          cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
-          python - <<'PY'
-          from pathlib import Path
-          import stat
-          import zipfile
-
-          root = Path('companion/source')
-          out = Path('companion/KeystoneLens-Source-0.12.7.zip')
-          fixed = (1980, 1, 1, 0, 0, 0)
-          selected = [root / 'README-NL.md', root / 'pytest.ini', root / 'conftest.py']
-          for base in [root / 'app', root / 'addon', root / 'data-addon', root / 'docs', root / 'installer' / 'windows', root / 'scripts']:
-              for path in base.rglob('*'):
-                  if not path.is_file():
-                      continue
-                  rel = path.relative_to(root).as_posix()
-                  if '/build/' in '/' + rel or rel.endswith('bootstrap/payload.zip'):
-                      continue
-                  if '__pycache__' in path.parts or path.suffix in {'.pyc', '.pyo', '.exe', '.zip'}:
-                      continue
-                  selected.append(path)
-          selected = sorted(set(p for p in selected if p.exists()))
-          with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-              for path in selected:
-                  rel = path.relative_to(root).as_posix()
-                  info = zipfile.ZipInfo(rel, fixed)
-                  info.compress_type = zipfile.ZIP_DEFLATED
-                  info.create_system = 3
-                  mode = 0o755 if path.suffix in {'.sh', '.py'} or path.name == 'BUILD-RELEASE.sh' else 0o644
-                  info.external_attr = (stat.S_IFREG | mode) << 16
-                  zf.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
-          PY
-          rm -rf companion/source/addon
-          echo 'd2c27168e9559ef1bf34f834d8e4ba35391482b9bde72829fbaccd0f7254b966  companion/KeystoneLens-Source-0.12.7.zip' | sha256sum -c -
+          cp companion/source/release/KeystoneLens-Setup-0.12.7.exe executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
+          cp companion/source/release/KeystoneLens-Source-0.12.7.zip companion/KeystoneLens-Source-0.12.7.zip
+          cp companion/source/release/KeystoneLensBridge-0.12.7-CurseForge.zip addon/KeystoneLensBridge-0.12.7-CurseForge.zip
+          cp companion/source/docs/AUDIT-REPORT.md companion/KeystoneLens-Audit-0.12.7.md
 
       - name: Clean build-only files and refresh checksums
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf .release-update .keystonelens-publish
+          rm -rf companion/source/addon
+          rm -rf companion/source/release
           rm -rf companion/source/installer/windows/build
           rm -f companion/source/installer/windows/bootstrap/payload.zip
           find companion/source -type d -name '__pycache__' -prune -exec rm -rf '{}' +
           rm -rf companion/source/.pytest_cache
           find README.md addon companion executable -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
-          echo '8b779edeb71ff4d0d766311e8c3fea36fb88aa4d67845bdcf3eda9bc683e7a62  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | grep -Fxf - SHA256SUMS.txt
-          echo 'd2c27168e9559ef1bf34f834d8e4ba35391482b9bde72829fbaccd0f7254b966  companion/KeystoneLens-Source-0.12.7.zip' | grep -Fxf - SHA256SUMS.txt
-          if grep -Eq '__pycache__|\.pytest_cache|\.keystonelens-publish|\.release-update' SHA256SUMS.txt; then
+          echo 'bbd0844b2e4d4594263b7625ed936b0ddebb1d29695d712a5cee42f2be212387  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | grep -Fxf - SHA256SUMS.txt
+          echo 'c20891377efae692e5e760cccecafa1ff5d3cd3d6e27ccbc9a58cc61d5a2bb2c  companion/KeystoneLens-Source-0.12.7.zip' | grep -Fxf - SHA256SUMS.txt
+          echo 'bbb180451cc972d7fffd51256a839518fe5cc54e52366888b41188f717b9ed66  addon/KeystoneLensBridge-0.12.7-CurseForge.zip' | grep -Fxf - SHA256SUMS.txt
+          if grep -Eq '__pycache__|\.pytest_cache|\.keystonelens-publish|\.release-update|companion/source/release' SHA256SUMS.txt; then
             echo 'Unexpected temporary path in checksum manifest.' >&2
             exit 1
           fi
@@ -129,5 +114,5 @@ jobs:
             echo 'No changes to commit.'
             exit 0
           fi
-          git commit -m 'Rebuild KeystoneLens 0.12.7 installer artifacts'
+          git commit -m 'Rebuild KeystoneLens 0.12.7 verified artifacts'
           git push origin HEAD:main
