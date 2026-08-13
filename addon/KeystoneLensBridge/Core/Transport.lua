@@ -473,6 +473,17 @@ local function SafeNumber(v, default)
     return n
 end
 
+local function SafeOptionalNumber(v)
+    if IsSecretValue(v) or v == nil then return nil end
+    local tv = type(v)
+    if tv ~= "number" and tv ~= "string" then return nil end
+    local n = tonumber(v)
+    if n == nil or n ~= n or n == math.huge or n == -math.huge then
+        return nil
+    end
+    return n
+end
+
 local function SafeRoundedNumber(v, default)
     return math.floor(SafeNumber(v, default) + 0.5)
 end
@@ -4077,7 +4088,7 @@ entryCreationKeyState.GetQRModuleUISize = function()
     local convert = pixelUtil and pixelUtil.ConvertPixelsToUIForRegion
     if type(convert) == "function" and qrFrame then
         local ok, converted = pcall(convert, QR_MODULE_PX, qrFrame)
-        converted = ok and SafeNumber(converted, nil) or nil
+        converted = ok and SafeOptionalNumber(converted) or nil
         if converted and converted > 0 then return converted end
     end
     -- Mirror PixelUtil's conversion when the helper is absent or rejects the
@@ -4088,8 +4099,8 @@ entryCreationKeyState.GetQRModuleUISize = function()
        and type(getEffectiveScale) == "function" then
         local screenOK, _, physicalHeight = pcall(getPhysicalScreenSize)
         local scaleOK, effectiveScale = pcall(getEffectiveScale, qrFrame)
-        physicalHeight = screenOK and SafeNumber(physicalHeight, nil) or nil
-        effectiveScale = scaleOK and SafeNumber(effectiveScale, nil) or nil
+        physicalHeight = screenOK and SafeOptionalNumber(physicalHeight) or nil
+        effectiveScale = scaleOK and SafeOptionalNumber(effectiveScale) or nil
         if physicalHeight and physicalHeight > 0
            and effectiveScale and effectiveScale > 0 then
             local uiUnitFactor =
@@ -4679,7 +4690,7 @@ MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllow
             -- the transport keeps retrying until the list becomes authoritative.
             if type(C_LFGList.GetNumApplicants) == "function" then
                 local countOK, rawCount = pcall(C_LFGList.GetNumApplicants)
-                local expectedGroups = countOK and SafeNumber(rawCount, nil) or nil
+                local expectedGroups = countOK and SafeOptionalNumber(rawCount) or nil
                 if expectedGroups and expectedGroups >= 0
                    and math.floor(expectedGroups) > #cleanApplicantIDs then
                     entryCreationKeyState.applicantListReadIncomplete = true
