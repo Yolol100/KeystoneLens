@@ -40,18 +40,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('addon/KeystoneLensBridge/Core/Transport.lua')
-          text = path.read_text(encoding='utf-8')
-          old = '-- rendered as a compact one-physical-pixel-per-module QR.'
-          new = '-- rendered at a three-physical-pixels-per-module reliability baseline.'
-          if old in text:
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          elif new not in text:
-              raise SystemExit('QR transport sizing comment contract not found')
-          PY
           grep -F 'three-physical-pixels-per-module reliability baseline' addon/KeystoneLensBridge/Core/Transport.lua
+          if grep -Fq 'one-physical-pixel-per-module' addon/KeystoneLensBridge/Core/Transport.lua; then
+            echo 'Stale one-pixel QR documentation returned.' >&2
+            exit 1
+          fi
           grep -F 'local QR_MODULE_PX = 3' addon/KeystoneLensBridge/Core/Transport.lua
           if grep -Fq 'local QR_MODULE_PX = 1' addon/KeystoneLensBridge/Core/Transport.lua; then
             echo 'QR module size regressed to the fragile one-pixel baseline.' >&2
