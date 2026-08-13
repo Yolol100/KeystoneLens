@@ -20,21 +20,33 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26.5'
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.13.15'
+
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Compile addon Lua
+        shell: bash
+        run: |
+          set -euo pipefail
+          find addon/KeystoneLensBridge -type f -name '*.lua' -print0 | while IFS= read -r -d '' file; do
+            LUA_FILE="$file" lua5.1 -e 'local f,e=loadfile(os.getenv("LUA_FILE")); assert(f,e)'
+          done
 
       - name: Verify QR reliability baseline and sync addon source
         shell: bash
@@ -91,7 +103,7 @@ jobs:
           cp companion/source/docs/AUDIT-REPORT.md /tmp/keystonelens-publish/KeystoneLens-Audit-0.12.7.md
 
       - name: Upload verified publish payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: keystonelens-verified-publish
           path: /tmp/keystonelens-publish
@@ -101,17 +113,18 @@ jobs:
   publish:
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - name: Checkout exact validated source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Download verified publish payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: keystonelens-verified-publish
           path: /tmp/keystonelens-publish
