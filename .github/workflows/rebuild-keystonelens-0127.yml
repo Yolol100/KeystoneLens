@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check 'pytest==9.0.2'
+          python -m pip install --disable-pip-version-check 'pytest==9.0.2' -r companion/source/app/requirements.txt
           rm -rf companion/source/addon
           cp -a addon companion/source/addon
           cd companion/source
