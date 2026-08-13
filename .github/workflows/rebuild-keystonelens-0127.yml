@@ -129,6 +129,7 @@ jobs:
             echo 'Unexpected temporary path in checksum manifest.' >&2
             exit 1
           fi
+          sha256sum -c SHA256SUMS.txt
 
       - name: Commit verified rebuilt artifacts
         shell: bash
