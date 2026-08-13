@@ -40,13 +40,15 @@ jobs:
             echo 'ce3da2e9c18b16deb735ef5be5a164930c9a0eb191753ab83ea4d939319c7ccc  addon/KeystoneLensBridge-0.12.7-CurseForge.zip' | sha256sum -c -
             echo '8b779edeb71ff4d0d766311e8c3fea36fb88aa4d67845bdcf3eda9bc683e7a62  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | sha256sum -c -
             rm -rf companion/source/addon
-            cp -a addon companion/source/addon
+            mkdir -p companion/source/addon
+            cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
             patch --dry-run --batch --forward -p1 -d companion/source < /tmp/keystonelens-update.patch
             patch --batch --forward -p1 -d companion/source < /tmp/keystonelens-update.patch
             cp companion/source/addon/KeystoneLensBridge/Core/Transport.lua addon/KeystoneLensBridge/Core/Transport.lua
           else
             rm -rf companion/source/addon
-            cp -a addon companion/source/addon
+            mkdir -p companion/source/addon
+            cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
           fi
 
       - name: Install test dependencies
