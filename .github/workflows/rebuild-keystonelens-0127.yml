@@ -36,7 +36,7 @@ jobs:
           if test -f .release-update/part-00; then
             cat .release-update/part-* > /tmp/keystonelens-update.b64
             base64 -d /tmp/keystonelens-update.b64 > /tmp/keystonelens-update.tar.gz
-            echo '25391c9f8fe86238069b98ac9e6fd3813c8526a6c188ae0a91bf6bb4bb640eb8  /tmp/keystonelens-update.tar.gz' | sha256sum -c -
+            echo '5ba841504a8f897b096801a82f7c40b56301b28fc14da621400c259787f6a317  /tmp/keystonelens-update.tar.gz' | sha256sum -c -
             tar -xzf /tmp/keystonelens-update.tar.gz -C .
           fi
           rm -rf .release-update .keystonelens-publish
@@ -59,7 +59,7 @@ jobs:
           set -euo pipefail
           cd companion/source
           bash installer/windows/build.sh
-          echo 'b5dbf55a39ed277e0e00c57b8753ded9841135e254c9136601fb227d508ca643  installer/windows/build/KeystoneLens-Setup.exe' | sha256sum -c -
+          echo '8b779edeb71ff4d0d766311e8c3fea36fb88aa4d67845bdcf3eda9bc683e7a62  installer/windows/build/KeystoneLens-Setup.exe' | sha256sum -c -
           cp installer/windows/build/KeystoneLens-Setup.exe ../../executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe
 
       - name: Build deterministic source archive
@@ -100,7 +100,7 @@ jobs:
                   zf.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
           PY
           rm -rf companion/source/addon
-          echo 'b110143724d1f4b2b8309db33f582396f7bb68476ab0273f155329553a23dc88  companion/KeystoneLens-Source-0.12.7.zip' | sha256sum -c -
+          echo 'd2c27168e9559ef1bf34f834d8e4ba35391482b9bde72829fbaccd0f7254b966  companion/KeystoneLens-Source-0.12.7.zip' | sha256sum -c -
 
       - name: Clean build-only files and refresh checksums
         shell: bash
@@ -111,8 +111,8 @@ jobs:
           find companion/source -type d -name '__pycache__' -prune -exec rm -rf '{}' +
           rm -rf companion/source/.pytest_cache
           find README.md addon companion executable -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
-          echo 'b5dbf55a39ed277e0e00c57b8753ded9841135e254c9136601fb227d508ca643  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | grep -Fxf - SHA256SUMS.txt
-          echo 'b110143724d1f4b2b8309db33f582396f7bb68476ab0273f155329553a23dc88  companion/KeystoneLens-Source-0.12.7.zip' | grep -Fxf - SHA256SUMS.txt
+          echo '8b779edeb71ff4d0d766311e8c3fea36fb88aa4d67845bdcf3eda9bc683e7a62  executable/KeystoneLens-Setup-v0.12.7-Windows-x64.exe' | grep -Fxf - SHA256SUMS.txt
+          echo 'd2c27168e9559ef1bf34f834d8e4ba35391482b9bde72829fbaccd0f7254b966  companion/KeystoneLens-Source-0.12.7.zip' | grep -Fxf - SHA256SUMS.txt
           if grep -Eq '__pycache__|\.pytest_cache|\.keystonelens-publish|\.release-update' SHA256SUMS.txt; then
             echo 'Unexpected temporary path in checksum manifest.' >&2
             exit 1
