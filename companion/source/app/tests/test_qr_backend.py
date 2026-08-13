@@ -10,8 +10,8 @@ from PIL import Image
 from keystonelens_companion import aps1
 
 
-REPO = Path(__file__).resolve().parents[4]
-BRIDGE = REPO / "addon" / "KeystoneLensBridge"
+SOURCE_ROOT = Path(__file__).resolve().parents[2]
+BRIDGE = SOURCE_ROOT / "addon" / "KeystoneLensBridge"
 
 
 def test_zxing_qr_backend_accepts_keystonelens_payload(tmp_path):
