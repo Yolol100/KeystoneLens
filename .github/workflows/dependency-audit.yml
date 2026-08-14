@@ -6,10 +6,14 @@ on:
     paths:
       - '.github/workflows/dependency-audit.yml'
       - 'companion/source/app/requirements.txt'
+      - 'companion/source/installer/windows/requirements-runtime.txt'
+      - 'companion/source/installer/windows/requirements-runtime.lock'
   pull_request:
     paths:
       - '.github/workflows/dependency-audit.yml'
       - 'companion/source/app/requirements.txt'
+      - 'companion/source/installer/windows/requirements-runtime.txt'
+      - 'companion/source/installer/windows/requirements-runtime.lock'
   schedule:
     - cron: '17 5 * * 1'
 
@@ -40,3 +44,26 @@ jobs:
         run: |
           set -euo pipefail
           pip-audit --strict --progress-spinner off -r companion/source/app/requirements.txt
+
+      - name: Audit exact Windows runtime package set
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('companion/source/installer/windows/requirements-runtime.lock')
+          output = Path('/tmp/keystonelens-runtime-audit.txt')
+          packages = []
+          for raw in source.read_text(encoding='utf-8').splitlines():
+              line = raw.strip()
+              if not line or line.startswith('#') or line.startswith('--hash='):
+                  continue
+              if line.endswith('\\'):
+                  line = line[:-1].rstrip()
+              if line and not line.startswith('--hash='):
+                  packages.append(line)
+          output.write_text('\n'.join(packages) + '\n', encoding='utf-8')
+          print(output.read_text(encoding='utf-8'), end='')
+          PY
+          pip-audit --strict --progress-spinner off -r /tmp/keystonelens-runtime-audit.txt
