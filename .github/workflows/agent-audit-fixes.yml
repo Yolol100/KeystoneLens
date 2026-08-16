@@ -39,5 +39,18 @@ jobs:
           cp -R addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
           python -m pip install --disable-pip-version-check -q 'pytest==9.0.2' -r companion/source/app/requirements.txt
           cd companion/source
-          python -m pytest -q
+          set +e
+          python -m pytest -q > /tmp/keystonelens-pytest.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/keystonelens-pytest.log').read_text(encoding='utf-8', errors='replace')[-12000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=KeystoneLens pytest failure::{text}')
+          PY
+            exit "$status"
+          fi
+          cat /tmp/keystonelens-pytest.log
           python -m compileall -q app
