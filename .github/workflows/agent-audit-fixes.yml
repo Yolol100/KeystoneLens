@@ -1,0 +1,179 @@
+name: Apply KeystoneLens audit fixes
+
+on:
+  push:
+    branches:
+      - agent/audit-fixes-20260816
+    paths:
+      - '.github/workflows/agent-audit-fixes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/audit-fixes-20260816
+          fetch-depth: 0
+      - name: Apply bounded audit fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          wcl_path = Path('companion/source/app/keystonelens_companion/wcl.py')
+          wcl = wcl_path.read_text(encoding='utf-8')
+
+          # Cache persistence is serialised by a dedicated save lock. Mutations and
+          # snapshots use the data lock, but JSON serialisation and filesystem I/O do not.
+          wcl = wcl.replace(
+              '        self._lock = threading.Lock()\n        self._data: dict[str, dict[str, Any]] = {}',
+              '        self._lock = threading.Lock()\n        self._save_lock = threading.Lock()\n        self._data: dict[str, dict[str, Any]] = {}',
+              1,
+          )
+          wcl = wcl.replace(
+              '''        with self._lock:\n            if self._prune_locked(time.time()):\n                self._save_locked()''',
+              '''        with self._lock:\n            changed = self._prune_locked(time.time())\n        if changed:\n            self._save()''',
+              1,
+          )
+
+          get_start = wcl.index('    def get(self, region: str, realm: str, name: str, spec_id: int, dungeon: str, target_key: int) -> WCLResult | None:\n')
+          get_end = wcl.index('\n    def put(self, region: str, result: WCLResult) -> None:\n', get_start)
+          new_get = '''    def get(self, region: str, realm: str, name: str, spec_id: int, dungeon: str, target_key: int) -> WCLResult | None:\n        key = self._key(region, realm, name, spec_id, dungeon, target_key)\n        now = time.time()\n        should_save = False\n        result: WCLResult | None = None\n        with self._lock:\n            row = self._data.get(key)\n            if not isinstance(row, dict):\n                return None\n            try:\n                fetched = float(row.get("fetched_at", 0) or 0)\n            except (TypeError, ValueError, OverflowError):\n                self._data.pop(key, None)\n                should_save = True\n                row = None\n\n            if row is not None:\n                age = now - fetched\n                if (\n                    not math.isfinite(fetched)\n                    or fetched <= 0\n                    or age < -MAX_CACHE_FUTURE_SKEW_SECONDS\n                    or age > self._row_ttl(row)\n                ):\n                    self._data.pop(key, None)\n                    should_save = True\n                    row = None\n\n            if row is not None:\n                raw_bracket = row.get("bracket")\n                bracket = _cached_bracket(raw_bracket)\n                invalid_evidence = raw_bracket is not None and bracket is None\n                metric_brackets: dict[str, WCLBracket] = {}\n                raw_metrics = row.get("metric_brackets")\n                if isinstance(raw_metrics, dict):\n                    if len(raw_metrics) > MAX_WCL_METRIC_BRACKETS:\n                        invalid_evidence = True\n                    for metric_name, raw_metric_bracket in list(raw_metrics.items())[:MAX_WCL_METRIC_BRACKETS]:\n                        if not isinstance(metric_name, str) or not metric_name or len(metric_name) > 64:\n                            invalid_evidence = True\n                            continue\n                        parsed = _cached_bracket(raw_metric_bracket)\n                        if parsed is None:\n                            invalid_evidence = True\n                            continue\n                        metric_brackets[metric_name] = parsed\n                elif raw_metrics not in (None, {}):\n                    invalid_evidence = True\n                if invalid_evidence:\n                    self._data.pop(key, None)\n                    should_save = True\n                else:\n                    try:\n                        stored_spec = int(row.get("spec_id") or spec_id)\n                    except (TypeError, ValueError, OverflowError):\n                        stored_spec = spec_id\n                    result = WCLResult(\n                        name=str(row.get("name") or name),\n                        realm=str(row.get("realm") or realm),\n                        dungeon_name=str(row.get("dungeon_name") or dungeon),\n                        spec_id=stored_spec,\n                        bracket=bracket,\n                        fetched_at=fetched,\n                        # Target key is request context, not part of the cached WCL\n                        # ranking evidence. Restamp it so engine context checks remain\n                        # exact after a re-queue at another key level.\n                        target_key=int(target_key or 0),\n                        not_found=bool(row.get("not_found")),\n                        error=str(row.get("error") or ""),\n                        metric_brackets=metric_brackets,\n                    )\n        if should_save:\n            self._save()\n        return result\n'''
+          wcl = wcl[:get_start] + new_get + wcl[get_end:]
+
+          old_persist = '''        with self._lock:\n            for region, result in pending:\n                key = self._key(\n                    region, result.realm, result.name, result.spec_id,\n                    result.dungeon_name, result.target_key,\n                )\n                payload = asdict(result)\n                # Quota is transient UI state, not useful persisted evidence.\n                payload.pop("quota_spent", None)\n                payload.pop("quota_limit", None)\n                payload.pop("quota_reset", None)\n                self._data[key] = payload\n            self._prune_locked(time.time())\n            self._save_locked()\n\n    def count(self) -> int:\n        with self._lock:\n            changed = self._prune_locked(time.time())\n            if changed:\n                self._save_locked()\n            return len(self._data)\n\n    def _save_locked(self) -> None:\n        try:\n            self.path.parent.mkdir(parents=True, exist_ok=True)\n            tmp = self.path.with_suffix(".tmp")\n            tmp.write_text(\n                json.dumps(self._data, ensure_ascii=False, separators=(",", ":"), allow_nan=False),\n                encoding="utf-8",\n            )\n            tmp.replace(self.path)\n        except (OSError, ValueError):\n            pass\n'''
+          new_persist = '''        with self._lock:\n            for region, result in pending:\n                key = self._key(\n                    region, result.realm, result.name, result.spec_id,\n                    result.dungeon_name, result.target_key,\n                )\n                payload = asdict(result)\n                # Quota is transient UI state, not useful persisted evidence.\n                payload.pop("quota_spent", None)\n                payload.pop("quota_limit", None)\n                payload.pop("quota_reset", None)\n                self._data[key] = payload\n            self._prune_locked(time.time())\n        self._save()\n\n    def count(self) -> int:\n        with self._lock:\n            changed = self._prune_locked(time.time())\n            count = len(self._data)\n        if changed:\n            self._save()\n        return count\n\n    def _save(self) -> None:\n        try:\n            # Serialise writers so an older snapshot cannot replace a newer one.\n            # Snapshotting briefly holds _lock; JSON encoding and filesystem I/O do not.\n            with self._save_lock:\n                with self._lock:\n                    snapshot = dict(self._data)\n                payload = json.dumps(\n                    snapshot, ensure_ascii=False, separators=(",", ":"), allow_nan=False\n                )\n                self.path.parent.mkdir(parents=True, exist_ok=True)\n                tmp = self.path.with_suffix(".tmp")\n                tmp.write_text(payload, encoding="utf-8")\n                tmp.replace(self.path)\n        except (OSError, ValueError):\n            pass\n'''
+          if old_persist not in wcl:
+              raise SystemExit('wcl.py: persistence block did not match current main')
+          wcl = wcl.replace(old_persist, new_persist, 1)
+
+          # Relative WCL quota/backoff clocks must not depend on wall-clock changes.
+          wcl = wcl.replace('time.time() < self._blocked_until', 'time.monotonic() < self._blocked_until')
+          wcl = wcl.replace('time.time() + self._retry_after_seconds(response)', 'time.monotonic() + self._retry_after_seconds(response)')
+          wcl = wcl.replace('time.time() + max(5.0, reset)', 'time.monotonic() + max(5.0, reset)')
+          wcl = wcl.replace('self._blocked_until = time.time() +', 'self._blocked_until = time.monotonic() +')
+
+          # Realm catalog retry pacing is also process-local relative time.
+          ensure_anchor = '''    def _ensure_realm_catalog(self) -> dict[str, object] | None:\n        if self._realm_catalog is not None:\n            return self._realm_catalog\n        now = time.time()\n        if now < self._blocked_until:'''
+          if ensure_anchor not in wcl:
+              raise SystemExit('wcl.py: realm catalog timing anchor missing')
+          wcl = wcl.replace(ensure_anchor, ensure_anchor.replace('now = time.time()', 'now = time.monotonic()'), 1)
+          # The second read inside _realm_lock belongs to the same retry clock.
+          lock_anchor = '''        with self._realm_lock:\n            if self._realm_catalog is not None:\n                return self._realm_catalog\n            now = time.time()\n            if now < self._blocked_until:'''
+          if lock_anchor not in wcl:
+              raise SystemExit('wcl.py: realm lock timing anchor missing')
+          wcl = wcl.replace(lock_anchor, lock_anchor.replace('now = time.time()', 'now = time.monotonic()'), 1)
+
+          # Complete the English runtime copy cleanup.
+          wcl = wcl.replace('error="WCL batch ontbreekt"', 'error="WCL batch result missing"')
+          wcl = wcl.replace('raise WCLError(f"Netwerk: {exc}") from exc', 'raise WCLError(f"WCL network error: {exc}") from exc')
+          wcl = wcl.replace('error="Geen geldige spec/realm"', 'error="Invalid spec/realm"')
+          wcl_path.write_text(wcl, encoding='utf-8')
+
+          # Regression: prove cache disk I/O happens while the shared data lock is available.
+          cache_test = Path('companion/source/app/tests/test_wcl_cache_locking.py')
+          cache_test.write_text('''from __future__ import annotations\n\nimport threading\nimport time\nfrom pathlib import Path\n\nfrom keystonelens_companion.models import WCLResult\nfrom keystonelens_companion.wcl import WCLCache\n\n\ndef test_wcl_cache_disk_write_does_not_hold_data_lock(tmp_path, monkeypatch):\n    cache = WCLCache(tmp_path / "wcl-cache.json")\n    started = threading.Event()\n    release = threading.Event()\n    original_write_text = Path.write_text\n\n    def blocking_write(path, *args, **kwargs):\n        if path.name == "wcl-cache.tmp":\n            started.set()\n            assert release.wait(2.0)\n        return original_write_text(path, *args, **kwargs)\n\n    monkeypatch.setattr(Path, "write_text", blocking_write)\n    result = WCLResult(\n        "Applicant", "Realm", "Dungeon", 250, None, time.time(),\n        target_key=10, not_found=True,\n    )\n    worker = threading.Thread(target=lambda: cache.put("eu", result), daemon=True)\n    worker.start()\n    assert started.wait(2.0)\n    acquired = cache._lock.acquire(timeout=0.5)\n    try:\n        assert acquired, "cache data lock remained held during filesystem I/O"\n    finally:\n        if acquired:\n            cache._lock.release()\n        release.set()\n    worker.join(2.0)\n    assert not worker.is_alive()\n\n\ndef test_wcl_backoff_uses_monotonic_clock():\n    source = Path(__file__).parents[1] / "keystonelens_companion" / "wcl.py"\n    text = source.read_text(encoding="utf-8")\n    assert "time.time() < self._blocked_until" not in text\n    assert "self._blocked_until = time.time() +" not in text\n    assert "time.monotonic() < self._blocked_until" in text\n''', encoding='utf-8')
+
+          # Split long-lived mutable transport state and QR frame bookkeeping out of
+          # Transport.lua. Besides responsibility separation this frees eight active
+          # chunk locals, increasing Lua 5.1 local-variable headroom.
+          transport_path = Path('addon/KeystoneLensBridge/Core/Transport.lua')
+          transport = transport_path.read_text(encoding='utf-8')
+
+          db_start = transport.index('local DB_DEFAULTS = {')
+          db_end = transport.index('\n\n-- Session lifecycle.', db_start)
+          db_block = transport[db_start:db_end].replace('local DB_DEFAULTS = {', 'State.DB_DEFAULTS = {', 1)
+          transport = transport[:db_start] + transport[db_end + 2:]
+
+          frame_start = transport.index('---@type any\nlocal qrFrame = nil')
+          frame_end = transport.index('\n\n-- forward-decl locals', frame_start)
+          transport = transport[:frame_start] + transport[frame_end + 2:]
+
+          lfg_start = transport.index('local lfgEntryCreationHookState = {')
+          lfg_end_marker = 'local lfgEntryCreationKeyCaptureHooked = setmetatable({}, { __mode = "k" })\n'
+          lfg_end = transport.index(lfg_end_marker, lfg_start) + len(lfg_end_marker)
+          transport = transport[:lfg_start] + transport[lfg_end:]
+
+          state_start = transport.index('local entryCreationKeyState = {')
+          clear_start = transport.index('\n\nentryCreationKeyState.ClearScreenshotFailureState = function()', state_start)
+          helpers_anchor = '\n\n-- ───────────────────────────────────────────────────────────\n-- helpers'
+          state_end = transport.index(helpers_anchor, clear_start)
+          state_chunk = transport[state_start:state_end]
+          table_chunk, clear_chunk = state_chunk.split('\n\nentryCreationKeyState.ClearScreenshotFailureState = function()', 1)
+          table_chunk = table_chunk.replace('local entryCreationKeyState = {', '    local state = {', 1)
+          table_chunk = table_chunk.replace(
+              '    END_SESSION_CLEAR_RETRY_DELAY_S = QR_RENDER_SETTLE_S * 2,',
+              '        qrFrame = nil,\n        qrTexturePool = {},\n        qrTextureUsed = 0,\n        qrFrameCreated = false,\n        qrCurrentSize = 0,\n        lfgEntryCreationHookState = { hooksSetup = false, hookError = nil },\n        lfgEntryCreationKeyCaptureHooked = setmetatable({}, { __mode = "k" }),\n        END_SESSION_CLEAR_RETRY_DELAY_S = QR_RENDER_SETTLE_S * 2,',
+              1,
+          )
+          # Indent the original table by one level inside State.New.
+          table_lines = table_chunk.splitlines()
+          table_chunk = '\n'.join(table_lines[:1] + [('    ' + line) for line in table_lines[1:]])
+          clear_body = '    state.ClearScreenshotFailureState = function()' + clear_chunk.replace('entryCreationKeyState', 'state')
+          clear_body = '\n'.join('    ' + line if i > 0 else line for i, line in enumerate(clear_body.splitlines()))
+
+          state_module = '''-- KeystoneLens transport state ownership.\n-- Keeps long-lived mutable transport/QR bookkeeping out of Transport.lua so the\n-- main transport chunk has more Lua 5.1 local-variable headroom.\n\nlocal _, KL = ...\nif type(KL) ~= "table" then return end\n\nlocal State = {}\n\n''' + db_block + '''\n\nfunction State.New(renderSettleSeconds)\n    local QR_RENDER_SETTLE_S = tonumber(renderSettleSeconds) or 0.16\n''' + table_chunk + '\n\n' + clear_body + '''\n    return state\nend\n\nKL.TransportState = State\n'''
+          Path('addon/KeystoneLensBridge/Core/TransportState.lua').write_text(state_module, encoding='utf-8')
+
+          replacement = '''local entryCreationKeyState = KL.TransportState.New(QR_RENDER_SETTLE_S)\nif type(entryCreationKeyState) ~= "table" then return end'''
+          transport = transport[:state_start] + replacement + transport[state_end:]
+          transport = re.sub(r'\bDB_DEFAULTS\b', 'KL.TransportState.DB_DEFAULTS', transport)
+          for name in (
+              'qrFrame', 'qrTexturePool', 'qrTextureUsed', 'qrFrameCreated', 'qrCurrentSize',
+              'lfgEntryCreationHookState', 'lfgEntryCreationKeyCaptureHooked',
+          ):
+              transport = re.sub(rf'\b{re.escape(name)}\b', f'entryCreationKeyState.{name}', transport)
+          transport_path.write_text(transport, encoding='utf-8')
+
+          toc = Path('addon/KeystoneLensBridge/KeystoneLensBridge.toc')
+          toc_text = toc.read_text(encoding='utf-8')
+          anchor = 'Core\\CapturePolicy.lua\nCore\\ScreenshotController.lua\nCore\\Transport.lua'
+          replacement = 'Core\\CapturePolicy.lua\nCore\\TransportState.lua\nCore\\ScreenshotController.lua\nCore\\Transport.lua'
+          if anchor not in toc_text:
+              raise SystemExit('KeystoneLensBridge.toc: transport load anchor missing')
+          toc.write_text(toc_text.replace(anchor, replacement, 1), encoding='utf-8')
+
+          # Static architecture regression in the existing Python suite.
+          Path('companion/source/app/tests/test_transport_architecture.py').write_text('''from pathlib import Path\n\n\ndef _repo_root() -> Path:\n    return Path(__file__).resolve().parents[5]\n\n\ndef test_transport_state_is_split_and_loaded_before_transport():\n    root = _repo_root()\n    toc = (root / "addon/KeystoneLensBridge/KeystoneLensBridge.toc").read_text(encoding="utf-8")\n    transport = (root / "addon/KeystoneLensBridge/Core/Transport.lua").read_text(encoding="utf-8")\n    state = (root / "addon/KeystoneLensBridge/Core/TransportState.lua").read_text(encoding="utf-8")\n    assert toc.index("Core\\\\TransportState.lua") < toc.index("Core\\\\Transport.lua")\n    assert "local qrFrame =" not in transport\n    assert "local qrTexturePool =" not in transport\n    assert "State.New" in state\n    assert "qrTexturePool = {}" in state\n''', encoding='utf-8')
+          PY
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1
+          luac5.1 -p addon/KeystoneLensBridge/Core/TransportState.lua
+          luac5.1 -p addon/KeystoneLensBridge/Core/ScreenshotController.lua
+          luac5.1 -p addon/KeystoneLensBridge/Core/Transport.lua
+
+          rm -rf companion/source/addon
+          mkdir -p companion/source/addon
+          cp -R addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
+          python -m pip install --disable-pip-version-check -q 'pytest==9.0.2' -r companion/source/app/requirements.txt
+          cd companion/source
+          python -m pytest -q
+          python -m compileall -q app
+          cd ../..
+          git diff --check
+      - name: Commit verified fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Webactueel Audit Fixer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add addon/KeystoneLensBridge companion/source/app/keystonelens_companion/wcl.py companion/source/app/tests
+          git diff --cached --check
+          git commit -m 'Fix cache timing and transport audit findings'
+          git push origin HEAD:agent/audit-fixes-20260816
