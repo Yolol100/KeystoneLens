@@ -40,31 +40,34 @@ jobs:
         run: |
           set -euo pipefail
           cd companion/source
-          report_failure() {
-            local title="$1" file="$2"
-            python - "$title" "$file" <<'PY'
-          from pathlib import Path
-          import sys
-          title, path = sys.argv[1], Path(sys.argv[2])
-          text = path.read_text(encoding='utf-8', errors='replace')[-14000:] if path.exists() else 'no log captured'
-          text = text.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
-          title = title.replace('%','%25').replace('\r','').replace('\n',' ')
-          print(f'::error title={title}::{text}')
-          PY
-          }
           set +e
           bash scripts/BUILD-RELEASE.sh > /tmp/kl-build1.log 2>&1
           status=$?
           set -e
-          if [ "$status" -ne 0 ]; then report_failure 'KeystoneLens release build 1 failed' /tmp/kl-build1.log; exit "$status"; fi
+          if [ "$status" -ne 0 ]; then echo "$status" > /tmp/kl-status.txt; exit "$status"; fi
           find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round1.sha256
           set +e
           bash scripts/BUILD-RELEASE.sh > /tmp/kl-build2.log 2>&1
           status=$?
           set -e
-          if [ "$status" -ne 0 ]; then report_failure 'KeystoneLens release build 2 failed' /tmp/kl-build2.log; exit "$status"; fi
+          if [ "$status" -ne 0 ]; then echo "$status" > /tmp/kl-status.txt; exit "$status"; fi
           find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round2.sha256
           if ! diff -u /tmp/kl-round1.sha256 /tmp/kl-round2.sha256 > /tmp/kl-diff.log; then
-            report_failure 'KeystoneLens deterministic release mismatch' /tmp/kl-diff.log
+            echo 1 > /tmp/kl-status.txt
             exit 1
           fi
+          echo 0 > /tmp/kl-status.txt
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: keystonelens-release-debug-${{ github.sha }}
+          path: |
+            /tmp/kl-build1.log
+            /tmp/kl-build2.log
+            /tmp/kl-round1.sha256
+            /tmp/kl-round2.sha256
+            /tmp/kl-diff.log
+            /tmp/kl-status.txt
+          if-no-files-found: warn
+          retention-days: 1
