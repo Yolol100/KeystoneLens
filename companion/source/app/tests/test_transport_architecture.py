@@ -2,7 +2,11 @@ from pathlib import Path
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "addon/KeystoneLensBridge").is_dir():
+            return parent
+    raise AssertionError("KeystoneLens addon source root not found")
 
 
 def test_transport_state_is_split_and_loaded_before_transport():
