@@ -45,6 +45,7 @@ def test_bridge_toc_has_one_explicit_runtime_order():
     assert runtime == [
         r"Libs\qrencode.lua",
         r"Core\CapturePolicy.lua",
+        r"Core\TransportState.lua",
         r"Core\ScreenshotController.lua",
         r"Core\Transport.lua",
         r"Core\Tooltip.lua",

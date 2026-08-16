@@ -300,8 +300,9 @@ def test_settings_exposes_user_visible_raider_io_attribution_link():
 
 
 def test_bridge_listing_generation_survives_reload_in_saved_variables():
+    state = (ROOT / "addon/KeystoneLensBridge/Core/TransportState.lua").read_text(encoding="utf-8")
     transport = (ROOT / "addon/KeystoneLensBridge/Core/Transport.lua").read_text(encoding="utf-8")
-    assert "listingGeneration = 0," in transport
+    assert "listingGeneration = 0," in state
     assert "KeystoneLensBridgeDB.listingGeneration" in transport
     assert "listingGeneration = savedListingGeneration" in transport
     assert "KeystoneLensBridgeDB.listingGeneration = listingGeneration" in transport
