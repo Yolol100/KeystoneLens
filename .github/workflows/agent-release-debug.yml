@@ -1,4 +1,4 @@
-name: Trace KeystoneLens release failure
+name: Validate KeystoneLens deterministic release fix
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  validate-release:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -35,22 +35,13 @@ jobs:
           mkdir -p companion/source/addon
           cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
           python -m pip install --disable-pip-version-check -q 'pytest==9.0.2' -r companion/source/app/requirements.txt
-      - name: Trace release build
+      - name: Build twice and prove deterministic output
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           cd companion/source
-          bash -x scripts/BUILD-RELEASE.sh > /tmp/kl-trace.log 2>&1
-          status=$?
-          echo "$status" > /tmp/kl-status.txt
-          exit "$status"
-      - name: Upload diagnostic trace
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: keystonelens-release-trace-${{ github.sha }}
-          path: |
-            /tmp/kl-trace.log
-            /tmp/kl-status.txt
-          if-no-files-found: error
-          retention-days: 1
+          bash scripts/BUILD-RELEASE.sh
+          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round1.sha256
+          bash scripts/BUILD-RELEASE.sh
+          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round2.sha256
+          diff -u /tmp/kl-round1.sha256 /tmp/kl-round2.sha256
