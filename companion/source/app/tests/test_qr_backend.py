@@ -39,6 +39,38 @@ def test_zxing_qr_backend_accepts_keystonelens_payload(tmp_path):
     assert calls and calls[0][1] == "QR"
 
 
+def test_fragment_expiry_uses_monotonic_clock_only():
+    fragment = aps1.Fragment(
+        stream_id=1,
+        generation=1,
+        index=0,
+        count=2,
+        inner_len=640,
+        inner_crc=0,
+        chunk=b"x" * aps1.FRAGMENT_CHUNK_BYTES,
+    )
+    assembler = aps1.FragmentAssembler(ttl=5.0)
+
+    with patch.object(
+        aps1.time,
+        "time",
+        side_effect=AssertionError("fragment TTL must not use the wall clock"),
+    ), patch.object(aps1.time, "monotonic", side_effect=[100.0, 104.0, 106.0]):
+        assert assembler.push(fragment) is None
+        assert assembler.has_pending_streams() is True
+        assert assembler.has_pending_streams() is False
+
+
+def test_missing_qr_runtime_error_is_english():
+    with patch.dict(sys.modules, {"zxingcpp": None}):
+        try:
+            aps1.decode_image_result(Path("unused.png"), aps1.FragmentAssembler())
+        except RuntimeError as exc:
+            assert str(exc).startswith("QR decoder unavailable:")
+        else:
+            raise AssertionError("missing QR decoder must raise RuntimeError")
+
+
 def test_bridge_toc_has_one_explicit_runtime_order():
     toc = (BRIDGE / "KeystoneLensBridge.toc").read_text(encoding="utf-8")
     runtime = [line.strip() for line in toc.splitlines() if line.strip() and not line.lstrip().startswith("#")]
