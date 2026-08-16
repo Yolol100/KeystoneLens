@@ -1,4 +1,4 @@
-name: Validate KeystoneLens audit fixes
+name: Validate KeystoneLens audit fixes final
 
 on:
   push:
