@@ -26,41 +26,6 @@ local CapturePolicy = KL.CapturePolicy
 if type(CapturePolicy) ~= "table" then return end
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)(addonName, "Version") or "?"
 
-local DB_DEFAULTS = {
-    enabled = true,
-    debug = false,
-    -- Legacy key kept only so old SavedVariables can be normalized away.
-    -- Visual QR support mode is session-only in 0.9.3: an old debug toggle
-    -- must never make the transport stay visible after a reload.
-    qrAlwaysVisible = false,
-    -- One-shot migration sentinel. Existing installs may have `debug=true`
-    -- stuck from a prior `/klbridge debug on` (default flipped from "on-stuck"
-    -- to "off after explicit toggle" in this version). When the key is
-    -- absent we force `debug=false` exactly once, then mark migrated so
-    -- subsequent user toggles persist normally.
-    debugDefaultMigrated = false,
-    -- Pre-capture screenshot CVar values. Each QR screenshot takes a short
-    -- lossless-PNG lease and restores the user's prior value afterwards;
-    -- persistence lets the next load recover if a reload interrupts a lease.
-    -- nil = no value currently owned by KeystoneLens.
-    priorScreenshotQuality = nil,
-    priorScreenshotFormat = nil,
-    -- QR frame position. nil = default TOPLEFT. Stored as canonical top-left
-    -- offsets relative to UIParent: {x=number, y=number}. y is normally <= 0.
-    qrFramePosition = nil,
-    -- `/kl off` pauses all applicant capture/lookups for the current hosting
-    -- session, but arms an automatic resume when a later NEW LFG listing is
-    -- detected. Persist this across /reload so pause semantics stay predictable.
-    autoResumePending = false,
-    pausedListingSignature = "",
-    pausedSawNoListing = false,
-    -- Keep the 1..255 listing-generation ring monotonic across /reload. The
-    -- desktop Companion can remain running while the Bridge reloads; resetting
-    -- this counter to 1 would make a fresh post-reload listing look older than
-    -- the last pre-reload generation and be rejected as stale.
-    listingGeneration = 0,
-}
-
 -- Session lifecycle. INVARIANT: isSessionActive == true means an applicant-
 -- recruitment transport session is active. A party roster by itself no longer
 -- keeps screenshot capture alive after the LFG listing ends.
@@ -117,13 +82,6 @@ local QR_RENDER_SETTLE_S = 0.16        -- enough render passes while keeping cap
 local QR_QUIET_ZONE = 4                -- modules of white border around QR
 local QR_EC_LEVEL = 2                  -- error correction: 1=L 2=M 3=Q 4=H. M=15% recovery
 
----@type any
-local qrFrame = nil                    -- containing frame
-local qrTexturePool = {}               -- pool of black-module rectangle textures (reused)
-local qrTextureUsed = 0                -- count of textures CURRENTLY shown (rest hidden)
-local qrFrameCreated = false           -- one-shot init guard
-local qrCurrentSize = 0                -- current frame side length in UI units (0 = unknown)
-
 -- forward-decl locals so helpers and consumers can reference each other regardless
 -- of definition order; assignment via `name = function(...)` lands on the LOCAL slot.
 -- WHY MaybeTriggerScreenshot here: EndSession calls it before MaybeTriggerScreenshot
@@ -133,7 +91,7 @@ local SafeStr, APSPrint, InitDB, StartSession, EndSession, CheckSessionTransitio
       MarkDirty, MaybeTriggerScreenshot,
       _SetEnabled, _SetDebug, _PauseUntilNextListing,
       -- Visibility coordinator + interaction-frame tracking. Replaces direct
-      -- qrFrame:Show/Hide calls so a single function decides visibility from
+      -- entryCreationKeyState.qrFrame:Show/Hide calls so a single function decides visibility from
       -- three orthogonal axes: isSessionActive (auto), _qrSuppressedByInteraction
       -- (auto, see below), qrAlwaysVisible (manual debug override).
       _RefreshQRVisibility, _RefreshQRMouse, _RecomputeInteractionSuppression,
@@ -163,140 +121,8 @@ local lastSnapshotHash, lastShotTime, pendingShotDirty,
       qrForceVisibleShotGen, lastQREncodeMode, lastQREncodeBytes,
       lastQREncodeError
 
-local lfgEntryCreationHookState = {
-    hooksSetup = false,
-    hookError = nil,
-}
-local lfgEntryCreationKeyCaptureHooked = setmetatable({}, { __mode = "k" })
-local entryCreationKeyState = {
-    END_SESSION_CLEAR_RETRY_DELAY_S = QR_RENDER_SETTLE_S * 2,
-    TERMINAL_CLEAR_MAX_DISPATCHES = 2,
-    terminalClearDispatchCount = 0,
-    terminalClearSessionGen = nil,
-    terminalClearRetryScheduled = false,
-    DISABLE_CVAR_RESTORE_AFTER_CLEAR_DELAY_S = QR_RENDER_SETTLE_S * 3,
-    entryCreationKeyLevelCache = nil,
-    pendingEntryCreationKeyLevelCache = nil,
-    activeListingCacheContext = nil,
-    activeListingGeneration = 0,
-    activeListingMaybeChanged = false,
-    lfgEntryCreationKeyCapturePending = false,
-    listingCreatePending = false,
-    entryCreationKeyLevelCacheDecision = "none",
-    lastPayloadApplicantCount = 0,
-    lastPayloadRosterCount = 0,
-    lastPayloadRosterIncomplete = false,
-    lastEmittedApplicantCount = 0,
-    rosterChangedSinceLastPayload = false,
-    ROSTER_CHANGE_PREFLIGHT_DEADLINE_S = 2.0,
-    ROSTER_INSPECT_RETRY_COOLDOWN_S = 15.0,
-    ROSTER_INSPECT_MAX_TIMEOUTS_PER_SESSION = 2,
-    -- Retry the expensive roster/RaiderIO builder only on a bounded backoff.
-    -- The 0.5s transport poll must keep listing/applicant state fresh without
-    -- rebuilding a roster surface that is already known to be incomplete.
-    ROSTER_LOAD_RETRY_DELAYS_S = { 0.5, 2.0, 5.0, 15.0 },
-    rosterLoadRetryAttempt = 0,
-    rosterLoadRetryReady = true,
-    rosterLoadRetryExhausted = false,
-    rosterChangePreflightDeadline = nil,
-    rosterChangePreflightToken = 0,
-    pendingTtl = 10,
-    NONTERMINAL_SNAPSHOT_MIN_SENDS = 1,
-    lastDeliverySnapshotHash = nil,
-    lastDeliverySnapshotSendCount = 0,
-    -- Overflow snapshots are transmitted as bounded APS1 v10 fragment
-    -- envelopes containing one frozen, complete logical payload. Keep this state on
-    -- the existing table: the file is close to Lua 5.1's 200-local limit.
-    QR_OVERFLOW_WIRE_VERSION = 0x0A,
-    QR_OVERFLOW_FRAGMENT_BYTES = 320,
-    QR_OVERFLOW_MAX_FRAGMENTS = 128,
-    QR_OVERFLOW_MIN_SENDS = 1,
-    QR_OVERFLOW_SHOT_INTERVAL_S = 0.45,
-    qrOverflowStreamID = nil,
-    qrOverflowGenerationCounter = 0,
-    qrOverflowState = nil,
-    qrOverflowSupersededCount = 0,
-    qrOverflowLastFailure = nil,
-    lastPayloadBuildError = nil,
-    lastPayloadTotalBytes = 0,
-    groupTransportGen = 0,
-    rioMPlusSummaryCache = {},
-    cleanUnknownLabel = nil,
-    cleanUnknownObjectLabel = nil,
-    -- Read-only by convention: payload builders only serialize these zero fields.
-    emptyRaiderIOMPlusSummary = {
-        currentScore = 0,
-        mainScore = 0,
-        hasProfile = false,
-        bestKey = 0,
-        bestDungeonKey = 0,
-        timedAtOrAbove = 0,
-        timedAtOrAboveMinus1 = 0,
-        timedAtOrAboveMinus2 = 0,
-        completedAtOrAboveMinus1 = 0,
-        dungeonCount = 0,
-    },
-    qrPaintJobGen = 0,
-    qrPaintInProgress = false,
-    qrCaptureInProgress = false,
-    qrPaintDirtyDuringPaint = false,
-    qrTransportJobStartedAt = nil,
-    qrTransportJobTerminalClear = false,
-    SCREENSHOT_CVAR_RESTORE_DELAY_S = 0.05,
-    screenshotCVarLeaseGeneration = 0,
-    SCREENSHOT_FAILURE_MAX_ATTEMPTS = 2,
-    screenshotFailureHash = nil,
-    screenshotFailureAttemptCount = 0,
-    screenshotAwaitingResult = false,
-    screenshotAwaitingJobGen = nil,
-    screenshotAwaitingSuperseded = false,
-    screenshotResultHandler = nil,
-    screenshotPendingForce = false,
-    screenshotPendingTerminalClear = false,
-    screenshotPendingSessionGen = nil,
-    screenshotPendingLFGReadsAllowed = true,
-    screenshotLastResult = "never",
-    QR_TRANSPORT_JOB_TIMEOUT_S = 8.0,
-    QR_RECOVERY_NOTICE_COOLDOWN_S = 30,
-    qrTransportRecoveryCount = 0,
-    qrTransportLastRecoveryReason = "never",
-    qrTransportLastRecoveryPrintAt = nil,
-    qrTextureVisibleHighWater = 0,
-    transportDirtyGeneration = 0,
-    LEADER_KEY_TTL_S = 60,
-    LEADER_KEY_REQUEST_THROTTLE_S = 3,
-    LEADER_KEY_REQUEST_RETRY_DELAY_S = 1.0,
-    LEADER_KEY_REQUEST_MAX_RETRIES = 5,
-    leaderKeystone = nil,
-    leaderKeystoneLastRequestAt = 0,
-    leaderKeystoneLastRequestStatus = "never",
-    leaderKeystoneRequestRetryToken = 0,
-    leaderKeystoneRequestRetryDeadline = nil,
-    leaderKeystoneRequestRetryGeneration = nil,
-    leaderKeystoneRefreshToken = 0,
-    leaderKeystoneRefreshDeadline = nil,
-    leaderKeystoneRefreshGeneration = nil,
-    leaderKeystoneContextCombatDeferred = false,
-    leaderKeystoneCallbackRegistered = false,
-    leaderKeystoneLib = nil,
-    leaderKeystoneCallbackOwner = {},
-    libKeystonePrefixRegistered = false,
-    libKeystoneShim = nil,
-    libKeystoneShimCallbacks = {},
-    libKeystoneLastSendStatus = "never",
-    LIB_KEYSTONE_RESPONSE_RETRY_DELAY_S = 1.0,
-    LIB_KEYSTONE_RESPONSE_MAX_RETRIES = 3,
-    libKeystoneResponseRetryToken = 0,
-    libKeystoneResponseRetryDeadline = nil,
-    libKeystoneResponseRetryGeneration = nil,
-    rosterInspectIlvlByGUID = {},
-    rosterInspectKnownGUIDs = {},
-}
-
-entryCreationKeyState.ClearScreenshotFailureState = function()
-    entryCreationKeyState.screenshotFailureHash = nil
-    entryCreationKeyState.screenshotFailureAttemptCount = 0
-end
+local entryCreationKeyState = KL.TransportState.New(QR_RENDER_SETTLE_S)
+if type(entryCreationKeyState) ~= "table" then return end
 
 -- ───────────────────────────────────────────────────────────
 -- helpers
@@ -569,7 +395,7 @@ end
 
 InitDB = function()
     if type(KeystoneLensBridgeDB) ~= "table" then KeystoneLensBridgeDB = {} end
-    for k, v in pairs(DB_DEFAULTS) do
+    for k, v in pairs(KL.TransportState.DB_DEFAULTS) do
         if KeystoneLensBridgeDB[k] == nil then KeystoneLensBridgeDB[k] = v end
     end
     KeystoneLensBridgeDB.enabled =
@@ -669,7 +495,7 @@ StartSession = function()
     end
     qrForceVisibleShotGen = (qrForceVisibleShotGen or 0) + 1
     qrForceVisibleForShot = false
-    if qrFrame then qrFrame:SetFrameStrata("DIALOG") end
+    if entryCreationKeyState.qrFrame then entryCreationKeyState.qrFrame:SetFrameStrata("DIALOG") end
     entryCreationKeyState.rioMPlusSummaryCache = {}
     entryCreationKeyState.lastQuietFullPartySignature = nil
     entryCreationKeyState.lastPayloadQuietFullPartySignature = nil
@@ -718,8 +544,8 @@ EndSession = function(emitTerminalClear)
     end
     qrForceVisibleShotGen = (qrForceVisibleShotGen or 0) + 1
     qrForceVisibleForShot = false
-    if qrFrame then
-        qrFrame:SetFrameStrata("DIALOG")
+    if entryCreationKeyState.qrFrame then
+        entryCreationKeyState.qrFrame:SetFrameStrata("DIALOG")
         _RefreshQRVisibility()
     end
     entryCreationKeyState.terminalClearDispatchCount = 0
@@ -738,7 +564,7 @@ EndSession = function(emitTerminalClear)
     entryCreationKeyState.lastQuietFullPartySignature = nil
     entryCreationKeyState.lastPayloadQuietFullPartySignature = nil
     -- Defensive: force-shot path resets pendingShotDirty on success, but if it
-    -- early-returned (qrFrame missing, QR encode failure) the flag could persist
+    -- early-returned (entryCreationKeyState.qrFrame missing, QR encode failure) the flag could persist
     -- across sessions and trigger empty drains in the scan ticker. Clear here.
     pendingShotDirty = false
     entryCreationKeyState.lastEmittedApplicantCount = 0
@@ -756,7 +582,7 @@ EndSession = function(emitTerminalClear)
     -- All gating (qrAlwaysVisible, new-session-started) re-checked at fire
     -- time so the deferred Hide respects the latest toggle state — important
     -- for /kl off which resets qrAlwaysVisible right after EndSession.
-    if qrFrame then
+    if entryCreationKeyState.qrFrame then
         local genAtSchedule = sessionGen
         C_Timer.After(QR_RENDER_SETTLE_S, function()
             -- Re-enter the visibility coordinator only if we're still in the
@@ -888,15 +714,15 @@ local function _ClampQRPosition(x, y, frameSize)
 end
 
 local function _GetQRFrameSize()
-    if qrFrame then
-        local w = qrFrame:GetWidth()
+    if entryCreationKeyState.qrFrame then
+        local w = entryCreationKeyState.qrFrame:GetWidth()
         if _IsFinitePositionNumber(w) and w > 0 then return w end
     end
-    return qrCurrentSize > 0 and qrCurrentSize or 64
+    return entryCreationKeyState.qrCurrentSize > 0 and entryCreationKeyState.qrCurrentSize or 64
 end
 
 local function _ApplyQRFramePosition()
-    if not qrFrame then return end
+    if not entryCreationKeyState.qrFrame then return end
     -- Normal transport is deliberately pinned to the extreme top-left because
     -- the Companion decodes a small top-left crop and this is the least
     -- intrusive location. A saved position is only honored in explicit move
@@ -908,13 +734,13 @@ local function _ApplyQRFramePosition()
         )
     end
     x, y = _ClampQRPosition(x, y, _GetQRFrameSize())
-    qrFrame:ClearAllPoints()
-    qrFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+    entryCreationKeyState.qrFrame:ClearAllPoints()
+    entryCreationKeyState.qrFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
 end
 
 local function _SaveQRFramePositionFromFrame()
-    if not (qrFrame and KeystoneLensBridgeDB) then return false end
-    local frameLeft, frameTop = qrFrame:GetLeft(), qrFrame:GetTop()
+    if not (entryCreationKeyState.qrFrame and KeystoneLensBridgeDB) then return false end
+    local frameLeft, frameTop = entryCreationKeyState.qrFrame:GetLeft(), entryCreationKeyState.qrFrame:GetTop()
     local parentLeft = UIParent and UIParent:GetLeft() or 0
     local parentTop = UIParent and UIParent:GetTop() or (UIParent and UIParent:GetHeight() or 0)
     if not (_IsFinitePositionNumber(frameLeft) and _IsFinitePositionNumber(frameTop)
@@ -939,7 +765,7 @@ local function _ResetQRFramePosition()
 end
 
 local function _CurrentQRPositionText()
-    if not qrFrame then return "(frame missing)" end
+    if not entryCreationKeyState.qrFrame then return "(frame missing)" end
     local x, y, valid = _NormalizeQRPosition(KeystoneLensBridgeDB and KeystoneLensBridgeDB.qrFramePosition)
     x, y = _ClampQRPosition(x, y, _GetQRFrameSize())
     local saved = valid and "saved" or "default"
@@ -964,35 +790,35 @@ local function _OnQRFrameDragStop(self)
 end
 
 local function CreateQRFrame()
-    if qrFrameCreated then return end
-    qrFrame = CreateFrame("Frame", "KeystoneLensBridgeQRFrame", UIParent)
-    qrFrame:SetIgnoreParentScale(true)
+    if entryCreationKeyState.qrFrameCreated then return end
+    entryCreationKeyState.qrFrame = CreateFrame("Frame", "KeystoneLensBridgeQRFrame", UIParent)
+    entryCreationKeyState.qrFrame:SetIgnoreParentScale(true)
     -- DIALOG strata: above gameplay HUD but below modal popups (StaticPopup,
     -- ColorPicker, dropdowns). Avoids FULLSCREEN_DIALOG which has been
     -- empirically observed to interfere with input chain on heavy renders.
-    qrFrame:SetFrameStrata("DIALOG")
-    qrFrame:SetSize(64, 64)  -- placeholder; PaintQR resizes per-snapshot
-    qrFrame:SetMovable(true)
-    qrFrame:SetClampedToScreen(true)
-    qrFrame:RegisterForDrag("LeftButton")
-    qrFrame:SetScript("OnDragStart", _OnQRFrameDragStart)
-    qrFrame:SetScript("OnDragStop", _OnQRFrameDragStop)
+    entryCreationKeyState.qrFrame:SetFrameStrata("DIALOG")
+    entryCreationKeyState.qrFrame:SetSize(64, 64)  -- placeholder; PaintQR resizes per-snapshot
+    entryCreationKeyState.qrFrame:SetMovable(true)
+    entryCreationKeyState.qrFrame:SetClampedToScreen(true)
+    entryCreationKeyState.qrFrame:RegisterForDrag("LeftButton")
+    entryCreationKeyState.qrFrame:SetScript("OnDragStart", _OnQRFrameDragStart)
+    entryCreationKeyState.qrFrame:SetScript("OnDragStop", _OnQRFrameDragStop)
     _ApplyQRFramePosition()
 
     -- White background — single texture covering the whole frame, BACKGROUND
     -- layer. Black module textures (BORDER layer above) overlay it. ZXing's
     -- QR detector relies on black-on-white contrast — this gives it the
     -- canonical look.
-    local qrBackground = qrFrame:CreateTexture(nil, "BACKGROUND")
+    local qrBackground = entryCreationKeyState.qrFrame:CreateTexture(nil, "BACKGROUND")
     qrBackground:SetColorTexture(1, 1, 1, 1)
-    qrBackground:SetAllPoints(qrFrame)
+    qrBackground:SetAllPoints(entryCreationKeyState.qrFrame)
 
-    qrFrameCreated = true
+    entryCreationKeyState.qrFrameCreated = true
     -- Hidden by default unless the current-session support override is enabled.
     -- Screenshot dispatch otherwise takes a temporary visibility lease only
     -- after a changed payload has been painted.
     if _RefreshQRMouse then _RefreshQRMouse() end
-    qrFrame:Hide()
+    entryCreationKeyState.qrFrame:Hide()
     if _RefreshQRVisibility then _RefreshQRVisibility() end
 end
 
@@ -1152,19 +978,19 @@ end
 -- "show me"). Interaction suppression gates non-force dispatch before a lease
 -- is acquired.
 _RefreshQRMouse = function()
-    if not qrFrame then return end
-    qrFrame:EnableMouse(qrMoveMode and true or false)
+    if not entryCreationKeyState.qrFrame then return end
+    entryCreationKeyState.qrFrame:EnableMouse(qrMoveMode and true or false)
 end
 
 _RefreshQRVisibility = function()
-    if not qrFrame then return end
-    local wasShown = qrFrame:IsShown()
+    if not entryCreationKeyState.qrFrame then return end
+    local wasShown = entryCreationKeyState.qrFrame:IsShown()
     local shouldShow = qrAlwaysVisible
                        or qrMoveMode
                        or qrForceVisibleForShot
     if shouldShow and not wasShown then
-        qrFrame:SetAlpha(1)
-        qrFrame:Show()
+        entryCreationKeyState.qrFrame:SetAlpha(1)
+        entryCreationKeyState.qrFrame:Show()
         -- WHY QR_RENDER_SETTLE_S grace on every hidden→shown transition (not just session
         -- start): the GPU framebuffer needs paint time after Show, same race
         -- as session-start. Without this, a vendor-close → fast Screenshot
@@ -1173,7 +999,7 @@ _RefreshQRVisibility = function()
         suppressShotsUntil = GetTime() + QR_RENDER_SETTLE_S
         pendingShotDirty = true  -- scan-tick drain retries post-grace
     elseif not shouldShow and wasShown then
-        qrFrame:Hide()
+        entryCreationKeyState.qrFrame:Hide()
     end
 end
 
@@ -1658,9 +1484,9 @@ local function _ClearEntryCreationKeystoneLevelCache(activityID, questID)
 end
 
 entryCreationKeyState.PrintDiagnostics = function()
-    print("  entry creation hooks: " .. tostring(lfgEntryCreationHookState.hooksSetup)
-          .. (lfgEntryCreationHookState.hookError
-              and (" (error: " .. lfgEntryCreationHookState.hookError .. ")")
+    print("  entry creation hooks: " .. tostring(entryCreationKeyState.lfgEntryCreationHookState.hooksSetup)
+          .. (entryCreationKeyState.lfgEntryCreationHookState.hookError
+              and (" (error: " .. entryCreationKeyState.lfgEntryCreationHookState.hookError .. ")")
               or ""))
     local pendingCache = SafeTable(entryCreationKeyState.pendingEntryCreationKeyLevelCache)
     local publishedCache = SafeTable(entryCreationKeyState.entryCreationKeyLevelCache)
@@ -1780,8 +1606,8 @@ local function _RememberEntryCreationKeystoneLevel(panel, reason)
 end
 
 local function _HookEntryCreationKeyCapture(panel)
-    if not panel or lfgEntryCreationKeyCaptureHooked[panel] then return end
-    lfgEntryCreationKeyCaptureHooked[panel] = true
+    if not panel or entryCreationKeyState.lfgEntryCreationKeyCaptureHooked[panel] then return end
+    entryCreationKeyState.lfgEntryCreationKeyCaptureHooked[panel] = true
 
     local button = panel.ListGroupButton
     if button and type(button.HookScript) == "function" then
@@ -4086,19 +3912,19 @@ entryCreationKeyState.QR_STEALTH_FRAGMENT_THRESHOLD_BYTES = 1400
 entryCreationKeyState.GetQRModuleUISize = function()
     local pixelUtil = SafeTable(_G.PixelUtil)
     local convert = pixelUtil and pixelUtil.ConvertPixelsToUIForRegion
-    if type(convert) == "function" and qrFrame then
-        local ok, converted = pcall(convert, QR_MODULE_PX, qrFrame)
+    if type(convert) == "function" and entryCreationKeyState.qrFrame then
+        local ok, converted = pcall(convert, QR_MODULE_PX, entryCreationKeyState.qrFrame)
         converted = ok and SafeOptionalNumber(converted) or nil
         if converted and converted > 0 then return converted end
     end
     -- Mirror PixelUtil's conversion when the helper is absent or rejects the
     -- region. Raw UI units would reintroduce fractional physical module widths.
     local getPhysicalScreenSize = _G.GetPhysicalScreenSize
-    local getEffectiveScale = qrFrame and qrFrame.GetEffectiveScale
+    local getEffectiveScale = entryCreationKeyState.qrFrame and entryCreationKeyState.qrFrame.GetEffectiveScale
     if type(getPhysicalScreenSize) == "function"
        and type(getEffectiveScale) == "function" then
         local screenOK, _, physicalHeight = pcall(getPhysicalScreenSize)
-        local scaleOK, effectiveScale = pcall(getEffectiveScale, qrFrame)
+        local scaleOK, effectiveScale = pcall(getEffectiveScale, entryCreationKeyState.qrFrame)
         physicalHeight = screenOK and SafeOptionalNumber(physicalHeight) or nil
         effectiveScale = scaleOK and SafeOptionalNumber(effectiveScale) or nil
         if physicalHeight and physicalHeight > 0
@@ -4113,23 +3939,23 @@ entryCreationKeyState.GetQRModuleUISize = function()
 end
 
 local function _AcquireQRTexture(x, y, w, h)
-    if qrTextureUsed >= entryCreationKeyState.QR_TEXTURE_RENDER_BUDGET then
+    if entryCreationKeyState.qrTextureUsed >= entryCreationKeyState.QR_TEXTURE_RENDER_BUDGET then
         return nil
     end
-    qrTextureUsed = qrTextureUsed + 1
-    local t = qrTexturePool[qrTextureUsed]
+    entryCreationKeyState.qrTextureUsed = entryCreationKeyState.qrTextureUsed + 1
+    local t = entryCreationKeyState.qrTexturePool[entryCreationKeyState.qrTextureUsed]
     if not t then
-        t = qrFrame:CreateTexture(nil, "BORDER")
+        t = entryCreationKeyState.qrFrame:CreateTexture(nil, "BORDER")
         t:SetColorTexture(0, 0, 0, 1)
-        qrTexturePool[qrTextureUsed] = t
+        entryCreationKeyState.qrTexturePool[entryCreationKeyState.qrTextureUsed] = t
     end
     t:ClearAllPoints()
     t:SetSize(w, h)
-    t:SetPoint("TOPLEFT", qrFrame, "TOPLEFT", x, -y)
+    t:SetPoint("TOPLEFT", entryCreationKeyState.qrFrame, "TOPLEFT", x, -y)
     t:Show()
     entryCreationKeyState.qrTextureVisibleHighWater = math.max(
         entryCreationKeyState.qrTextureVisibleHighWater or 0,
-        qrTextureUsed
+        entryCreationKeyState.qrTextureUsed
     )
     return t
 end
@@ -4205,11 +4031,11 @@ local function PaintQR(matrix, runs, runCount, module_ui_size, jobGen, onComplet
     local total_modules = rows + 2 * QR_QUIET_ZONE   -- assume square QR
     local frame_ui = total_modules * module_ui_size
 
-    qrFrame:SetSize(frame_ui, frame_ui)
-    qrCurrentSize = frame_ui
+    entryCreationKeyState.qrFrame:SetSize(frame_ui, frame_ui)
+    entryCreationKeyState.qrCurrentSize = frame_ui
     _ApplyQRFramePosition()
 
-    qrTextureUsed = 0
+    entryCreationKeyState.qrTextureUsed = 0
     local runIndex = 1
 
     local function CompletePaint(success)
@@ -4228,7 +4054,7 @@ local function PaintQR(matrix, runs, runCount, module_ui_size, jobGen, onComplet
         -- visible high-water mark until cleanup completes: if a timer callback
         -- is aborted, the watchdog can retry and the next job still knows how
         -- far the stale black textures extend.
-        local cleanupIndex = qrTextureUsed + 1
+        local cleanupIndex = entryCreationKeyState.qrTextureUsed + 1
         local cleanupTarget = entryCreationKeyState.qrTextureVisibleHighWater or 0
 
         local function ContinueCleanup()
@@ -4238,7 +4064,7 @@ local function PaintQR(matrix, runs, runCount, module_ui_size, jobGen, onComplet
                 cleanupIndex + entryCreationKeyState.QR_TEXTURE_PAINT_CHUNK - 1
             )
             for i = cleanupIndex, chunkEnd do
-                local t = qrTexturePool[i]
+                local t = entryCreationKeyState.qrTexturePool[i]
                 if t then t:Hide() end
             end
             cleanupIndex = chunkEnd + 1
@@ -4246,14 +4072,14 @@ local function PaintQR(matrix, runs, runCount, module_ui_size, jobGen, onComplet
                 C_Timer.After(0, ContinueCleanup)
                 return
             end
-            entryCreationKeyState.qrTextureVisibleHighWater = qrTextureUsed
+            entryCreationKeyState.qrTextureVisibleHighWater = entryCreationKeyState.qrTextureUsed
             CompletePaint(success)
         end
 
         if cleanupIndex <= cleanupTarget then
             C_Timer.After(0, ContinueCleanup)
         else
-            entryCreationKeyState.qrTextureVisibleHighWater = qrTextureUsed
+            entryCreationKeyState.qrTextureVisibleHighWater = entryCreationKeyState.qrTextureUsed
             CompletePaint(success)
         end
     end
@@ -4468,7 +4294,7 @@ local lastTransportPollTime = 0
 local function _ReleaseForceVisibleShotLease(forceVisibleShotGen)
     if forceVisibleShotGen and qrForceVisibleShotGen == forceVisibleShotGen then
         qrForceVisibleForShot = false
-        if qrFrame then qrFrame:SetFrameStrata("DIALOG") end
+        if entryCreationKeyState.qrFrame then entryCreationKeyState.qrFrame:SetFrameStrata("DIALOG") end
         _RefreshQRVisibility()
     end
 end
@@ -4485,7 +4311,7 @@ local function _AcquireQRShotLease()
     -- The capture lease is brief and non-interactive. TOOLTIP prevents chat
     -- replacements and other DIALOG-strata UI from covering QR pixels without
     -- leaving a permanently topmost frame after the capture finishes.
-    if qrFrame then qrFrame:SetFrameStrata("TOOLTIP") end
+    if entryCreationKeyState.qrFrame then entryCreationKeyState.qrFrame:SetFrameStrata("TOOLTIP") end
     _RefreshQRVisibility()
     return forceVisibleShotGen, QR_RENDER_SETTLE_S
 end
@@ -4591,7 +4417,7 @@ MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllow
         pendingShotDirty = false
         return
     end
-    if not qrFrameCreated then
+    if not entryCreationKeyState.qrFrameCreated then
         pendingShotDirty = false
         return
     end
@@ -5122,7 +4948,7 @@ MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllow
                         overflowState.pass
                     ) or ""
                 print(string.format("|cff999999[APS-debug]|r CAP qr_size=%.2fui hash=%x t=%.2f%s",
-                      qrCurrentSize, h, GetTime(), overflowProgress))
+                      entryCreationKeyState.qrCurrentSize, h, GetTime(), overflowProgress))
             end
             entryCreationKeyState.ClearQRTransportJob(jobGen)
             if terminalClearSessionGen then
@@ -5253,13 +5079,13 @@ entryCreationKeyState.ProcessLFGEntryCreationDeferredWork = function()
 end
 
 _SetupLFGEntryCreationHooks = function()
-    if lfgEntryCreationHookState.hooksSetup then
+    if entryCreationKeyState.lfgEntryCreationHookState.hooksSetup then
         if _G.LFGListFrame and _G.LFGListFrame.EntryCreation then
             entryCreationKeyState.QueueLFGEntryCreationKeyCapture()
         end
         return true
     end
-    if lfgEntryCreationHookState.hookError then return false end
+    if entryCreationKeyState.lfgEntryCreationHookState.hookError then return false end
 
     local hook = _G.hooksecurefunc
     if type(hook) ~= "function"
@@ -5293,15 +5119,15 @@ _SetupLFGEntryCreationHooks = function()
         end
     end)
     if not ok then
-        lfgEntryCreationHookState.hookError = tostring(err)
+        entryCreationKeyState.lfgEntryCreationHookState.hookError = tostring(err)
         if KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
             print("|cff999999[KL-debug]|r LFG key capture hook failed: "
-                  .. lfgEntryCreationHookState.hookError)
+                  .. entryCreationKeyState.lfgEntryCreationHookState.hookError)
         end
         return false
     end
 
-    lfgEntryCreationHookState.hooksSetup = true
+    entryCreationKeyState.lfgEntryCreationHookState.hooksSetup = true
     if _G.LFGListFrame and _G.LFGListFrame.EntryCreation then
         entryCreationKeyState.QueueLFGEntryCreationKeyCapture()
     end
@@ -5655,7 +5481,7 @@ local function _RunDisabledCleanup(emitTerminalClear)
             entryCreationKeyState.ClearQRTransportJob()
             qrForceVisibleShotGen = (qrForceVisibleShotGen or 0) + 1
             qrForceVisibleForShot = false
-            if qrFrame then qrFrame:SetFrameStrata("DIALOG") end
+            if entryCreationKeyState.qrFrame then entryCreationKeyState.qrFrame:SetFrameStrata("DIALOG") end
         end
     end
 
@@ -5733,7 +5559,7 @@ entryCreationKeyState.RequestForcedSnapshot = function()
         APSPrint("forced snapshot skipped — enable KeystoneLens Bridge first")
         return false, "disabled"
     end
-    if not qrFrameCreated then
+    if not entryCreationKeyState.qrFrameCreated then
         APSPrint("forced snapshot skipped — QR frame unavailable; /reload and retry")
         return false, "qr-frame-unavailable"
     end
@@ -5773,15 +5599,15 @@ entryCreationKeyState.PrintTroubleshootingStatus = function()
     -- QR transport diagnostics
     print("|cff00ff7f---|r QR transport:")
     print("  QR library loaded: " .. tostring(_qrencode ~= nil))
-    print("  QR frame created: " .. tostring(qrFrameCreated))
-    if qrFrame then
-        print("  QR frame visible: " .. tostring(qrFrame:IsShown()) ..
+    print("  QR frame created: " .. tostring(entryCreationKeyState.qrFrameCreated))
+    if entryCreationKeyState.qrFrame then
+        print("  QR frame visible: " .. tostring(entryCreationKeyState.qrFrame:IsShown()) ..
               " (always-visible mode: " .. tostring(qrAlwaysVisible) ..
               ", move mode: " .. tostring(qrMoveMode) .. ")")
         print(string.format(
             "  QR frame size: %.2f×%.2f UI units (modules are physical-pixel snapped)",
-            qrCurrentSize,
-            qrCurrentSize
+            entryCreationKeyState.qrCurrentSize,
+            entryCreationKeyState.qrCurrentSize
         ))
         print("  QR frame position: " .. _CurrentQRPositionText())
         print("  QR mouse enabled: " .. tostring(qrMoveMode and true or false))
@@ -5807,8 +5633,8 @@ entryCreationKeyState.PrintTroubleshootingStatus = function()
           .. " (last: "
           .. tostring(entryCreationKeyState.qrTransportLastRecoveryReason or "never")
           .. ")")
-    print("  texture pool: " .. #qrTexturePool
-          .. " (used last paint: " .. qrTextureUsed
+    print("  texture pool: " .. #entryCreationKeyState.qrTexturePool
+          .. " (used last paint: " .. entryCreationKeyState.qrTextureUsed
           .. ", visible high-water: "
           .. tostring(entryCreationKeyState.qrTextureVisibleHighWater or 0) .. ")")
     print("  last snapshot hash: " .. tostring(lastSnapshotHash))

@@ -69,6 +69,7 @@ class WCLCache:
         self.path = path or cache_path()
         self.ttl = ttl
         self._lock = threading.Lock()
+        self._save_lock = threading.Lock()
         self._data: dict[str, dict[str, Any]] = {}
         self._load()
 
@@ -83,8 +84,9 @@ class WCLCache:
         except (OSError, json.JSONDecodeError):
             self._data = {}
         with self._lock:
-            if self._prune_locked(time.time()):
-                self._save_locked()
+            changed = self._prune_locked(time.time())
+        if changed:
+            self._save()
 
     def _key(self, region: str, realm: str, name: str, spec_id: int, dungeon: str, target_key: int) -> str:
         dungeon = canonical_dungeon_name(dungeon)
@@ -159,6 +161,8 @@ class WCLCache:
     def get(self, region: str, realm: str, name: str, spec_id: int, dungeon: str, target_key: int) -> WCLResult | None:
         key = self._key(region, realm, name, spec_id, dungeon, target_key)
         now = time.time()
+        should_save = False
+        result: WCLResult | None = None
         with self._lock:
             row = self._data.get(key)
             if not isinstance(row, dict):
@@ -167,60 +171,67 @@ class WCLCache:
                 fetched = float(row.get("fetched_at", 0) or 0)
             except (TypeError, ValueError, OverflowError):
                 self._data.pop(key, None)
-                self._save_locked()
-                return None
-            age = now - fetched
-            if (
-                not math.isfinite(fetched)
-                or fetched <= 0
-                or age < -MAX_CACHE_FUTURE_SKEW_SECONDS
-                or age > self._row_ttl(row)
-            ):
-                self._data.pop(key, None)
-                self._save_locked()
-                return None
-            raw_bracket = row.get("bracket")
-            bracket = _cached_bracket(raw_bracket)
-            invalid_evidence = raw_bracket is not None and bracket is None
-            metric_brackets: dict[str, WCLBracket] = {}
-            raw_metrics = row.get("metric_brackets")
-            if isinstance(raw_metrics, dict):
-                if len(raw_metrics) > MAX_WCL_METRIC_BRACKETS:
+                should_save = True
+                row = None
+
+            if row is not None:
+                age = now - fetched
+                if (
+                    not math.isfinite(fetched)
+                    or fetched <= 0
+                    or age < -MAX_CACHE_FUTURE_SKEW_SECONDS
+                    or age > self._row_ttl(row)
+                ):
+                    self._data.pop(key, None)
+                    should_save = True
+                    row = None
+
+            if row is not None:
+                raw_bracket = row.get("bracket")
+                bracket = _cached_bracket(raw_bracket)
+                invalid_evidence = raw_bracket is not None and bracket is None
+                metric_brackets: dict[str, WCLBracket] = {}
+                raw_metrics = row.get("metric_brackets")
+                if isinstance(raw_metrics, dict):
+                    if len(raw_metrics) > MAX_WCL_METRIC_BRACKETS:
+                        invalid_evidence = True
+                    for metric_name, raw_metric_bracket in list(raw_metrics.items())[:MAX_WCL_METRIC_BRACKETS]:
+                        if not isinstance(metric_name, str) or not metric_name or len(metric_name) > 64:
+                            invalid_evidence = True
+                            continue
+                        parsed = _cached_bracket(raw_metric_bracket)
+                        if parsed is None:
+                            invalid_evidence = True
+                            continue
+                        metric_brackets[metric_name] = parsed
+                elif raw_metrics not in (None, {}):
                     invalid_evidence = True
-                for metric_name, raw_metric_bracket in list(raw_metrics.items())[:MAX_WCL_METRIC_BRACKETS]:
-                    if not isinstance(metric_name, str) or not metric_name or len(metric_name) > 64:
-                        invalid_evidence = True
-                        continue
-                    parsed = _cached_bracket(raw_metric_bracket)
-                    if parsed is None:
-                        invalid_evidence = True
-                        continue
-                    metric_brackets[metric_name] = parsed
-            elif raw_metrics not in (None, {}):
-                invalid_evidence = True
-            if invalid_evidence:
-                self._data.pop(key, None)
-                self._save_locked()
-                return None
-            try:
-                stored_spec = int(row.get("spec_id") or spec_id)
-            except (TypeError, ValueError, OverflowError):
-                stored_spec = spec_id
-            return WCLResult(
-                name=str(row.get("name") or name),
-                realm=str(row.get("realm") or realm),
-                dungeon_name=str(row.get("dungeon_name") or dungeon),
-                spec_id=stored_spec,
-                bracket=bracket,
-                fetched_at=fetched,
-                # Target key is request context, not part of the cached WCL
-                # ranking evidence. Restamp it so engine context checks remain
-                # exact after a re-queue at another key level.
-                target_key=int(target_key or 0),
-                not_found=bool(row.get("not_found")),
-                error=str(row.get("error") or ""),
-                metric_brackets=metric_brackets,
-            )
+                if invalid_evidence:
+                    self._data.pop(key, None)
+                    should_save = True
+                else:
+                    try:
+                        stored_spec = int(row.get("spec_id") or spec_id)
+                    except (TypeError, ValueError, OverflowError):
+                        stored_spec = spec_id
+                    result = WCLResult(
+                        name=str(row.get("name") or name),
+                        realm=str(row.get("realm") or realm),
+                        dungeon_name=str(row.get("dungeon_name") or dungeon),
+                        spec_id=stored_spec,
+                        bracket=bracket,
+                        fetched_at=fetched,
+                        # Target key is request context, not part of the cached WCL
+                        # ranking evidence. Restamp it so engine context checks remain
+                        # exact after a re-queue at another key level.
+                        target_key=int(target_key or 0),
+                        not_found=bool(row.get("not_found")),
+                        error=str(row.get("error") or ""),
+                        metric_brackets=metric_brackets,
+                    )
+        if should_save:
+            self._save()
+        return result
 
     def put(self, region: str, result: WCLResult) -> None:
         self.put_many(((region, result),))
@@ -256,24 +267,30 @@ class WCLCache:
                 payload.pop("quota_reset", None)
                 self._data[key] = payload
             self._prune_locked(time.time())
-            self._save_locked()
+        self._save()
 
     def count(self) -> int:
         with self._lock:
             changed = self._prune_locked(time.time())
-            if changed:
-                self._save_locked()
-            return len(self._data)
+            count = len(self._data)
+        if changed:
+            self._save()
+        return count
 
-    def _save_locked(self) -> None:
+    def _save(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(
-                json.dumps(self._data, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
-                encoding="utf-8",
-            )
-            tmp.replace(self.path)
+            # Serialise writers so an older snapshot cannot replace a newer one.
+            # Snapshotting briefly holds _lock; JSON encoding and filesystem I/O do not.
+            with self._save_lock:
+                with self._lock:
+                    snapshot = dict(self._data)
+                payload = json.dumps(
+                    snapshot, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+                )
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = self.path.with_suffix(".tmp")
+                tmp.write_text(payload, encoding="utf-8")
+                tmp.replace(self.path)
         except (OSError, ValueError):
             pass
 
@@ -417,7 +434,7 @@ class WCLClient:
         spent, limit, reset = quota
         self.last_quota = quota
         if spent / limit >= .96:
-            self._blocked_until = max(self._blocked_until, time.time() + max(5.0, reset))
+            self._blocked_until = max(self._blocked_until, time.monotonic() + max(5.0, reset))
         return quota
 
     def _refresh_realm_catalog(self) -> dict[str, object] | None:
@@ -437,7 +454,7 @@ class WCLClient:
         except WCLError:
             return None
         if response.status_code == 429:
-            self._blocked_until = max(self._blocked_until, time.time() + self._retry_after_seconds(response))
+            self._blocked_until = max(self._blocked_until, time.monotonic() + self._retry_after_seconds(response))
             return None
         if response.status_code != 200:
             return None
@@ -455,7 +472,7 @@ class WCLClient:
             self.last_quota = quota
             spent, limit, reset = quota
             if spent / limit >= .96:
-                self._blocked_until = max(self._blocked_until, time.time() + max(5.0, reset))
+                self._blocked_until = max(self._blocked_until, time.monotonic() + max(5.0, reset))
         world = root.get("worldData")
         region_rows = world.get("regions") if isinstance(world, dict) else None
         if not isinstance(region_rows, list):
@@ -507,13 +524,13 @@ class WCLClient:
     def _ensure_realm_catalog(self) -> dict[str, object] | None:
         if self._realm_catalog is not None:
             return self._realm_catalog
-        now = time.time()
+        now = time.monotonic()
         if now < self._blocked_until:
             return None
         with self._realm_lock:
             if self._realm_catalog is not None:
                 return self._realm_catalog
-            now = time.time()
+            now = time.monotonic()
             if now < self._blocked_until:
                 return None
             if self._realm_catalog_last_attempt and now - self._realm_catalog_last_attempt < REALM_CATALOG_RETRY_SECONDS:
@@ -582,7 +599,7 @@ class WCLClient:
         finalized = [
             result if result is not None else WCLResult(
                 jobs[index][0], jobs[index][2], jobs[index][5], jobs[index][4], None,
-                time.time(), target_key=jobs[index][6], error="WCL batch ontbreekt",
+                time.time(), target_key=jobs[index][6], error="WCL batch result missing",
             )
             for index, result in enumerate(results)
         ]
@@ -608,7 +625,7 @@ class WCLClient:
                     timeout=22,
                 )
         except requests.RequestException as exc:
-            raise WCLError(f"Netwerk: {exc}") from exc
+            raise WCLError(f"WCL network error: {exc}") from exc
         if self._closed.is_set():
             raise WCLError("WCL client closed")
         if response.status_code == 401:
@@ -626,7 +643,7 @@ class WCLClient:
                         timeout=22,
                     )
             except requests.RequestException as exc:
-                raise WCLError(f"Netwerk: {exc}") from exc
+                raise WCLError(f"WCL network error: {exc}") from exc
             if self._closed.is_set():
                 raise WCLError("WCL client closed")
         return response
@@ -669,7 +686,7 @@ class WCLClient:
         except WCLError:
             return cache_result({})
         if response.status_code == 429:
-            self._blocked_until = time.time() + self._retry_after_seconds(response)
+            self._blocked_until = time.monotonic() + self._retry_after_seconds(response)
         if response.status_code != 200:
             return cache_result({})
         try:
@@ -720,7 +737,7 @@ class WCLClient:
         *,
         resolve_realms: bool = False,
     ) -> None:
-        if time.time() < self._blocked_until:
+        if time.monotonic() < self._blocked_until:
             for index, job in group:
                 results[index] = WCLResult(
                     job[0], job[2], job[5], job[4], None, time.time(),
@@ -745,7 +762,7 @@ class WCLClient:
             if not fallback_slug or not spec_name:
                 results[index] = WCLResult(
                     name, realm, dungeon, spec_id, None, time.time(),
-                    target_key=target, error="Geen geldige spec/realm",
+                    target_key=target, error="Invalid spec/realm",
                 )
                 continue
             prepared.append((index, job, spec_name))
@@ -758,7 +775,7 @@ class WCLClient:
         # characters where a localized realm name may genuinely need mapping.
         if resolve_realms:
             self._ensure_realm_catalog()
-            if time.time() < self._blocked_until:
+            if time.monotonic() < self._blocked_until:
                 for index, job, _spec_name in prepared:
                     results[index] = WCLResult(
                         job[0], job[2], dungeon, job[4], None, time.time(),
@@ -813,7 +830,7 @@ class WCLClient:
                 )
             return
         if response.status_code == 429:
-            self._blocked_until = time.time() + self._retry_after_seconds(response)
+            self._blocked_until = time.monotonic() + self._retry_after_seconds(response)
         if response.status_code != 200:
             error = (
                 "WCL rate limit" if response.status_code == 429

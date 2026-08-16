@@ -12,6 +12,7 @@
 
 Libs\qrencode.lua
 Core\CapturePolicy.lua
+Core\TransportState.lua
 Core\ScreenshotController.lua
 Core\Transport.lua
 Core\Tooltip.lua
