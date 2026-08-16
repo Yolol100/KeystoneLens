@@ -1,0 +1,49 @@
+name: Materialize KeystoneLens audit fixes
+
+on:
+  push:
+    branches:
+      - agent/audit-fixes-20260816
+    paths:
+      - '.github/workflows/agent-audit-materialize.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/audit-fixes-20260816
+          fetch-depth: 0
+      - name: Materialize generated fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import textwrap
+
+          workflow = Path('.github/workflows/agent-audit-fixes.yml').read_text(encoding='utf-8')
+          marker = "python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY", start)
+          script = textwrap.dedent(workflow[start:end])
+          Path('/tmp/apply_audit_fixes.py').write_text(script, encoding='utf-8')
+          subprocess.run(['python', '/tmp/apply_audit_fixes.py'], check=True)
+          PY
+          git diff --check
+      - name: Commit materialized branch changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Webactueel Audit Fixer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add addon/KeystoneLensBridge companion/source/app/keystonelens_companion/wcl.py companion/source/app/tests
+          git diff --cached --check
+          git commit -m 'Materialize KeystoneLens audit fixes for validation'
+          git push origin HEAD:agent/audit-fixes-20260816
