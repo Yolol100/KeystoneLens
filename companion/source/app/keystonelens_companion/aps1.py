@@ -323,7 +323,7 @@ class FragmentAssembler:
         self._streams: dict[tuple[int, int], tuple[float, Fragment, dict[int, bytes]]] = {}
 
     def has_pending_streams(self) -> bool:
-        now = time.time()
+        now = time.monotonic()
         self._streams = {
             key: value
             for key, value in self._streams.items()
@@ -332,7 +332,7 @@ class FragmentAssembler:
         return bool(self._streams)
 
     def push(self, fragment: Fragment) -> bytes | None:
-        now = time.time()
+        now = time.monotonic()
         self._streams = {key: value for key, value in self._streams.items() if now - value[0] <= self.ttl}
         key = (fragment.stream_id, fragment.generation)
         if key not in self._streams:
@@ -375,7 +375,7 @@ def decode_image_result(path: Path, assembler: FragmentAssembler) -> tuple[bool,
         from PIL import Image
         import zxingcpp
     except Exception as exc:  # pragma: no cover - depends on Windows runtime
-        raise RuntimeError(f"QR decoder ontbreekt: {exc}") from exc
+        raise RuntimeError(f"QR decoder unavailable: {exc}") from exc
 
     def decode_qr(image) -> list[bytes]:
         # zxing-cpp accepts PIL images directly and ships a current CPython
@@ -433,7 +433,7 @@ def decode_image_result(path: Path, assembler: FragmentAssembler) -> tuple[bool,
             owned_any = False
             consumed_any = False
 
-            # Current transport renders one physical pixel per QR module into a
+            # Current transport renders three physical pixels per QR module into a
             # lossless PNG. ZXing is more reliable when the crop is optionally
             # expanded with nearest-neighbour sampling on unusual DPI/framebuffer
             # setups. Decode only the small top-left search area at 4x so a 4K
