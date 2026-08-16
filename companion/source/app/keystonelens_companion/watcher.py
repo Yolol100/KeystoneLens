@@ -144,7 +144,7 @@ class ScreenshotWatcher:
             try:
                 accepted = self.on_snapshot(snapshot)
             except Exception as exc:
-                self.on_status(f"Transport • snapshot verwerken: {type(exc).__name__} • retry")
+                self.on_status(f"Transport • snapshot processing: {type(exc).__name__} • retry")
                 return False
             if accepted is False:
                 # A deliberately rejected stale snapshot is obsolete, not a
@@ -174,7 +174,7 @@ class ScreenshotWatcher:
                     self.files.delete_if_unchanged(path, sig)
                 else:
                     self.files.commit_snapshot(path, sig)
-                self.on_status("Transport • complete snapshot ontvangen")
+                self.on_status("Transport • complete snapshot received")
 
         return backfill and snapshot is not None
 
