@@ -1,4 +1,4 @@
-name: Diagnose KeystoneLens deterministic release
+name: Trace KeystoneLens release failure
 
 on:
   push:
@@ -35,39 +35,22 @@ jobs:
           mkdir -p companion/source/addon
           cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
           python -m pip install --disable-pip-version-check -q 'pytest==9.0.2' -r companion/source/app/requirements.txt
-      - name: Diagnose two release builds
+      - name: Trace release build
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           cd companion/source
-          set +e
-          bash scripts/BUILD-RELEASE.sh > /tmp/kl-build1.log 2>&1
+          bash -x scripts/BUILD-RELEASE.sh > /tmp/kl-trace.log 2>&1
           status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then echo "$status" > /tmp/kl-status.txt; exit "$status"; fi
-          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round1.sha256
-          set +e
-          bash scripts/BUILD-RELEASE.sh > /tmp/kl-build2.log 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then echo "$status" > /tmp/kl-status.txt; exit "$status"; fi
-          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round2.sha256
-          if ! diff -u /tmp/kl-round1.sha256 /tmp/kl-round2.sha256 > /tmp/kl-diff.log; then
-            echo 1 > /tmp/kl-status.txt
-            exit 1
-          fi
-          echo 0 > /tmp/kl-status.txt
-      - name: Upload diagnostic logs
+          echo "$status" > /tmp/kl-status.txt
+          exit "$status"
+      - name: Upload diagnostic trace
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: keystonelens-release-debug-${{ github.sha }}
+          name: keystonelens-release-trace-${{ github.sha }}
           path: |
-            /tmp/kl-build1.log
-            /tmp/kl-build2.log
-            /tmp/kl-round1.sha256
-            /tmp/kl-round2.sha256
-            /tmp/kl-diff.log
+            /tmp/kl-trace.log
             /tmp/kl-status.txt
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 1
