@@ -336,7 +336,7 @@ class WCLClient:
                 raise WCLError("WCL OAuth returned invalid JSON") from exc
             token = data.get("access_token") if isinstance(data, dict) else None
             if not isinstance(token, str) or not token:
-                raise WCLError("WCL OAuth token ontbreekt")
+                raise WCLError("WCL OAuth token missing")
             self._token = token
             try:
                 expires_in = int(data.get("expires_in", 86400) or 86400)

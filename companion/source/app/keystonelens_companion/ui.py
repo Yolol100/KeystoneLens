@@ -1076,7 +1076,7 @@ class OverlayWindow:
         self.count = tk.Label(summary, text="", bg=BG, fg=MUTED, font=(FONT, 9))
         self.count.pack(side="right")
         self.reset_filters_button = tk.Button(
-            summary, text="Reset", command=self._reset_filters, bg=PANEL_ALT, fg=MUTED,
+            summary, text="Reset filters", command=self._reset_filters, bg=PANEL_ALT, fg=MUTED,
             activebackground=PANEL, activeforeground=TEXT, relief="flat", bd=0,
             highlightthickness=1, highlightbackground=BG, highlightcolor=ACCENT,
             padx=8, pady=2, font=(FONT, 8), cursor="hand2", takefocus=1,
@@ -1272,9 +1272,9 @@ class OverlayWindow:
             self._show_empty_state()
         elif not self.rows and (state.lfg_unavailable or state.applicants_unavailable):
             self.selected_identity = ""
-            self.empty.winfo_children()[0].configure(text="Group Finder temporarily limited")
+            self.empty.winfo_children()[0].configure(text="Group Finder data temporarily unavailable")
             self.empty.winfo_children()[1].configure(
-                text="KeystoneLens is waiting for a reliable Blizzard snapshot.\nThe last valid list is kept intact."
+                text="KeystoneLens is waiting for complete Group Finder data.\nThe last valid applicant list stays visible."
             )
             self._show_empty_state()
         elif not self.rows:
