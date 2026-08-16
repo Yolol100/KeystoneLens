@@ -43,5 +43,8 @@ def test_wcl_backoff_uses_monotonic_clock():
     source = Path(__file__).parents[1] / "keystonelens_companion" / "wcl.py"
     text = source.read_text(encoding="utf-8")
     assert "time.time() < self._blocked_until" not in text
+    assert "time.time() >= self._blocked_until" not in text
+    assert "time.time() > self._blocked_until" not in text
+    assert "time.time() <= self._blocked_until" not in text
     assert "self._blocked_until = time.time() +" not in text
     assert "time.monotonic() < self._blocked_until" in text

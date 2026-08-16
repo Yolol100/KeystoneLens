@@ -879,7 +879,7 @@ class WCLClient:
                 self._fetch_group(group[midpoint:], results)
                 return
             detail = global_errors[0] if global_errors else (
-                next(iter(alias_errors.values()))[0] if alias_errors else "antwoord incompleet"
+                next(iter(alias_errors.values()))[0] if alias_errors else "incomplete response"
             )
             error = f"WCL GraphQL error: {detail}"
             for _alias, index, job, _spec, _source_job in valid:
@@ -908,7 +908,7 @@ class WCLClient:
                 unresolved.append((alias, index, job, spec_name, source_job))
             if unresolved:
                 catalog = self._ensure_realm_catalog()
-                if isinstance(catalog, dict) and time.time() >= self._blocked_until:
+                if isinstance(catalog, dict) and time.monotonic() >= self._blocked_until:
                     retry_group = []
                     for _alias, index, job, _spec_name, source_job in unresolved:
                         mapped = self._official_realm_slug(region, source_job[2], source_job[1])
