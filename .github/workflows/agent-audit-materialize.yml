@@ -1,4 +1,4 @@
-name: Update KeystoneLens architecture contracts
+name: Finalize KeystoneLens WCL audit fixes
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  update-contracts:
+  finalize:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -19,40 +19,53 @@ jobs:
         with:
           ref: agent/audit-fixes-20260816
           fetch-depth: 0
-      - name: Update architecture contract tests
+      - name: Finish WCL timing and copy cleanup
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          def replace_once(path, old, new):
+          def replace_exact(path, old, new, expected=1):
               p = Path(path)
               text = p.read_text(encoding='utf-8')
-              if text.count(old) != 1:
-                  raise SystemExit(f'{path}: expected one match, found {text.count(old)}')
-              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f'{path}: expected {expected} matches for {old!r}, found {count}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
 
-          replace_once(
-              'companion/source/app/tests/test_qr_backend.py',
-              '''        r"Core\\CapturePolicy.lua",\n        r"Core\\ScreenshotController.lua",''',
-              '''        r"Core\\CapturePolicy.lua",\n        r"Core\\TransportState.lua",\n        r"Core\\ScreenshotController.lua",''',
+          replace_exact(
+              'companion/source/app/keystonelens_companion/wcl.py',
+              'time.time() >= self._blocked_until',
+              'time.monotonic() >= self._blocked_until',
+          )
+          replace_exact(
+              'companion/source/app/keystonelens_companion/wcl.py',
+              '"antwoord incompleet"',
+              '"incomplete response"',
           )
 
-          replace_once(
-              'companion/source/app/tests/test_release_contract.py',
-              '''def test_bridge_listing_generation_survives_reload_in_saved_variables():\n    transport = (ROOT / "addon/KeystoneLensBridge/Core/Transport.lua").read_text(encoding="utf-8")\n    assert "listingGeneration = 0," in transport\n    assert "KeystoneLensBridgeDB.listingGeneration" in transport''',
-              '''def test_bridge_listing_generation_survives_reload_in_saved_variables():\n    state = (ROOT / "addon/KeystoneLensBridge/Core/TransportState.lua").read_text(encoding="utf-8")\n    transport = (ROOT / "addon/KeystoneLensBridge/Core/Transport.lua").read_text(encoding="utf-8")\n    assert "listingGeneration = 0," in state\n    assert "KeystoneLensBridgeDB.listingGeneration" in transport''',
+          test = Path('companion/source/app/tests/test_wcl_cache_locking.py')
+          text = test.read_text(encoding='utf-8')
+          anchor = '    assert "time.time() < self._blocked_until" not in text\n'
+          if text.count(anchor) != 1:
+              raise SystemExit('test_wcl_cache_locking.py: timing assertion anchor missing')
+          replacement = (
+              anchor
+              + '    assert "time.time() >= self._blocked_until" not in text\n'
+              + '    assert "time.time() > self._blocked_until" not in text\n'
+              + '    assert "time.time() <= self._blocked_until" not in text\n'
           )
+          test.write_text(text.replace(anchor, replacement, 1), encoding='utf-8')
           PY
           git diff --check
-      - name: Commit updated contracts
+      - name: Commit final WCL fixes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Webactueel Audit Fixer'
           git config user.email 'actions@users.noreply.github.com'
-          git add companion/source/app/tests/test_qr_backend.py companion/source/app/tests/test_release_contract.py
+          git add companion/source/app/keystonelens_companion/wcl.py companion/source/app/tests/test_wcl_cache_locking.py
           git diff --cached --check
-          git commit -m 'Update transport architecture regression contracts'
+          git commit -m 'Finish WCL timing and copy audit fixes'
           git push origin HEAD:agent/audit-fixes-20260816
