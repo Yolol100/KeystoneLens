@@ -15,6 +15,36 @@ from .util import realm_slug, split_name_realm
 from .wcl import WCLClient
 
 
+def _listing_context(value: Listing | None) -> tuple[str, int]:
+    """Return the stable enrichment identity for a listing."""
+    if value is None:
+        return ("", 0)
+    return (value.dungeon_name.casefold(), int(value.key_level or 0))
+
+
+def _same_character_context(old: ApplicantView | None, applicant, listing: Listing | None, region: str) -> bool:
+    """Keep enrichment only when character and listing context are unchanged."""
+    return bool(
+        old
+        and old.applicant.name == applicant.name
+        and old.applicant.spec_id == applicant.spec_id
+        and old.applicant.role_byte == applicant.role_byte
+        and _listing_context(old.snapshot_listing) == _listing_context(listing)
+        and old.region == region
+    )
+
+
+def _result_matches_listing(result: WCLResult | RIOResult | None, listing: Listing | None) -> bool:
+    """Validate cached online evidence against the current listing context."""
+    return bool(
+        result
+        and not result.error
+        and listing is not None
+        and result.dungeon_name == listing.dungeon_name
+        and result.target_key == int(listing.key_level or 0)
+    )
+
+
 class ApplicantEngine:
     """Authoritative LFG mirror with asynchronous Raider.IO/WCL enrichment.
 
@@ -52,7 +82,7 @@ class ApplicantEngine:
         self._rio_worker = threading.Thread(target=self._run_rio_worker, daemon=True, name="KL-RIOWorker")
         self._worker.start()
         self._rio_worker.start()
-        self._status = "Open your Mythic+ Group Finder listing"
+        self._status = "Open a Mythic+ Group Finder listing"
         self._lfg_unavailable = False
         self._applicants_unavailable = False
         self._roster_unavailable = False
@@ -137,7 +167,7 @@ class ApplicantEngine:
                     self._listing_generation = 0
                     self._listing_closed = False
                 self._revision += 1
-                self._status = "Open your Mythic+ Group Finder listing"
+                self._status = "Open a Mythic+ Group Finder listing"
                 self._lfg_unavailable = False
                 self._applicants_unavailable = False
                 self._roster_unavailable = False
@@ -150,7 +180,7 @@ class ApplicantEngine:
                 self._lfg_unavailable = True
                 self._applicants_unavailable = snapshot.applicants_unavailable
                 self._roster_unavailable = snapshot.roster_unavailable
-                self._status = "Group Finder temporarily limited • keeping last valid list"
+                self._status = "Group Finder data temporarily unavailable • keeping last valid list"
                 self._emit_locked()
                 return True
 
@@ -189,41 +219,17 @@ class ApplicantEngine:
             effective_listing = old_listing if listing_missing_partial else listing
             self._listing = effective_listing
 
-            def enrichment_context(value: Listing | None) -> tuple[str, int]:
-                if value is None:
-                    return ("", 0)
-                return (value.dungeon_name.casefold(), int(value.key_level or 0))
-
-            new_enrichment_context = enrichment_context(effective_listing)
-            if (enrichment_context(old_listing), old_region) != (new_enrichment_context, region):
+            new_enrichment_context = _listing_context(effective_listing)
+            if (_listing_context(old_listing), old_region) != (new_enrichment_context, region):
                 # Old queued requests cannot enrich the new dungeon/key/region.
                 # Drop them immediately; any request already in flight is still
                 # rejected by the per-view revision/context checks.
                 self._clear_enrichment_queues_locked()
 
             def view_for_context(applicant, old: ApplicantView | None) -> ApplicantView:
-                same_character_context = bool(
-                    old
-                    and old.applicant.name == applicant.name
-                    and old.applicant.spec_id == applicant.spec_id
-                    and old.applicant.role_byte == applicant.role_byte
-                    and enrichment_context(old.snapshot_listing) == new_enrichment_context
-                    and old.region == region
-                )
-                same_wcl_context = bool(
-                    same_character_context
-                    and old.wcl
-                    and not old.wcl.error
-                    and old.wcl.dungeon_name == (effective_listing.dungeon_name if effective_listing else "")
-                    and old.wcl.target_key == (effective_listing.key_level if effective_listing else 0)
-                )
-                same_rio_context = bool(
-                    same_character_context
-                    and old.rio
-                    and not old.rio.error
-                    and old.rio.dungeon_name == (effective_listing.dungeon_name if effective_listing else "")
-                    and old.rio.target_key == (effective_listing.key_level if effective_listing else 0)
-                )
+                same_character_context = _same_character_context(old, applicant, effective_listing, region)
+                same_wcl_context = bool(same_character_context and _result_matches_listing(old.wcl, effective_listing))
+                same_rio_context = bool(same_character_context and _result_matches_listing(old.rio, effective_listing))
                 view = ApplicantView(
                     applicant=applicant,
                     snapshot_listing=effective_listing,
@@ -273,13 +279,13 @@ class ApplicantEngine:
                     if incoming_generation:
                         self._listing_closed = True
                 self._status = (
-                    "Group Finder temporarily unreadable • keeping last valid list"
-                    if partial_applicants else "Open your Mythic+ Group Finder listing"
+                    "Group Finder data temporarily unavailable • keeping last valid list"
+                    if partial_applicants else "Open a Mythic+ Group Finder listing"
                 )
             elif partial_applicants:
                 if incoming_generation:
                     self._listing_closed = False
-                self._status = f"{len(self._views)} players • partial snapshot • {region}"
+                self._status = f"{len(self._views)} applicants • partial data • {region}"
             elif snapshot.roster_unavailable:
                 if incoming_generation:
                     self._listing_closed = False
@@ -287,7 +293,7 @@ class ApplicantEngine:
             else:
                 if incoming_generation:
                     self._listing_closed = False
-                self._status = "Waiting for players" if not new_views else f"{len(new_views)} players • {region}"
+                self._status = "Waiting for applicants" if not new_views else f"{len(new_views)} applicants • {region}"
 
             self._emit_locked()
             queued = False

@@ -46,9 +46,9 @@ COLUMN_GAP = 14
 ROLE_OFFSET_X = -11
 SETTINGS_TEXT_OFFSET_X = -4
 COLUMN_SPECS = (
-    ("score", "KL ↓", 66, "w"),
+    ("score", "Score ↓", 66, "w"),
     ("role", "Role", 60, "center"),
-    ("player", "Player", 110, "w"),
+    ("player", "Applicant", 110, "w"),
     ("class", "Class", 110, "w"),
     ("spec", "Spec", 110, "w"),
     ("rio", "Raider.IO", 170, "w"),
@@ -89,10 +89,10 @@ def pct_colour(pct: float | None) -> str:
 def validate_settings_values(client_id: str, client_secret: str, screenshots_path: str) -> str:
     raw_path = screenshots_path.strip()
     if not raw_path:
-        return "Choose the WoW Screenshots folder first."
+        return "Select your WoW Screenshots folder."
     path = Path(raw_path).expanduser()
     if path.exists() and not path.is_dir():
-        return "The selected Screenshots location is not a folder."
+        return "Select a valid Screenshots folder."
 
     # Validate the path shape even when the WoW drive is temporarily offline.
     # Path() cannot parse Windows backslashes on non-Windows test hosts, so use
@@ -101,7 +101,7 @@ def validate_settings_values(client_id: str, client_secret: str, screenshots_pat
     if len(parts) < 2 or parts[-1].casefold() != "screenshots" or parts[-2].casefold() != "_retail_":
         return r"Choose the World of Warcraft\_retail_\Screenshots folder."
     if bool(client_id.strip()) != bool(client_secret.strip()):
-        return "Enter both the Warcraft Logs Client ID and Client Secret, or leave both empty."
+        return "Enter both Warcraft Logs credentials, or leave both fields empty."
     return ""
 
 
@@ -518,20 +518,20 @@ class SetupDialog(tk.Toplevel):
 
         display = tk.Frame(content, bg=BG)
         display.pack(fill="x")
-        tk.Label(display, text="Overlay columns", bg=BG, fg=TEXT,
+        tk.Label(display, text="Visible columns", bg=BG, fg=TEXT,
                  font=(FONT, 9, "bold"), anchor="w").pack(fill="x")
         tk.Label(
-            display, text="Hide optional data without changing the KL score calculation.",
+            display, text="Show or hide columns without changing the KL Score.",
             bg=BG, fg=DIALOG_MUTED, font=(FONT, 8), anchor="w",
         ).pack(fill="x", pady=(2, 7))
         toggle_grid = tk.Frame(display, bg=BG)
         toggle_grid.pack(fill="x")
         toggles = (
-            ("show_role", "Role", "Also controls the role filter"),
-            ("show_class", "Class", "Also controls the class filter"),
-            ("show_spec", "Spec", "Specialization column"),
-            ("show_rio", "Raider.IO", "Hide rating details only"),
-            ("show_wcl", "Warcraft Logs", "Hide WCL details only"),
+            ("show_role", "Role", "Show the Role column and filter"),
+            ("show_class", "Class", "Show the Class column and filter"),
+            ("show_spec", "Spec", "Show the Specialization column"),
+            ("show_rio", "Raider.IO", "Show Raider.IO details"),
+            ("show_wcl", "Warcraft Logs", "Show Warcraft Logs details"),
         )
         for index, (key, label, description) in enumerate(toggles):
             row = self._setting_toggle(toggle_grid, label, description, self.column_vars[key])
@@ -710,7 +710,7 @@ class SetupDialog(tk.Toplevel):
             show_wcl=self.column_vars["show_wcl"].get(),
         )
         if self.on_save(out) is False:
-            self.error_label.configure(text="Settings could not be saved. Check the main window status and try again.")
+            self.error_label.configure(text="Couldn’t save settings. Check the main window status, then try again.")
             return
         self.destroy()
 
@@ -1049,10 +1049,10 @@ class OverlayWindow:
         self.main_area.pack(fill="both", expand=True)
 
         self.empty = tk.Frame(self.main_area, bg=BG)
-        tk.Label(self.empty, text="Open your Mythic+ Group Finder listing", bg=BG, fg=TEXT,
+        tk.Label(self.empty, text="Open a Mythic+ Group Finder listing", bg=BG, fg=TEXT,
                  font=(FONT, 12, "bold")).pack(pady=(28, 8))
         tk.Label(self.empty,
-                 text="KeystoneLens automatically imports applicants.\nNo manual refresh needed.",
+                 text="Applicants appear automatically as they apply.",
                  bg=BG, fg=MUTED, font=(FONT, 9), justify="center").pack()
 
         self.data = tk.Frame(self.main_area, bg=BG)
@@ -1265,9 +1265,9 @@ class OverlayWindow:
 
         if not listing:
             self.selected_identity = ""
-            self.empty.winfo_children()[0].configure(text="Open your Mythic+ Group Finder listing")
+            self.empty.winfo_children()[0].configure(text="Open a Mythic+ Group Finder listing")
             self.empty.winfo_children()[1].configure(
-                text="KeystoneLens automatically imports applicants.\nNo manual refresh needed."
+                text="Applicants appear automatically as they apply."
             )
             self._show_empty_state()
         elif not self.rows and (state.lfg_unavailable or state.applicants_unavailable):
@@ -1279,7 +1279,7 @@ class OverlayWindow:
             self._show_empty_state()
         elif not self.rows:
             self.selected_identity = ""
-            self.empty.winfo_children()[0].configure(text="Waiting for players")
+            self.empty.winfo_children()[0].configure(text="Waiting for applicants")
             self.empty.winfo_children()[1].configure(
                 text=f"{context} is open.\nNew applicants appear automatically."
             )
@@ -1388,9 +1388,9 @@ class OverlayWindow:
         eligible_total = len(self._eligible_rows())
         active_filters = self._active_filter_count()
         if active_filters:
-            count_text = f"{shown} / {eligible_total} players"
+            count_text = f"{shown} / {eligible_total} applicants"
         else:
-            count_text = f"{eligible_total} player{'s' if eligible_total != 1 else ''}"
+            count_text = f"{eligible_total} applicant{'s' if eligible_total != 1 else ''}"
         self.count.configure(text=count_text)
         self._refresh_filter_meta()
         self._selected_row_widget = None
@@ -1398,7 +1398,7 @@ class OverlayWindow:
             self.selected_identity = ""
 
         if not rows:
-            empty_text = "No players match the current filters" if eligible_total else "Waiting for final KL scores"
+            empty_text = "No applicants match these filters" if eligible_total else "Calculating KL scores…"
             tk.Label(self.list_frame, text=empty_text, bg=BG, fg=MUTED,
                      font=(FONT, 9)).pack(pady=18)
         else:
@@ -1549,18 +1549,18 @@ class OverlayWindow:
             wcl_text = "Warcraft Logs loading…" if view.wcl_status in {"queued", "loading"} else "Warcraft Logs ready"
             self.detail_title.configure(text=f"{view.applicant.name}   KL … · loading", fg=MUTED)
             self.detail_line1.configure(text=f"{rio_text}  |  {wcl_text}", fg=MUTED)
-            self.detail_line2.configure(text="Final KL appears after online enrichment is complete.", fg=MUTED)
+            self.detail_line2.configure(text="KL Score appears when Raider.IO and Warcraft Logs finish loading.", fg=MUTED)
             self.detail_line3.configure(text="", fg=MUTED)
             return
         self.detail_title.configure(
-            text=f"{view.applicant.name}   KL {score.score}/100 · {score.label} · confidence {score.confidence}",
+            text=f"{view.applicant.name}   KL {score.score}/100 · {score.label.title()} · {score.confidence.title()} confidence",
             fg=score_colour(score.score),
         )
 
         components = [
-            f"RIO {score.rio_score:.0f}/100 (50%)",
-            (f"WCL {score.wcl_score:.0f}/100 (50%)"
-             if score.wcl_score is not None else "WCL 0/100 (50% · no data)"),
+            f"Raider.IO {score.rio_score:.0f}/100 · 50%",
+            (f"Warcraft Logs {score.wcl_score:.0f}/100 · 50%"
+             if score.wcl_score is not None else "Warcraft Logs 0/100 · 50% · No public data"),
         ]
         self.detail_line1.configure(text="  |  ".join(components), fg=TEXT)
 
@@ -1588,11 +1588,11 @@ class OverlayWindow:
                 )
             line = f"{average_text}  |  {metric_text}{context_text}"
         elif view.wcl_status == "disabled":
-            line = "WCL staat off; het vaste WCL-deel van 50% blijft daardoor 0/100."
+            line = "Warcraft Logs is off. Its fixed 50% share remains 0/100."
         elif view.wcl and view.wcl.error:
             line = f"WCL: {view.wcl.error}"
         else:
-            line = "WCL: no usable public ranking; its fixed 50% share is 0/100."
+            line = "Warcraft Logs: no usable public ranking; its fixed 50% share is 0/100."
         self.detail_line2.configure(text=line, fg=MUTED)
 
         source = "Raider.IO live" if view.rio and not view.rio.error and not view.rio.not_found else "Raider.IO local addon data"

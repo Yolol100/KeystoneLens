@@ -126,13 +126,13 @@ class RIOClient:
     def _get(self, url: str, *, params: dict[str, object] | None = None) -> requests.Response:
         if self._closed.is_set():
             raise RuntimeError("Raider.IO client closed")
-        if time.time() < self._blocked_until:
+        if time.monotonic() < self._blocked_until:
             raise RuntimeError("Raider.IO rate limit; waiting for reset")
         # Profile requests are processed asynchronously, but a large applicant pool
         # can still arrive in a burst. Pace requests locally so normal use stays
         # below the public unauthenticated quota even before a 429 is returned.
         with self._rate_lock:
-            delay = MIN_REQUEST_INTERVAL_SECONDS - (time.time() - self._last_request_at)
+            delay = MIN_REQUEST_INTERVAL_SECONDS - (time.monotonic() - self._last_request_at)
             if delay > 0:
                 # Event.wait keeps shutdown responsive during local rate pacing.
                 if self._closed.wait(delay):
@@ -141,11 +141,11 @@ class RIOClient:
                 response = self._http.get(url, params=params or {}, timeout=REQUEST_TIMEOUT_SECONDS)
             except requests.RequestException as exc:
                 raise RuntimeError(f"Raider.IO network error: {exc}") from exc
-            self._last_request_at = time.time()
+            self._last_request_at = time.monotonic()
         if self._closed.is_set():
             raise RuntimeError("Raider.IO client closed")
         if response.status_code == 429:
-            self._blocked_until = time.time() + self._retry_after(response)
+            self._blocked_until = time.monotonic() + self._retry_after(response)
         return response
 
     def fetch_character(self, name: str, realm: str, region: str, dungeon: str, target_key: int, role: str = "") -> RIOResult:
