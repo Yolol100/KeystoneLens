@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[5]
+    return Path(__file__).resolve().parents[4]
 
 
 def test_transport_state_is_split_and_loaded_before_transport():
