@@ -1,0 +1,70 @@
+name: Diagnose KeystoneLens deterministic release
+
+on:
+  push:
+    branches:
+      - agent/audit-fixes-20260816
+    paths:
+      - '.github/workflows/agent-release-debug.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/audit-fixes-20260816
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.5'
+          cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13.15'
+      - run: sudo apt-get update && sudo apt-get install -y lua5.1
+      - name: Prepare exact release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf companion/source/addon
+          mkdir -p companion/source/addon
+          cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
+          python -m pip install --disable-pip-version-check -q 'pytest==9.0.2' -r companion/source/app/requirements.txt
+      - name: Diagnose two release builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd companion/source
+          report_failure() {
+            local title="$1" file="$2"
+            python - "$title" "$file" <<'PY'
+          from pathlib import Path
+          import sys
+          title, path = sys.argv[1], Path(sys.argv[2])
+          text = path.read_text(encoding='utf-8', errors='replace')[-14000:] if path.exists() else 'no log captured'
+          text = text.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+          title = title.replace('%','%25').replace('\r','').replace('\n',' ')
+          print(f'::error title={title}::{text}')
+          PY
+          }
+          set +e
+          bash scripts/BUILD-RELEASE.sh > /tmp/kl-build1.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then report_failure 'KeystoneLens release build 1 failed' /tmp/kl-build1.log; exit "$status"; fi
+          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round1.sha256
+          set +e
+          bash scripts/BUILD-RELEASE.sh > /tmp/kl-build2.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then report_failure 'KeystoneLens release build 2 failed' /tmp/kl-build2.log; exit "$status"; fi
+          find release -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/kl-round2.sha256
+          if ! diff -u /tmp/kl-round1.sha256 /tmp/kl-round2.sha256 > /tmp/kl-diff.log; then
+            report_failure 'KeystoneLens deterministic release mismatch' /tmp/kl-diff.log
+            exit 1
+          fi
