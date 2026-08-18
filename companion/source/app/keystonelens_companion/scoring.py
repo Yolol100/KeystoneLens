@@ -6,7 +6,7 @@ from .constants import HEALER_SPECS
 from .models import Applicant, Listing, ScoreBreakdown, WCLBracket, WCLResult
 from .rio import RIOResult
 
-# KeystoneLens 0.12.7 deliberately has only two scoring pillars.
+# KeystoneLens deliberately has only two scoring pillars.
 # Nothing else can add or subtract points from the displayed KL Score.
 BASE_RIO_WEIGHT = 0.50
 BASE_WCL_WEIGHT = 0.50
