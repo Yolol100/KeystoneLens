@@ -215,9 +215,12 @@ class App:
     def _poll(self) -> None:
         try:
             now = time.monotonic()
-            if now >= self._next_season_transition_check:
+            next_check = getattr(self, "_next_season_transition_check", 0.0)
+            if now >= next_check:
                 self._next_season_transition_check = now + 30.0
-                self.engine.refresh_season_transition()
+                engine = getattr(self, "engine", None)
+                if engine is not None:
+                    engine.refresh_season_transition()
             while True:
                 kind, data = self.q.get_nowait()
                 if kind == "state":
