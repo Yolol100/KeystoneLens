@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from unittest.mock import Mock, patch
 
@@ -246,8 +247,7 @@ def test_unknown_region_falls_back_to_eu_window():
 
 
 def test_ui_uses_local_current_score_when_raiderio_api_lags_in_week1():
-    applicant = _applicant()
-    applicant.rio_score = 375
+    applicant = replace(_applicant(), rio_score=375)
     view = ApplicantView(
         applicant=applicant,
         snapshot_listing=Listing(key_level=10, dungeon_name="Altar of Fangs"),
