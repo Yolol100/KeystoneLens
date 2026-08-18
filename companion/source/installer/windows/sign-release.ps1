@@ -66,7 +66,7 @@ foreach ($file in @($Launcher, $Uninstaller, $WoWWatcher, $Setup)) {
     if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $file" }
     $signature = Get-AuthenticodeSignature -LiteralPath $file
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "Authenticode status is not Valid for $file: $($signature.Status)"
+        throw "Authenticode status is not Valid for ${file}: $($signature.Status)"
     }
 }
 
