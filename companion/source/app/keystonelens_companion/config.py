@@ -68,9 +68,14 @@ def log_path() -> Path:
     return local_app_dir() / "keystonelens.log"
 
 
+def _is_windows() -> bool:
+    """Single platform seam so Windows-only secret behavior is testable in isolation."""
+    return os.name == "nt"
+
+
 def _dpapi_transform(data: bytes, *, protect: bool) -> bytes:
     """Protect/unprotect bytes with the current Windows user's DPAPI key."""
-    if os.name != "nt":
+    if not _is_windows():
         raise OSError("Windows DPAPI is only available on Windows")
 
     class DataBlob(ctypes.Structure):
@@ -217,7 +222,7 @@ def _config_payload(cfg: Config) -> dict[str, Any]:
     safe = _normalize_config(asdict(cfg))
     data = asdict(safe)
     secret = data.pop("client_secret", "")
-    if secret and os.name == "nt":
+    if secret and _is_windows():
         data[_PROTECTED_SECRET_KEY] = _protect_secret(secret)
     # KeystoneLens is a Windows product. On unsupported source/demo hosts the
     # in-memory secret is never written back in plaintext.
@@ -251,6 +256,7 @@ def load_config() -> Config:
         had_plaintext_secret_field = "client_secret" in raw
         protected = raw.get(_PROTECTED_SECRET_KEY)
         protected_present = isinstance(protected, str) and bool(protected)
+        windows = _is_windows()
         if protected_present:
             try:
                 raw["client_secret"] = _unprotect_secret(protected)
@@ -258,7 +264,7 @@ def load_config() -> Config:
                 # Never fall back to a stray legacy plaintext field when a DPAPI
                 # value exists but cannot be authenticated/decrypted.
                 raw["client_secret"] = ""
-        elif os.name != "nt":
+        elif not windows:
             # Unsupported source/demo hosts must not activate a credential that
             # was found in an old plaintext config file.
             raw["client_secret"] = ""
@@ -269,11 +275,11 @@ def load_config() -> Config:
 
         if had_plaintext_secret_field:
             try:
-                if os.name == "nt" and cfg.client_secret:
+                if windows and cfg.client_secret:
                     # Successful legacy migration: protect for the current user
                     # and atomically replace the old plaintext file.
                     _atomic_write_config(path, _config_payload(cfg))
-                elif os.name == "nt" and protected_present:
+                elif windows and protected_present:
                     # DPAPI remains authoritative; rewrite to remove a stale
                     # duplicate plaintext field (or remove both if DPAPI failed).
                     if cfg.client_secret:
