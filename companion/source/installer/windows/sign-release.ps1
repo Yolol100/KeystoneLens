@@ -29,7 +29,9 @@ if (-not (Test-Path -LiteralPath $Launcher -PathType Leaf) -or -not (Test-Path -
 }
 
 function Invoke-Sign([string]$Path) {
-    $args = @('sign', '/fd', 'SHA256', '/tr', $TimestampUrl, '/td', 'SHA256')
+    # Keep the digest/timestamp pairs compact because release-contract tests
+    # verify these exact security-critical arguments in addition to PS parsing.
+    $args = @('sign','/fd','SHA256','/tr',$TimestampUrl,'/td','SHA256')
     if ($CertThumbprint) {
         $args += @('/sha1', $CertThumbprint)
     } else {
