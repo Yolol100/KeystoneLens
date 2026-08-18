@@ -5,7 +5,7 @@ on:
     branches:
       - agent/season-transition-self-audit-work-20260819
     paths:
-      - 'scripts/apply-season-transition-self-audit.py'
+      - 'scripts/fix-season-transition-self-audit-test.py'
       - '.github/workflows/apply-season-transition-self-audit.yml'
 
 permissions:
@@ -26,20 +26,20 @@ jobs:
         with:
           python-version: '3.13.15'
 
-      - name: Apply guarded audit fixes
+      - name: Correct immutable audit test setup
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/apply-season-transition-self-audit.py
+          python scripts/fix-season-transition-self-audit-test.py
           git diff --check
           python -m py_compile companion/source/app/keystonelens_companion/*.py companion/source/app/tests/test_season_transition.py
 
-      - name: Commit source changes
+      - name: Commit source correction
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add companion/source/app/keystonelens_companion companion/source/app/tests/test_season_transition.py
-          git commit -m 'Harden Season 2 transition after self-audit'
+          git add companion/source/app/tests/test_season_transition.py
+          git commit -m 'Fix immutable Season 2 audit scenario'
           git push origin "HEAD:${GITHUB_REF_NAME}"
