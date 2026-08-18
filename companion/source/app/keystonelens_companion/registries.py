@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,25 @@ WCL_ZONE_BY_SEASON = {
     MIDNIGHT_SEASON_2.key: 56,
 }
 
+# Midnight Season 2 Mythic+ starts in the week of 19 August 2026. For the
+# first weekly lockout, fresh-season Raider.IO/WCL evidence is intentionally
+# treated as incomplete. On the second weekly reset we switch to Season 2 only.
+MIDNIGHT_SEASON_2_MYTHIC_PLUS_START = date(2026, 8, 19)
+MIDNIGHT_SEASON_2_WEEK2_START = date(2026, 8, 26)
+
+
+def season2_transition_phase(on_date: date | None = None) -> str:
+    current = on_date or date.today()
+    if current < MIDNIGHT_SEASON_2_MYTHIC_PLUS_START:
+        return "preseason"
+    if current < MIDNIGHT_SEASON_2_WEEK2_START:
+        return "week1"
+    return "current"
+
+
+def use_season1_carryover(on_date: date | None = None) -> bool:
+    return season2_transition_phase(on_date) == "week1"
+
 
 # Names can differ slightly between Blizzard's LFG short names and external
 # services. Canonicalize the known Season 2 variants before enrichment so WCL,
@@ -96,3 +116,22 @@ def season_for_dungeon(name: str) -> SeasonDefinition | None:
 def wcl_zone_for_dungeon(name: str) -> int | None:
     season = season_for_dungeon(name)
     return WCL_ZONE_BY_SEASON.get(season.key) if season else None
+
+
+def use_previous_wcl_for_dungeon(name: str, on_date: date | None = None) -> bool:
+    season = season_for_dungeon(name)
+    return bool(
+        season
+        and season.key == MIDNIGHT_SEASON_2.key
+        and use_season1_carryover(on_date)
+    )
+
+
+def wcl_source_season_for_dungeon(name: str, on_date: date | None = None) -> str:
+    """Return the WCL season whose evidence should score this listing today."""
+    season = season_for_dungeon(name)
+    if not season:
+        return ""
+    if use_previous_wcl_for_dungeon(name, on_date):
+        return MIDNIGHT_SEASON_1.key
+    return season.key

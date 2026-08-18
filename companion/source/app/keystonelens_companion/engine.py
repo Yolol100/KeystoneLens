@@ -7,7 +7,7 @@ import time
 from typing import Callable
 
 from .constants import ACTIVITY_TO_DUNGEON, REGION_NAMES
-from .registries import canonical_dungeon_name, DUNGEON_TO_SEASON
+from .registries import canonical_dungeon_name, DUNGEON_TO_SEASON, use_previous_wcl_for_dungeon, wcl_source_season_for_dungeon
 from .models import ApplicantView, EngineState, Listing, PartyMember, Snapshot, WCLResult
 from .rio import RIOClient, RIOResult
 from .scoring import calculate_score
@@ -36,13 +36,40 @@ def _same_character_context(old: ApplicantView | None, applicant, listing: Listi
 
 def _result_matches_listing(result: WCLResult | RIOResult | None, listing: Listing | None) -> bool:
     """Validate cached online evidence against the current listing context."""
-    return bool(
+    matches = bool(
         result
         and not result.error
         and listing is not None
         and result.dungeon_name == listing.dungeon_name
         and result.target_key == int(listing.key_level or 0)
     )
+    if not matches:
+        return False
+    if isinstance(result, WCLResult):
+        return result.source_season == wcl_source_season_for_dungeon(listing.dungeon_name)
+    return True
+
+
+def _fetch_wcl_batch(client: WCLClient, jobs):
+    """Route WCL to S1 carry-over only during the first S2 weekly lockout."""
+    if not jobs:
+        return []
+    indexed_previous = []
+    indexed_current = []
+    for index, job in enumerate(jobs):
+        target = indexed_previous if use_previous_wcl_for_dungeon(job[5]) else indexed_current
+        target.append((index, job))
+
+    results: list[WCLResult | None] = [None] * len(jobs)
+    if indexed_previous:
+        fetched = client.fetch_batch_previous_season([job for _index, job in indexed_previous])
+        for (index, _job), result in zip(indexed_previous, fetched):
+            results[index] = result
+    if indexed_current:
+        fetched = client.fetch_batch_current_dungeon([job for _index, job in indexed_current])
+        for (index, _job), result in zip(indexed_current, fetched):
+            results[index] = result
+    return results
 
 
 class ApplicantEngine:
@@ -440,7 +467,7 @@ class ApplicantEngine:
                     for _identity, _revision, name, realm, spec_id, dungeon, target, region in batch
                 ]
                 try:
-                    fetched = client.fetch_batch_current_dungeon(jobs)
+                    fetched = _fetch_wcl_batch(client, jobs)
                     results = list(fetched) if isinstance(fetched, (list, tuple)) else []
                 except Exception as exc:
                     results = [
@@ -465,6 +492,11 @@ class ApplicantEngine:
                 stale_client = client is not self.wcl
                 for item, result in zip(batch, results):
                     identity, queued_revision, name, realm, spec_id, dungeon, target, region = item
+                    if result is not None:
+                        result = replace(
+                            result,
+                            source_season=wcl_source_season_for_dungeon(dungeon),
+                        )
                     self._pending.discard((
                         name.casefold() + "@" + realm.casefold(), dungeon.casefold(),
                         spec_id, target, region, queued_revision,

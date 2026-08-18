@@ -128,6 +128,7 @@ class WCLResult:
     quota_limit: float | None = None
     quota_reset: float | None = None
     metric_brackets: dict[str, WCLBracket] = field(default_factory=dict)
+    source_season: str = ""
 
 
 @dataclass(frozen=True)

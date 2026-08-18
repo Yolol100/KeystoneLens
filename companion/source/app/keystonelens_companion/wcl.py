@@ -13,7 +13,7 @@ import requests
 from .config import cache_path
 from .constants import DUNGEONS, HEALER_SPECS, SPEC_NAMES
 from .models import WCLBracket, WCLResult
-from .registries import canonical_dungeon_name, season_for_dungeon, wcl_zone_for_dungeon
+from .registries import MIDNIGHT_SEASON_1, canonical_dungeon_name, season_for_dungeon, wcl_zone_for_dungeon
 
 OAUTH_URL = "https://www.warcraftlogs.com/oauth/token"
 API_URL = "https://www.warcraftlogs.com/api/v2/client"
@@ -611,6 +611,247 @@ class WCLClient:
                 for index, _job in misses
             )
         return finalized
+
+    def fetch_batch_previous_season(self, jobs: list[tuple[str, str, str, str, int, str, int]]) -> list[WCLResult]:
+        """Fetch Season 1 carry-over evidence for fresh Season 2 applicants.
+
+        The S2 listing dungeon has no meaningful historical S1 counterpart, so
+        week-one carry-over is an honest season-wide playerscore aggregate across
+        the eight verified Midnight Season 1 Mythic+ dungeons. It is deliberately
+        not written into the normal current-dungeon cache, preventing any S1 row
+        from surviving the automatic week-two cutover.
+        """
+        if not jobs:
+            return []
+        if self._closed.is_set():
+            return [
+                WCLResult(
+                    name, realm, dungeon, spec_id, None, time.time(),
+                    target_key=target, error="WCL client closed",
+                    source_season=MIDNIGHT_SEASON_1.key,
+                )
+                for name, _slug, realm, _region, spec_id, dungeon, target in jobs
+            ]
+        if len(jobs) > 10:
+            raise ValueError("KeystoneLens batch size is capped at 10")
+
+        results: list[WCLResult | None] = [None] * len(jobs)
+        by_region: dict[str, list[tuple[int, tuple[str, str, str, str, int, str, int]]]] = {}
+        for index, job in enumerate(jobs):
+            by_region.setdefault(job[3], []).append((index, job))
+
+        # 5 applicants x 8 S1 dungeons = 40 ranking fields, staying below the
+        # normal current-dungeon batch's ~50 ranking fields per GraphQL request.
+        for group in by_region.values():
+            for start in range(0, len(group), 5):
+                self._fetch_previous_season_group(group[start:start + 5], results)
+
+        finalized: list[WCLResult] = []
+        for index, result in enumerate(results):
+            if result is None:
+                name, _slug, realm, _region, spec_id, dungeon, target = jobs[index]
+                result = WCLResult(
+                    name, realm, dungeon, spec_id, None, time.time(),
+                    target_key=target, error="WCL Season 1 carry-over response incomplete",
+                    source_season=MIDNIGHT_SEASON_1.key,
+                )
+            finalized.append(result)
+        return finalized
+
+    def _fetch_previous_season_group(
+        self,
+        group: list[tuple[int, tuple[str, str, str, str, int, str, int]]],
+        results: list[WCLResult | None],
+    ) -> None:
+        if not group:
+            return
+        if time.monotonic() < self._blocked_until:
+            for index, job in group:
+                results[index] = WCLResult(
+                    job[0], job[2], job[5], job[4], None, time.time(),
+                    target_key=job[6], error="WCL rate limit; waiting for reset",
+                    source_season=MIDNIGHT_SEASON_1.key,
+                )
+            return
+
+        encounters = []
+        for dungeon_name in MIDNIGHT_SEASON_1.dungeons:
+            encounter_id = DUNGEONS.get(dungeon_name)
+            if not encounter_id:
+                for index, job in group:
+                    results[index] = WCLResult(
+                        job[0], job[2], job[5], job[4], None, time.time(),
+                        target_key=job[6], error="WCL Season 1 encounter registry incomplete",
+                        source_season=MIDNIGHT_SEASON_1.key,
+                    )
+                return
+            encounters.append((dungeon_name, int(encounter_id)))
+
+        region = group[0][1][3]
+        vars_decl = ["$serverRegion:String!"]
+        variables: dict[str, object] = {"serverRegion": region}
+        fields: list[str] = []
+        valid = []
+        for alias_index, (index, job) in enumerate(group):
+            name, fallback_slug, realm, _region, spec_id, _dungeon, _target = job
+            spec_name = SPEC_NAMES.get(spec_id, "")
+            if not fallback_slug or not spec_name:
+                results[index] = WCLResult(
+                    name, realm, job[5], spec_id, None, time.time(),
+                    target_key=job[6], error="Invalid spec/realm",
+                    source_season=MIDNIGHT_SEASON_1.key,
+                )
+                continue
+            slug = self._official_realm_slug(region, realm, fallback_slug)
+            nvar = f"n{alias_index}"
+            svar = f"s{alias_index}"
+            alias = f"c{alias_index}"
+            vars_decl += [f"${nvar}:String!", f"${svar}:String!"]
+            variables[nvar] = name
+            variables[svar] = slug
+            ranking_fields = "\n".join(
+                f"      s{season_index}: encounterRankings(encounterID:{encounter_id}, metric:playerscore, byBracket:true, compare:Parses)"
+                for season_index, (_dungeon_name, encounter_id) in enumerate(encounters)
+            )
+            fields.append(
+                f"    {alias}: character(name:${nvar}, serverSlug:${svar}, serverRegion:$serverRegion) {{\n"
+                "      name\n"
+                + ranking_fields
+                + "\n    }"
+            )
+            valid.append((alias, index, job, spec_name))
+
+        if not valid:
+            return
+        query = (
+            "query KLS1(" + ", ".join(vars_decl) + ") {\n"
+            "  rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn }\n"
+            "  characterData {\n" + "\n".join(fields) + "\n  }\n}"
+        )
+        try:
+            response = self._post_graphql({"query": query, "variables": variables})
+        except WCLError as exc:
+            for _alias, index, job, _spec_name in valid:
+                results[index] = WCLResult(
+                    job[0], job[2], job[5], job[4], None, time.time(),
+                    target_key=job[6], error=str(exc),
+                    source_season=MIDNIGHT_SEASON_1.key,
+                )
+            return
+
+        if response.status_code == 429:
+            self._blocked_until = time.monotonic() + self._retry_after_seconds(response)
+        if response.status_code != 200:
+            error = (
+                "WCL rate limit" if response.status_code == 429
+                else "WCL login invalid" if response.status_code in (401, 403)
+                else f"WCL HTTP {response.status_code}"
+            )
+            for _alias, index, job, _spec_name in valid:
+                results[index] = WCLResult(
+                    job[0], job[2], job[5], job[4], None, time.time(),
+                    target_key=job[6], error=error,
+                    source_season=MIDNIGHT_SEASON_1.key,
+                )
+            return
+
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        graphql_errors = data.get("errors") if isinstance(data, dict) else None
+        alias_errors: dict[str, list[str]] = {}
+        global_errors: list[str] = []
+        if isinstance(graphql_errors, list):
+            for item in graphql_errors:
+                if not isinstance(item, dict):
+                    continue
+                message = str(item.get("message") or "GraphQL error")[:180]
+                path = item.get("path")
+                alias = None
+                if isinstance(path, list):
+                    for part in path:
+                        if isinstance(part, str) and part.startswith("c") and part[1:].isdigit():
+                            alias = part
+                            break
+                if alias:
+                    alias_errors.setdefault(alias, []).append(message)
+                else:
+                    global_errors.append(message)
+
+        root = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(root, dict):
+            detail = global_errors[0] if global_errors else "incomplete response"
+            for _alias, index, job, _spec_name in valid:
+                results[index] = WCLResult(
+                    job[0], job[2], job[5], job[4], None, time.time(),
+                    target_key=job[6], error=f"WCL GraphQL error: {detail}",
+                    source_season=MIDNIGHT_SEASON_1.key,
+                )
+            return
+
+        spent = limit = reset = None
+        quota = self._apply_quota(root)
+        if quota is not None:
+            spent, limit, reset = quota
+        cdata = root.get("characterData")
+        if not isinstance(cdata, dict):
+            cdata = {}
+
+        for alias, index, job, spec_name in valid:
+            name, _slug, realm, _region, spec_id, dungeon, target = job
+            char = cdata.get(alias)
+            local_errors = alias_errors.get(alias, [])
+            if char is None:
+                if local_errors or global_errors:
+                    detail = (local_errors or global_errors)[0]
+                    result = WCLResult(
+                        name, realm, dungeon, spec_id, None, time.time(), target_key=target,
+                        error=f"WCL GraphQL error: {detail}",
+                        quota_spent=spent, quota_limit=limit, quota_reset=reset,
+                        source_season=MIDNIGHT_SEASON_1.key,
+                    )
+                else:
+                    result = WCLResult(
+                        name, realm, dungeon, spec_id, None, time.time(), target_key=target,
+                        not_found=True, quota_spent=spent, quota_limit=limit, quota_reset=reset,
+                        source_season=MIDNIGHT_SEASON_1.key,
+                    )
+                results[index] = result
+                continue
+            if not isinstance(char, dict):
+                results[index] = WCLResult(
+                    name, realm, dungeon, spec_id, None, time.time(), target_key=target,
+                    error="WCL character data invalid", source_season=MIDNIGHT_SEASON_1.key,
+                )
+                continue
+
+            values: list[float] = []
+            for season_index in range(len(encounters)):
+                ranking = char.get(f"s{season_index}")
+                ranks = ranking.get("ranks") if isinstance(ranking, dict) else []
+                for row in _rank_rows_for_dungeon(ranks, spec_name):
+                    values.append(float(row["rankPercent"]))
+
+            bracket = None
+            if values:
+                bracket = WCLBracket(
+                    key_level=0,
+                    best_percentile=max(values),
+                    median_percentile=float(statistics.median(values)),
+                    run_count=len(values),
+                    average_percentile=float(statistics.fmean(values)),
+                )
+            error = ""
+            if bracket is None and local_errors:
+                error = f"WCL GraphQL error: {local_errors[0]}"
+            elif bracket is None and global_errors:
+                error = f"WCL GraphQL error: {global_errors[0]}"
+            results[index] = WCLResult(
+                name, realm, dungeon, spec_id, bracket, time.time(), target_key=target,
+                error=error, quota_spent=spent, quota_limit=limit, quota_reset=reset,
+                source_season=MIDNIGHT_SEASON_1.key,
+            )
 
     def _post_graphql(self, body: dict[str, object]):
         if self._closed.is_set():
