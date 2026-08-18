@@ -20,7 +20,7 @@ from .filters import (
 )
 from .models import ApplicantView, EngineState
 from .scoring import wcl_metric_scores
-from .registries import use_season1_carryover
+from .registries import is_season1_carryover_source, use_season1_carryover
 
 FONT = "Segoe UI"
 RAIDER_IO_URL = "https://raider.io"
@@ -92,8 +92,8 @@ def _rio_rating_text(view: ApplicantView) -> str:
     live = view.rio if view.rio and not view.rio.error and not view.rio.not_found else None
     main_rio = max(0, view.applicant.rio_main_score)
     if live is not None:
-        current = max(0, live.role_score or live.score)
-        if use_season1_carryover():
+        current = max(0, live.role_score or live.score or view.applicant.rio_score)
+        if use_season1_carryover(region=view.region):
             previous = max(0, live.previous_role_score or live.previous_score)
             return f"{current} / {previous}" if previous else f"{current} / —"
         return str(current)
@@ -1453,7 +1453,15 @@ class OverlayWindow:
 
         if view.score and view.score.wcl_score is not None:
             average = view.score.wcl_score
-            source = "S1 " if view.wcl and view.wcl.source_season == "midnight-s1" else ""
+            source = (
+                "S1 "
+                if view.wcl
+                and view.snapshot_listing
+                and is_season1_carryover_source(
+                    view.snapshot_listing.dungeon_name, view.wcl.source_season
+                )
+                else ""
+            )
             wtext, wfg = f"{source}{int(round(average))}/100", pct_colour(average)
         elif view.wcl_status == "loading":
             wtext, wfg = "loading…", MUTED
@@ -1596,7 +1604,16 @@ class OverlayWindow:
                 context_bracket = next(iter(view.wcl.metric_brackets.values()), None)
             context_text = ""
             if context_bracket:
-                scope = "full dungeon" if context_bracket.key_level <= 0 else f"+{context_bracket.key_level}"
+                if (
+                    view.wcl
+                    and view.snapshot_listing
+                    and is_season1_carryover_source(
+                        view.snapshot_listing.dungeon_name, view.wcl.source_season
+                    )
+                ):
+                    scope = "Season 1 aggregate"
+                else:
+                    scope = "full dungeon" if context_bracket.key_level <= 0 else f"+{context_bracket.key_level}"
                 context_text = (
                     f"  |  {scope}  |  {context_bracket.run_count} "
                     f"parse{'s' if context_bracket.run_count != 1 else ''}"
@@ -1611,12 +1628,12 @@ class OverlayWindow:
         self.detail_line2.configure(text=line, fg=MUTED)
 
         source = "Raider.IO live" if view.rio and not view.rio.error and not view.rio.not_found else "Raider.IO local addon data"
-        rio_rating = score.rio_effective or 0
+        rio_rating = _rio_rating_text(view)
         run_score_text = ""
         if view.rio and not view.rio.error and not view.rio.not_found and view.rio.best_dungeon_run_score > 0:
             run_key = view.rio.best_dungeon_score_key or score.same_dungeon_key
             run_score_text = f"  |  Best run: +{run_key}"
-        meta_text = f"RIO half {score.rio_score:.0f}/100  |  rating {rio_rating or '—'}  |  dungeon +{score.same_dungeon_key or 0}{run_score_text}"
+        meta_text = f"RIO half {score.rio_score:.0f}/100  |  rating {rio_rating}  |  dungeon +{score.same_dungeon_key or 0}{run_score_text}"
         self.detail_line3.configure(
             text=f"{source}: {meta_text}",
             fg=MUTED,

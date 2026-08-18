@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 
 @dataclass(frozen=True)
@@ -65,24 +65,61 @@ WCL_ZONE_BY_SEASON = {
     MIDNIGHT_SEASON_2.key: 56,
 }
 
-# Midnight Season 2 Mythic+ starts in the week of 19 August 2026. For the
-# first weekly lockout, fresh-season Raider.IO/WCL evidence is intentionally
-# treated as incomplete. On the second weekly reset we switch to Season 2 only.
-MIDNIGHT_SEASON_2_MYTHIC_PLUS_START = date(2026, 8, 19)
-MIDNIGHT_SEASON_2_WEEK2_START = date(2026, 8, 26)
+# Blizzard publishes Season 2 by regional weekly window. Keep EU aliases for
+# backwards-compatible tests/imports, but make runtime decisions from the actual
+# WoW region carried by the Bridge. This intentionally models the published day,
+# not an invented maintenance clock time.
+MIDNIGHT_SEASON_2_START_BY_REGION = {
+    "US": date(2026, 8, 18),
+    "EU": date(2026, 8, 19),
+    "KR": date(2026, 8, 20),
+    "TW": date(2026, 8, 20),
+    "CN": date(2026, 8, 20),
+}
+MIDNIGHT_SEASON_2_MYTHIC_PLUS_START = MIDNIGHT_SEASON_2_START_BY_REGION["EU"]
+MIDNIGHT_SEASON_2_WEEK2_START = MIDNIGHT_SEASON_2_MYTHIC_PLUS_START + timedelta(days=7)
+# Blizzard's published EU weekly reset is permanently 05:00 CET, i.e. 04:00 UTC
+# year-round (06:00 local CEST during August). This exact boundary avoids the
+# calendar-day implementation switching Dutch/EU users roughly six hours early.
+MIDNIGHT_SEASON_2_EU_START_UTC = datetime(2026, 8, 19, 4, 0, tzinfo=timezone.utc)
+MIDNIGHT_SEASON_2_EU_WEEK2_UTC = MIDNIGHT_SEASON_2_EU_START_UTC + timedelta(days=7)
 
 
-def season2_transition_phase(on_date: date | None = None) -> str:
+def season2_start_for_region(region: str = "EU") -> date:
+    key = str(region or "EU").strip().upper()
+    return MIDNIGHT_SEASON_2_START_BY_REGION.get(key, MIDNIGHT_SEASON_2_MYTHIC_PLUS_START)
+
+
+def season2_transition_phase_at(moment: datetime, *, region: str = "EU") -> str:
+    """Resolve the transition at an exact instant where a verified reset exists."""
+    if moment.tzinfo is None:
+        raise ValueError("season transition moment must be timezone-aware")
+    key = str(region or "EU").strip().upper()
+    if key == "EU":
+        current_utc = moment.astimezone(timezone.utc)
+        if current_utc < MIDNIGHT_SEASON_2_EU_START_UTC:
+            return "preseason"
+        if current_utc < MIDNIGHT_SEASON_2_EU_WEEK2_UTC:
+            return "week1"
+        return "current"
+    return season2_transition_phase(moment.date(), region=key)
+
+
+def season2_transition_phase(on_date: date | None = None, *, region: str = "EU") -> str:
+    key = str(region or "EU").strip().upper()
+    if on_date is None and key == "EU":
+        return season2_transition_phase_at(datetime.now(timezone.utc), region=key)
     current = on_date or date.today()
-    if current < MIDNIGHT_SEASON_2_MYTHIC_PLUS_START:
+    start = season2_start_for_region(key)
+    if current < start:
         return "preseason"
-    if current < MIDNIGHT_SEASON_2_WEEK2_START:
+    if current < start + timedelta(days=7):
         return "week1"
     return "current"
 
 
-def use_season1_carryover(on_date: date | None = None) -> bool:
-    return season2_transition_phase(on_date) == "week1"
+def use_season1_carryover(on_date: date | None = None, *, region: str = "EU") -> bool:
+    return season2_transition_phase(on_date, region=region) == "week1"
 
 
 # Names can differ slightly between Blizzard's LFG short names and external
@@ -118,20 +155,30 @@ def wcl_zone_for_dungeon(name: str) -> int | None:
     return WCL_ZONE_BY_SEASON.get(season.key) if season else None
 
 
-def use_previous_wcl_for_dungeon(name: str, on_date: date | None = None) -> bool:
+def use_previous_wcl_for_dungeon(name: str, on_date: date | None = None, *, region: str = "EU") -> bool:
     season = season_for_dungeon(name)
     return bool(
         season
         and season.key == MIDNIGHT_SEASON_2.key
-        and use_season1_carryover(on_date)
+        and use_season1_carryover(on_date, region=region)
     )
 
 
-def wcl_source_season_for_dungeon(name: str, on_date: date | None = None) -> str:
+def wcl_source_season_for_dungeon(name: str, on_date: date | None = None, *, region: str = "EU") -> str:
     """Return the WCL season whose evidence should score this listing today."""
     season = season_for_dungeon(name)
     if not season:
         return ""
-    if use_previous_wcl_for_dungeon(name, on_date):
+    if use_previous_wcl_for_dungeon(name, on_date, region=region):
         return MIDNIGHT_SEASON_1.key
     return season.key
+
+
+def is_season1_carryover_source(name: str, source_season: str) -> bool:
+    """True only when Season 1 evidence stands in for a Season 2 listing."""
+    season = season_for_dungeon(name)
+    return bool(
+        season
+        and season.key == MIDNIGHT_SEASON_2.key
+        and source_season == MIDNIGHT_SEASON_1.key
+    )
