@@ -362,6 +362,68 @@ def test_same_calendar_date_can_be_different_transition_phase_by_region():
     assert season2_transition_phase(day, region="CN") == "preseason"
 
 
+
+def test_long_running_engine_invalidates_online_evidence_on_phase_change_without_snapshot():
+    states = []
+    app_engine = engine.ApplicantEngine(None, states.append, rio=None)
+    try:
+        listing = Listing(key_level=10, dungeon_name="Altar of Fangs")
+        applicant = _applicant()
+        old_wcl = WCLResult(
+            "Applicant", "Realm", "Altar of Fangs", 71,
+            WCLBracket(0, 80, 80, 1, 80), time.time(), target_key=10,
+            source_season="midnight-s1",
+        )
+        old_rio = rio.RIOResult(
+            "Applicant", "realm", "EU", "Altar of Fangs", 10,
+            score=0, previous_score=2784, fetched_at=time.time(),
+        )
+        view = ApplicantView(
+            applicant=applicant,
+            snapshot_listing=listing,
+            region="EU",
+            wcl=old_wcl,
+            wcl_status="ready",
+            rio=old_rio,
+            rio_status="ready",
+            revision=4,
+        )
+        view.score = engine.calculate_score(applicant, listing, old_wcl, old_rio)
+        with app_engine._lock:
+            app_engine._views = {applicant.identity: view}
+            app_engine._listing = listing
+            app_engine._revision = 4
+            app_engine._season_phase_by_region["EU"] = "week1"
+
+        with patch.object(engine, "season2_transition_phase", return_value="current"):
+            assert app_engine.refresh_season_transition() is True
+
+        assert view.revision == 5
+        assert view.wcl is None
+        assert view.rio is None
+        assert view.wcl_status == "disabled"
+        assert view.rio_status == "disabled"
+        assert states and states[-1].revision == 5
+    finally:
+        app_engine.stop()
+
+
+def test_long_running_engine_phase_check_is_noop_when_phase_is_unchanged():
+    app_engine = engine.ApplicantEngine(None, lambda _state: None, rio=None)
+    try:
+        listing = Listing(key_level=10, dungeon_name="Altar of Fangs")
+        applicant = _applicant()
+        view = ApplicantView(applicant=applicant, snapshot_listing=listing, region="EU", revision=3)
+        with app_engine._lock:
+            app_engine._views = {applicant.identity: view}
+            app_engine._season_phase_by_region["EU"] = "week1"
+        with patch.object(engine, "season2_transition_phase", return_value="week1"):
+            assert app_engine.refresh_season_transition() is False
+        assert view.revision == 3
+    finally:
+        app_engine.stop()
+
+
 def test_real_season1_listing_is_not_mistaken_for_s2_carryover():
     from keystonelens_companion.registries import use_previous_wcl_for_dungeon
 

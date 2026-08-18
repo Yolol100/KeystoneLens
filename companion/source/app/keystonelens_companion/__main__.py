@@ -57,6 +57,7 @@ class App:
         self._tooltip_notice_generation = 0
         self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path)
         self._preferences_save_job: str | None = None
+        self._next_season_transition_check = 0.0
         self.engine = ApplicantEngine(None, lambda state: self.q.put(("state", state)), rio=self.rio)
         self.ui = OverlayWindow(
             self.root,
@@ -213,6 +214,10 @@ class App:
 
     def _poll(self) -> None:
         try:
+            now = time.monotonic()
+            if now >= self._next_season_transition_check:
+                self._next_season_transition_check = now + 30.0
+                self.engine.refresh_season_transition()
             while True:
                 kind, data = self.q.get_nowait()
                 if kind == "state":
