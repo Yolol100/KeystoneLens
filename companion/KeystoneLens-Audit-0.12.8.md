@@ -12,6 +12,14 @@ This report supersedes the 0.12.7 audit for the 0.12.8 artifacts. The 0.12.7 rep
 - The Bridge accepts only schema v2 and requires the current active Group Finder activity/key plus the applicant specialization to match before showing cached KeystoneLens lines.
 - Generated v2 data uses `_G.KeystoneLensTooltipCacheV2` and clears `_G.KeystoneLensTooltipCache`. This closes the downgrade path where an older name-only Bridge could otherwise consume a new v2 entry.
 - Invalid, incomplete or unreadable listing/spec context remains fail-closed.
+- Raider.IO runtime HTTP identity follows the canonical Companion version instead of carrying a stale hard-coded release number.
+
+## Midnight Season 2 review
+
+- The configured Season 2 dungeon registry matches Blizzard's published eight-dungeon rotation: Altar of Fangs, Murder Row, Den of Nalorakk, The Blinding Vale, Voidscar Arena, Kings' Rest, Ruby Life Pools and Temple of Sethraliss.
+- The existing Group Finder tooltip contract remains context-bound and does not depend on Blizzard's visual Premade Group Finder layout changes.
+- Raider.IO's published +2 through +30 on-time base-score table still matches the constants used by KeystoneLens.
+- Warcraft Logs zone 56 exposes the complete Season 2 dungeon set but is still labelled PTR before the European Mythic+ unlock. The code therefore keeps zone 56 while treating first-live parse verification as an external acceptance gate.
 
 ## Release-integrity changes
 
@@ -28,7 +36,8 @@ The release-validation workflow derives the Linux test installation from the exa
 
 ## Remaining external gates
 
-- A live WoW Retail client is required for final Group Finder tooltip, screenshot transport and co-load acceptance.
+- A live WoW Retail client after the Season 2 Mythic+ unlock is required for final Group Finder tooltip, screenshot transport and co-load acceptance.
+- Warcraft Logs zone 56 must be rechecked against live Season 2 parses after the reset; pre-season PTR evidence is not treated as a full production acceptance result.
 - A native clean Windows machine is required for final installer/repair/uninstall, taskbar, DPI and SmartScreen acceptance.
 - Authenticode signing requires the actual publisher certificate and timestamping service. Until signed, the Windows executable remains a release-trust blocker for a public production claim.
 - GitHub branch protection/rulesets are repository settings and are not established by source code. Required checks should be enforced on `main` in repository settings.
