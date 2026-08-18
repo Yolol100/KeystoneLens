@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 from . import __version__
-from .registries import canonical_dungeon_name, use_season1_carryover
+from .registries import canonical_dungeon_name, season2_transition_phase, use_season1_carryover
 
 PROFILE_URL = "https://raider.io/api/v1/characters/profile"
 PROFILE_TTL_SECONDS = 15 * 60
@@ -68,11 +68,11 @@ class RIOClient:
         self._lock = threading.Lock()
         self._rate_lock = threading.Lock()
         self._last_request_at = 0.0
-        self._profiles: dict[tuple[str, str, str, str, int, str], RIOResult] = {}
+        self._profiles: dict[tuple[str, str, str, str, int, str, str], RIOResult] = {}
         # The Raider.IO profile response is character-wide. Dungeon, target key
         # and queued role only affect our local interpretation, so keep the raw
         # response once and derive multiple contexts without repeating HTTP.
-        self._raw_profiles: dict[tuple[str, str, str], tuple[float, dict[str, Any] | None, bool]] = {}
+        self._raw_profiles: dict[tuple[str, str, str, str], tuple[float, dict[str, Any] | None, bool]] = {}
         self._blocked_until = 0.0
 
     def close(self) -> None:
@@ -81,9 +81,10 @@ class RIOClient:
         self._http.close()
 
     @staticmethod
-    def _profile_key(region: str, realm: str, name: str, dungeon: str, target: int, role: str) -> tuple[str, str, str, str, int, str]:
+    def _profile_key(region: str, realm: str, name: str, dungeon: str, target: int, role: str) -> tuple[str, str, str, str, int, str, str]:
         dungeon = canonical_dungeon_name(dungeon)
-        return (region.casefold(), realm.casefold(), name.casefold(), dungeon.casefold(), int(target or 0), role.casefold())
+        phase = season2_transition_phase(region=region)
+        return (region.casefold(), realm.casefold(), name.casefold(), dungeon.casefold(), int(target or 0), role.casefold(), phase)
 
     @staticmethod
     def _fresh_at(fetched_at: float, ttl: int, now: float) -> bool:
@@ -157,7 +158,8 @@ class RIOClient:
             return RIOResult(name, realm, region, dungeon, target_key, fetched_at=time.time(), error="Raider.IO client closed")
         role = role.casefold().strip()
         key = self._profile_key(region, realm, name, dungeon, target_key, role)
-        raw_key = (region.casefold(), realm.casefold(), name.casefold())
+        phase = season2_transition_phase(region=region)
+        raw_key = (region.casefold(), realm.casefold(), name.casefold(), phase)
         with self._lock:
             self._prune_cache_locked(time.time())
             cached = self._profiles.get(key)
@@ -234,7 +236,7 @@ class RIOClient:
             # During the first Season 2 lockout, keep the new score and previous
             # score side by side. Previous-season enrichment is optional: a bad
             # or unavailable carry-over request must never invalidate fresh data.
-            if use_season1_carryover():
+            if use_season1_carryover(region=region):
                 previous_params: dict[str, object] = {
                     "region": region.lower(),
                     "realm": realm,

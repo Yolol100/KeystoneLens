@@ -68,7 +68,7 @@ def effective_rio_rating(a: Applicant, rio: RIOResult | None = None) -> int:
         return rio.role_score
     if _usable_rio(rio) and rio and rio.score > 0:
         return rio.score
-    if _usable_rio(rio) and rio and use_season1_carryover():
+    if _usable_rio(rio) and rio and use_season1_carryover(region=rio.region):
         if rio.previous_role_score > 0:
             return rio.previous_role_score
         if rio.previous_score > 0:

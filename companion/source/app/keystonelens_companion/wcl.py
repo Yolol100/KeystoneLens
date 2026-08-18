@@ -28,7 +28,7 @@ MAX_REALM_CATALOG_FILE_BYTES = 8 * 1024 * 1024
 REALM_CATALOG_TTL_SECONDS = 30 * 24 * 60 * 60
 REALM_CATALOG_RETRY_SECONDS = 10 * 60
 REALM_CATALOG_VERSION = 1
-WCL_CONTEXT_VERSION = "midnight-season-aware-v12:role-aware-ranking-average:parses2w"
+WCL_CONTEXT_VERSION = "midnight-season-aware-v13:source-season-bound:role-aware-ranking-average:parses2w"
 WCL_ENCOUNTER_CATALOG_TTL_SECONDS = 24 * 60 * 60
 WCL_ENCOUNTER_CATALOG_RETRY_SECONDS = 10 * 60
 
@@ -228,6 +228,7 @@ class WCLCache:
                         not_found=bool(row.get("not_found")),
                         error=str(row.get("error") or ""),
                         metric_brackets=metric_brackets,
+                        source_season=str(row.get("source_season") or ""),
                     )
         if should_save:
             self._save()
