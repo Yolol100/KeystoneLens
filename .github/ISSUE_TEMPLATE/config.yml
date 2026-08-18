@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Yolol100/KeystoneLens/blob/main/SECURITY.md
+    about: Use the private/reporting process in SECURITY.md instead of disclosing a security-sensitive finding in a public issue.
+  - name: Release checklist
+    url: https://github.com/Yolol100/KeystoneLens/blob/main/companion/source/docs/UITGAVE-CHECKLIST.md
+    about: Check signing, WoW, Windows and release acceptance gates before filing a release-readiness question.
