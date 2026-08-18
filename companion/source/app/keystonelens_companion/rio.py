@@ -81,9 +81,10 @@ class RIOClient:
         self._http.close()
 
     @staticmethod
-    def _profile_key(region: str, realm: str, name: str, dungeon: str, target: int, role: str) -> tuple[str, str, str, str, int, str, str]:
+    def _profile_key(
+        region: str, realm: str, name: str, dungeon: str, target: int, role: str, phase: str
+    ) -> tuple[str, str, str, str, int, str, str]:
         dungeon = canonical_dungeon_name(dungeon)
-        phase = season2_transition_phase(region=region)
         return (region.casefold(), realm.casefold(), name.casefold(), dungeon.casefold(), int(target or 0), role.casefold(), phase)
 
     @staticmethod
@@ -157,8 +158,8 @@ class RIOClient:
         if self._closed.is_set():
             return RIOResult(name, realm, region, dungeon, target_key, fetched_at=time.time(), error="Raider.IO client closed")
         role = role.casefold().strip()
-        key = self._profile_key(region, realm, name, dungeon, target_key, role)
         phase = season2_transition_phase(region=region)
+        key = self._profile_key(region, realm, name, dungeon, target_key, role, phase)
         raw_key = (region.casefold(), realm.casefold(), name.casefold(), phase)
         with self._lock:
             self._prune_cache_locked(time.time())

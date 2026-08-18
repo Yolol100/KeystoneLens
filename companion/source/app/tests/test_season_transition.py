@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -275,7 +276,7 @@ def test_raiderio_phase_change_invalidates_raw_profile_cache():
     phase = {"value": "preseason"}
     client = rio.RIOClient()
     try:
-        with patch.object(rio, "season2_transition_phase", side_effect=lambda **_kw: phase["value"]), \
+        with patch.object(rio, "season2_transition_phase", side_effect=lambda **_kw: phase["value"]) as phase_lookup, \
              patch.object(rio, "use_season1_carryover", side_effect=lambda **_kw: phase["value"] == "week1"), \
              patch.object(client, "_get", side_effect=[current, current, previous]) as get:
             first = client.fetch_character("Applicant", "realm", "EU", "Altar of Fangs", 10, "dps")
@@ -284,6 +285,7 @@ def test_raiderio_phase_change_invalidates_raw_profile_cache():
             second = client.fetch_character("Applicant", "realm", "EU", "Altar of Fangs", 10, "dps")
         assert second.previous_score == 2784
         assert get.call_count == 3
+        assert phase_lookup.call_count == 2
     finally:
         client.close()
 
@@ -319,7 +321,7 @@ def test_wcl_cache_roundtrip_preserves_source_season(tmp_path):
     cache = WCLCache(tmp_path / "wcl.json")
     result = WCLResult(
         "Applicant", "Realm", "Altar of Fangs", 71,
-        WCLBracket(10, 55, 55, 1, 55), 1.0, target_key=10,
+        WCLBracket(10, 55, 55, 1, 55), time.time(), target_key=10,
         source_season="midnight-s2",
     )
     cache.put("EU", result)
