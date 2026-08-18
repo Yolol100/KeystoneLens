@@ -1,8 +1,8 @@
-# Problemen oplossen — 0.12.7
+# Problemen oplossen — 0.12.8
 
 ## Geen spelers
 
-- Controleer of Bridge en Companion allebei 0.12.7 zijn.
+- Controleer of Bridge en Companion allebei 0.12.8 zijn.
 - Controleer `_retail_\Screenshots` in Instellingen.
 - Open je eigen Mythic+ listing.
 - Gebruik `/kl status`.
@@ -11,7 +11,11 @@
 
 ## KL blijft op `…`
 
-RIO en/of WCL is nog aan het laden. 0.12.7 toont bewust geen tijdelijke halve eindscore.
+RIO en/of WCL is nog aan het laden. 0.12.8 toont bewust geen tijdelijke halve eindscore.
+
+## Oude KL-regels verdwijnen na listing/spec-wijziging
+
+Dit is bedoeld fail-closed gedrag. Tooltipcache v2 is gebonden aan de exacte activity, target key en applicant spec. Na een gewijzigde scoringcontext moet de Companion nieuwe data schrijven en moet WoW die data via `/reload` opnieuw laden voordat de nieuwe KL-regels geldig zijn.
 
 ## WCL `geen data`
 
@@ -26,7 +30,7 @@ Voor dit character/spec is geen bruikbare openbare ranking-evidence gevonden in 
 
 ## WCL blijft lang op `loading...`
 
-0.12.7 gebruikt geen seriële recente-reportscan meer voor de KL-score. Applicants uit dezelfde regio/dungeon worden in batches van maximaal 10 bevraagd. Bij een koude cache kan de openbare API nog steeds tijd kosten, maar één trage applicant hoort de overige succesvolle batchresultaten niet te blokkeren.
+0.12.8 gebruikt geen seriële recente-reportscan voor de KL-score. Applicants uit dezelfde regio/dungeon worden in batches van maximaal 10 bevraagd. Bij een koude cache kan de openbare API nog steeds tijd kosten, maar één trage applicant hoort de overige succesvolle batchresultaten niet te blokkeren.
 
 ## Niet alle applicants zichtbaar
 
