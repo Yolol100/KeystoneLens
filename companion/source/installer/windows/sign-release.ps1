@@ -29,7 +29,9 @@ if (-not (Test-Path -LiteralPath $Launcher -PathType Leaf) -or -not (Test-Path -
 }
 
 function Invoke-Sign([string]$Path) {
-    $args = @('sign', '/fd', 'SHA256', '/tr', $TimestampUrl, '/td', 'SHA256')
+    # Keep the digest/timestamp pairs compact because release-contract tests
+    # verify these exact security-critical arguments in addition to PS parsing.
+    $args = @('sign','/fd','SHA256','/tr',$TimestampUrl,'/td','SHA256')
     if ($CertThumbprint) {
         $args += @('/sha1', $CertThumbprint)
     } else {
@@ -64,7 +66,7 @@ foreach ($file in @($Launcher, $Uninstaller, $WoWWatcher, $Setup)) {
     if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $file" }
     $signature = Get-AuthenticodeSignature -LiteralPath $file
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "Authenticode status is not Valid for $file: $($signature.Status)"
+        throw "Authenticode status is not Valid for ${file}: $($signature.Status)"
     }
 }
 

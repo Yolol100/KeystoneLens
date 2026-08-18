@@ -68,9 +68,14 @@ def log_path() -> Path:
     return local_app_dir() / "keystonelens.log"
 
 
+def _is_windows() -> bool:
+    """Single platform seam so Windows-only secret behavior is testable in isolation."""
+    return os.name == "nt"
+
+
 def _dpapi_transform(data: bytes, *, protect: bool) -> bytes:
     """Protect/unprotect bytes with the current Windows user's DPAPI key."""
-    if os.name != "nt":
+    if not _is_windows():
         raise OSError("Windows DPAPI is only available on Windows")
 
     class DataBlob(ctypes.Structure):
@@ -151,7 +156,6 @@ def _clean_ttl(value: Any) -> int:
     return ttl
 
 
-
 def _clean_bool(value: Any, default: bool = True) -> bool:
     if isinstance(value, bool):
         return value
@@ -205,6 +209,36 @@ def _normalize_config(raw: dict[str, Any]) -> Config:
     )
 
 
+def _atomic_write_config(path: Path, data: dict[str, Any]) -> None:
+    """Replace config.json only after a complete temporary JSON file exists."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _config_payload(cfg: Config) -> dict[str, Any]:
+    # Normalize even programmatic callers so malformed state never becomes the
+    # persistent source of truth.
+    safe = _normalize_config(asdict(cfg))
+    data = asdict(safe)
+    secret = data.pop("client_secret", "")
+    if secret and _is_windows():
+        data[_PROTECTED_SECRET_KEY] = _protect_secret(secret)
+    # KeystoneLens is a Windows product. On unsupported source/demo hosts the
+    # in-memory secret is never written back in plaintext.
+    return data
+
+
+def _scrub_persisted_secret(path: Path, cfg: Config) -> None:
+    """Remove every persisted secret field without needing DPAPI to succeed."""
+    safe = _normalize_config(asdict(cfg))
+    safe.client_secret = ""
+    data = asdict(safe)
+    data.pop("client_secret", None)
+    data.pop(_PROTECTED_SECRET_KEY, None)
+    _atomic_write_config(path, data)
+
+
 def load_config() -> Config:
     path = config_path()
     if not path.exists():
@@ -216,41 +250,64 @@ def load_config() -> Config:
         if not isinstance(raw, dict):
             raise ValueError("config root is not an object")
 
-        # 0.8.3+ stores the WCL secret with Windows DPAPI. Plaintext
-        # `client_secret` remains a one-way legacy migration input only.
+        # DPAPI is authoritative whenever present. Plaintext `client_secret` is
+        # accepted only as a one-way legacy migration input and is removed from
+        # disk during this load.
+        had_plaintext_secret_field = "client_secret" in raw
         protected = raw.get(_PROTECTED_SECRET_KEY)
-        if isinstance(protected, str) and protected:
+        protected_present = isinstance(protected, str) and bool(protected)
+        windows = _is_windows()
+        if protected_present:
             try:
                 raw["client_secret"] = _unprotect_secret(protected)
             except (OSError, ValueError, UnicodeDecodeError, binascii.Error):
+                # Never fall back to a stray legacy plaintext field when a DPAPI
+                # value exists but cannot be authenticated/decrypted.
                 raw["client_secret"] = ""
+        elif not windows:
+            # Unsupported source/demo hosts must not activate a credential that
+            # was found in an old plaintext config file.
+            raw["client_secret"] = ""
 
         cfg = _normalize_config(raw)
         if not cfg.screenshots_path:
             cfg.screenshots_path = autodetect_screenshots_path()
+
+        if had_plaintext_secret_field:
+            try:
+                if windows and cfg.client_secret:
+                    # Successful legacy migration: protect for the current user
+                    # and atomically replace the old plaintext file.
+                    _atomic_write_config(path, _config_payload(cfg))
+                elif windows and protected_present:
+                    # DPAPI remains authoritative; rewrite to remove a stale
+                    # duplicate plaintext field (or remove both if DPAPI failed).
+                    if cfg.client_secret:
+                        _atomic_write_config(path, _config_payload(cfg))
+                    else:
+                        _scrub_persisted_secret(path, cfg)
+                else:
+                    # No safe DPAPI destination is available. Fail closed by
+                    # removing the legacy secret from disk and memory.
+                    cfg.client_secret = ""
+                    _scrub_persisted_secret(path, cfg)
+            except (OSError, ValueError):
+                # If protection itself fails, do not keep using a secret that is
+                # still persisted in plaintext. Best-effort scrub it without
+                # encryption; a read-only/locked file may still require the user
+                # to re-save settings after permissions are corrected.
+                cfg.client_secret = ""
+                try:
+                    _scrub_persisted_secret(path, cfg)
+                except OSError:
+                    pass
         return cfg
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return Config(screenshots_path=autodetect_screenshots_path())
 
 
 def save_config(cfg: Config) -> None:
-    path = config_path()
-    tmp = path.with_suffix(".tmp")
-    # Normalize even programmatic callers so malformed state never becomes the
-    # persistent source of truth.
-    safe = _normalize_config(asdict(cfg))
-    data = asdict(safe)
-    secret = data.pop("client_secret", "")
-    if secret:
-        if os.name == "nt":
-            data[_PROTECTED_SECRET_KEY] = _protect_secret(secret)
-        else:
-            # KeystoneLens is a Windows product. Never persist a WCL credential
-            # in plaintext on unsupported source/demo hosts. The secret remains
-            # available only in this process for the current run.
-            pass
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    _atomic_write_config(config_path(), _config_payload(cfg))
 
 
 def autodetect_screenshots_path() -> str:
