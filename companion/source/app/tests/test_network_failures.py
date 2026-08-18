@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from keystonelens_companion import rio, wcl
+from keystonelens_companion import __version__, rio, wcl
 
 
 class Response:
@@ -20,6 +20,15 @@ class Response:
         if self._json_error is not None:
             raise self._json_error
         return self._payload
+
+
+def test_rio_user_agent_follows_canonical_companion_version():
+    client = rio.RIOClient()
+    try:
+        assert client._http.headers["User-Agent"].startswith(f"KeystoneLens/{__version__} ")
+        assert "Raider.IO attribution" in client._http.headers["User-Agent"]
+    finally:
+        client.close()
 
 
 @pytest.mark.parametrize("status", [400, 401, 403, 409, 429, 500, 502, 503])
@@ -97,7 +106,6 @@ def test_wcl_graphql_failure_matrix_does_not_persist_error(tmp_path, status, exp
         client.close()
 
 
-
 def test_rio_404_is_explicit_not_found_and_cacheable():
     client = rio.RIOClient()
     try:
@@ -124,6 +132,7 @@ def test_wcl_graphql_invalid_200_json_is_explicit_and_not_cached(tmp_path):
         assert cache.count() == 0
     finally:
         client.close()
+
 
 def test_network_sources_do_not_disable_tls_verification():
     root = Path(__file__).resolve().parents[2] / "app" / "keystonelens_companion"
