@@ -28,6 +28,11 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,6 +153,12 @@ jobs:
           cp "companion/source/release/KeystoneLens-Source-${VERSION}.zip" "/tmp/keystonelens-publish/KeystoneLens-Source-${VERSION}.zip"
           cp "companion/source/release/KeystoneLensBridge-${VERSION}-CurseForge.zip" "/tmp/keystonelens-publish/KeystoneLensBridge-${VERSION}-CurseForge.zip"
           cp "companion/source/docs/AUDIT-REPORT-${VERSION}.md" "/tmp/keystonelens-publish/KeystoneLens-Audit-${VERSION}.md"
+
+      - name: Attest verified publish payload
+        if: github.ref == 'refs/heads/main'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: /tmp/keystonelens-publish/*
 
       - name: Upload verified publish payload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
