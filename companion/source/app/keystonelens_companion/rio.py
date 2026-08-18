@@ -8,6 +8,7 @@ from typing import Any
 
 import requests
 
+from . import __version__
 from .registries import canonical_dungeon_name
 
 PROFILE_URL = "https://raider.io/api/v1/characters/profile"
@@ -48,7 +49,6 @@ class RIOResult:
     error: str = ""
 
 
-
 class RIOClient:
     """Small, rate-conscious Raider.IO runtime enrichment client.
 
@@ -60,7 +60,7 @@ class RIOClient:
     def __init__(self) -> None:
         self._http = requests.Session()
         self._closed = threading.Event()
-        self._http.headers.update({"User-Agent": "KeystoneLens/0.12.7 (Raider.IO attribution: https://raider.io)"})
+        self._http.headers.update({"User-Agent": f"KeystoneLens/{__version__} (Raider.IO attribution: https://raider.io)"})
         self._lock = threading.Lock()
         self._rate_lock = threading.Lock()
         self._last_request_at = 0.0
