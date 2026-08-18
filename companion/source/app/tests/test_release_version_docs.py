@@ -12,6 +12,8 @@ def test_current_release_documents_follow_canonical_version():
 
     current_docs = [
         ROOT / "README-NL.md",
+        ROOT / "docs/CHANGELOG.md",
+        ROOT / "docs/AUDIT-REPORT.md",
         ROOT / "docs/CURSEFORGE-UPLOAD.md",
         ROOT / "docs/CURSEFORGE-BESCHRIJVING.md",
         ROOT / "docs/SIGNING-REQUIRED.md",
@@ -35,3 +37,11 @@ def test_version_specific_release_evidence_exists():
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     assert (ROOT / f"docs/RELEASE-NOTES-{version}.md").is_file()
     assert (ROOT / f"docs/AUDIT-REPORT-{version}.md").is_file()
+    assert (ROOT / "docs/HISTORY.md").is_file()
+
+
+def test_current_changelog_separates_release_summary_from_history():
+    changelog = (ROOT / "docs/CHANGELOG.md").read_text(encoding="utf-8")
+    history = (ROOT / "docs/HISTORY.md").read_text(encoding="utf-8")
+    assert "Full pre-0.12.8 history is retained in `HISTORY.md`" in changelog
+    assert "## 0.12.7" in history
