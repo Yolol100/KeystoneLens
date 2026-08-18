@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/codeql.yml'
+      - 'addon/KeystoneLensBridge/**'
       - 'companion/source/app/**'
       - 'companion/source/installer/windows/**'
   pull_request:
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - '.github/workflows/codeql.yml'
+      - 'addon/KeystoneLensBridge/**'
       - 'companion/source/app/**'
       - 'companion/source/installer/windows/**'
   schedule:
@@ -64,6 +66,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf companion/source/addon
+          mkdir -p companion/source/addon
+          cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
           bash companion/source/installer/windows/build.sh >/dev/null
 
       - name: Analyze
