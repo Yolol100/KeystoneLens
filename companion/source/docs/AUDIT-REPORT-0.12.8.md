@@ -2,44 +2,55 @@
 
 ## Verdict
 
-**SOURCE/CI: PASS WITH EXTERNAL RUNTIME GATES**
+**SOURCE / BUILD / RELEASE PIPELINE: PASS WITH EXTERNAL LIVE + SIGNING IDENTITY GATES**
 
-This report supersedes the 0.12.7 audit for the 0.12.8 artifacts. The 0.12.7 report remains historical evidence for the original 0.12.7 build and must not be used to describe 0.12.8.
+This report supersedes the 0.12.7 audit for the 0.12.8 source and future tagged release artifacts. Historical audit files remain documentation only and are not release binaries.
 
-## Correctness changes verified by source contracts
+## Runtime correctness verified by source contracts
 
 - Tooltip data is schema v2 and includes `activityID`, `keyLevel` and `specID` for every published score.
-- The Bridge accepts only schema v2 and requires the current active Group Finder activity/key plus the applicant specialization to match before showing cached KeystoneLens lines.
-- Generated v2 data uses `_G.KeystoneLensTooltipCacheV2` and clears `_G.KeystoneLensTooltipCache`. This closes the downgrade path where an older name-only Bridge could otherwise consume a new v2 entry.
+- The Bridge requires the current active Group Finder activity/key plus applicant specialization to match before showing cached KeystoneLens lines.
+- Generated v2 data uses `_G.KeystoneLensTooltipCacheV2` and clears `_G.KeystoneLensTooltipCache`, so rollback to a name-only Bridge fails closed.
 - Invalid, incomplete or unreadable listing/spec context remains fail-closed.
-- Raider.IO runtime HTTP identity follows the canonical Companion version instead of carrying a stale hard-coded release number.
+- Raider.IO runtime HTTP identity follows the canonical Companion version.
+- The Season 2 dungeon registry and score-source contracts remain covered by regression tests; first-live WCL/runtime observations are still external evidence.
 
-## Midnight Season 2 review
+## Repository/product hardening
 
-- The configured Season 2 dungeon registry matches Blizzard's published eight-dungeon rotation: Altar of Fangs, Murder Row, Den of Nalorakk, The Blinding Vale, Voidscar Arena, Kings' Rest, Ruby Life Pools and Temple of Sethraliss.
-- The existing Group Finder tooltip contract remains context-bound and does not depend on Blizzard's visual Premade Group Finder layout changes.
-- Raider.IO's published +2 through +30 on-time base-score table still matches the constants used by KeystoneLens.
-- Warcraft Logs zone 56 exposes the complete Season 2 dungeon set but is still labelled PTR before the European Mythic+ unlock. The code therefore keeps zone 56 while treating first-live parse verification as an external acceptance gate.
+- `main` contains source, documentation and release engineering only. Generated `.zip`, `.exe`, root checksum manifests, build/release directories and local caches are explicitly excluded and audited.
+- Repository text/binary handling is normalized through `.gitattributes` and `.editorconfig`; local output and signing material are ignored by `.gitignore`.
+- `LICENSE-SCOPE.md` states the actual licensing boundary instead of implying a blanket repository license.
+- GitHub Actions are required by the repository audit to use immutable full commit SHA pins. Dependabot maintains GitHub Actions dependency updates.
+- The release workflow no longer commits generated assets back to `main`, removing the previous unsigned artifact-bot commit from the forward release design.
 
-## Release-integrity changes
+## Release integrity
 
 - Canonical release identity is `0.12.8` in `companion/source/VERSION`.
-- Companion and Bridge version metadata are checked against the canonical version before Windows or release packaging proceeds.
-- Windows PE resources and the embedded Setup script receive the canonical version during the deterministic build.
-- The source ZIP is normalized to the same installer version and is reopened and checked after packaging.
-- Release notes and this audit report are selected by the canonical version, preventing an older audit from being silently republished as current evidence.
-- Release output is built twice and must have identical SHA-256 manifests before it can be staged for publication.
+- Companion, Bridge, Companion Data and Windows metadata are checked against the canonical version.
+- `sign-release.ps1` reads the canonical version and rejects ambiguous/missing signing identities or non-HTTPS timestamp URLs.
+- Release output is built twice and must have identical SHA-256 manifests before staging.
+- A public tag must be exactly `v<VERSION>`.
+- Tagged core assets receive GitHub artifact attestations; final release assets receive SHA-256 checksums and final provenance attestations.
+- GitHub Release creation is draft-only so live acceptance cannot be bypassed by a successful build.
+
+## Windows trust gate
+
+- Public Windows tag releases fail closed unless the real publisher PFX/password secrets are available to the ephemeral Windows runner.
+- Payload binaries are signed before embedding; Setup is rebuilt and signed afterwards.
+- Signing uses SHA-256 Authenticode with RFC 3161/SHA-256 timestamping and verifies the four binaries through SignTool and PowerShell Authenticode status.
+- The signing identity itself is an external secret and is not present in source control.
 
 ## CI/runtime dependency parity
 
-The release-validation workflow derives the Linux test installation from the exact package versions in the Windows runtime lock (hash lines removed only because the lock contains Windows-wheel hashes). This keeps functional tests on the same dependency versions that the shipped Windows runtime uses. The separate dependency-audit workflow continues to audit the production requirements and exact runtime package set.
+The release-validation workflow derives Linux functional test dependencies from the exact Windows production runtime lock. Native Windows CI installs the same exact hashed runtime package set. The scheduled dependency-audit workflow continues to audit both declared application requirements and the exact runtime package set.
 
 ## Remaining external gates
 
-- A live WoW Retail client after the Season 2 Mythic+ unlock is required for final Group Finder tooltip, screenshot transport and co-load acceptance.
-- Warcraft Logs zone 56 must be rechecked against live Season 2 parses after the reset; pre-season PTR evidence is not treated as a full production acceptance result.
-- A native clean Windows machine is required for final installer/repair/uninstall, taskbar, DPI and SmartScreen acceptance.
-- Authenticode signing requires the actual publisher certificate and timestamping service. Until signed, the Windows executable remains a release-trust blocker for a public production claim.
-- GitHub branch protection/rulesets are repository settings and are not established by source code. Required checks should be enforced on `main` in repository settings.
+- Configure the real publisher signing identity securely before creating a public Windows tag release.
+- Complete clean-Windows install/repair/uninstall, taskbar/DPI and SmartScreen/AV acceptance on the signed build.
+- Complete live WoW Retail Group Finder tooltip, screenshot transport and Bridge/Data co-load acceptance after the Season 2 unlock.
+- Recheck Warcraft Logs against live Season 2 parses.
+- Publish the draft GitHub Release and CurseForge file only after those gates pass.
+- Enable branch protection/rulesets with required checks on `main` in repository settings when administration tooling is available.
 
-No new user-facing features or settings are introduced by 0.12.8.
+No new user-facing features or settings are introduced by this hardening round.

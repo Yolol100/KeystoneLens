@@ -1,20 +1,31 @@
 # KeystoneLens 0.12.8
 
-0.12.8 is a correctness, Season 2 readiness and release-integrity update. It does not add user-facing settings or scoring features.
+0.12.8 is a correctness, Season 2 readiness and production-release hardening update. It does not add user-facing settings or scoring features.
 
-## Fixes
+## Runtime fixes
 
 - Tooltip cache schema v2 remains bound to the exact Group Finder activity, target key level and applicant specialization.
-- Schema v2 now uses `KeystoneLensTooltipCacheV2` and explicitly clears the legacy `KeystoneLensTooltipCache` global. An older Bridge therefore fails closed instead of interpreting new v2 data with the former name-only cache logic after a rollback.
-- Raider.IO runtime requests derive their User-Agent version from the canonical Companion `__version__`, removing the stale `0.12.7` network identity from the 0.12.8 build.
-- The Midnight Season 2 registry matches Blizzard's eight-dungeon rotation. Warcraft Logs zone 56 is retained for Season 2; because Warcraft Logs still labels it PTR before the European Mythic+ unlock, the first live Season 2 data remains an acceptance gate rather than guessed production evidence.
-- Release identity is no longer reused after source changes. Companion, Bridge, Windows PE metadata, setup UI build, ZIP names and generated data-addon metadata are validated against the canonical `companion/source/VERSION` value.
-- The distributed source archive receives the canonical installer version before verification, so a source rebuild and the shipped binary agree on product version.
-- CI release validation uses the same exact production dependency versions as the Windows runtime lock when running the Python regression suite.
+- Schema v2 uses `KeystoneLensTooltipCacheV2` and explicitly clears the legacy `KeystoneLensTooltipCache` global. An older Bridge therefore fails closed instead of interpreting new v2 data with former name-only cache logic after a rollback.
+- Raider.IO runtime requests derive their User-Agent version from the canonical Companion `__version__`.
+- The Midnight Season 2 registry matches Blizzard's eight-dungeon rotation. Warcraft Logs zone 56 is retained for Season 2; first-live parse verification remains an acceptance gate.
+
+## Release/product hardening
+
+- `companion/source/VERSION` is the canonical Companion, Bridge, data-addon, Windows metadata and artifact version source.
+- `sign-release.ps1` now reads that canonical version instead of carrying a stale hard-coded release number.
+- Generated ZIPs, checksums and Windows executables are no longer stored on `main`; tagged builds publish them as release assets.
+- Repository hygiene now has explicit `.gitignore`, `.gitattributes`, `.editorconfig`, release-output/secret checks and GitHub Actions dependency maintenance.
+- A repository audit rejects generated binaries, local build/cache output, common secret/key patterns, version drift, mutable/unpinned Actions and workflows that try to commit release artifacts back to `main`.
+- CI release validation uses the same exact production dependency versions as the Windows runtime lock, compiles Lua, runs the full Python suite and proves deterministic packaging with two builds.
+- Public tag releases require `v<VERSION>` parity and fail closed unless the real publisher signing secrets are configured.
+- Windows public-release builds sign and RFC 3161 timestamp the three payload executables first, rebuild Setup with that signed payload, sign Setup and verify every signature.
+- Final tagged assets receive SHA-256 checksums and GitHub artifact attestations; the workflow creates a draft GitHub Release rather than publishing before live acceptance.
+- `LICENSE-SCOPE.md` documents the existing Bridge/third-party license boundary without inventing a repository-wide Companion/installer license.
 
 ## Release gates still external
 
-- Native clean-Windows install/repair/uninstall and SmartScreen behavior remain runtime acceptance gates.
-- Authenticode signing requires the real publisher certificate; unsigned public Windows binaries are not a production-trust GO.
-- Live World of Warcraft Midnight Season 2 Group Finder/screenshot/tooltip validation remains a live-client acceptance gate after Mythic+ opens in Europe.
-- Warcraft Logs zone 56 must be rechecked once live Season 2 parses replace the pre-season PTR state.
+- Native clean-Windows install/repair/uninstall and SmartScreen/AV behavior remain runtime acceptance gates.
+- A real publisher signing identity must be securely configured before the tag workflow can produce a public Windows release.
+- Live World of Warcraft Midnight Season 2 Group Finder/screenshot/tooltip validation remains a live-client acceptance gate.
+- Warcraft Logs Season 2 must be rechecked against first-live parses before full production acceptance.
+- The draft GitHub Release and CurseForge file should be published as Release only after those live gates pass; until then use preview/Beta distribution where appropriate.

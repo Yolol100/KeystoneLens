@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible KeystoneLens Bridge or Companion problem.
+title: "[Bug] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: KeystoneLens version
+      placeholder: 0.12.8
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Bridge addon
+        - Companion
+        - Windows installer / repair / uninstall
+        - Companion Data addon
+        - Raider.IO / Warcraft Logs enrichment
+        - Release package
+    validations:
+      required: true
+  - type: input
+    id: wow
+    attributes:
+      label: WoW Retail version/build
+      placeholder: 12.1.x / build number
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2 / build number
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or errors
+      description: Remove character/account identifiers, credentials, API tokens and other secrets before pasting.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submit checks
+      options:
+        - label: I reproduced this with the current release or current main build.
+          required: true
+        - label: I did not include passwords, private keys, signing certificates or API secrets.
+          required: true

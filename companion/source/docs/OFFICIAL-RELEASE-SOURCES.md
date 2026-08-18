@@ -1,35 +1,50 @@
 # Official release references for KeystoneLens 0.12.8
 
-The dependency/platform reference set below was checked on 2026-08-12 for the 0.12.7 baseline. KeystoneLens 0.12.8 changes tooltip-cache correctness and release integrity only; it does not change the listed runtime dependency versions, WoW interface targets or Season 2 registry. Live-runtime acceptance remains a separate release gate.
-
-## CurseForge
-- WoW addon file processor requirements: https://support.curseforge.com/support/solutions/articles/9000210425-curseforge-file-processor-rejections-and-how-to-solve-them
-- Project/file moderation states: https://support.curseforge.com/support/solutions/articles/9000197905-project-statuses-101
-- Project submission/file requirements: https://support.curseforge.com/support/solutions/articles/9000197241-creating-and-submitting-a-project
-- Multi-TOC guidance: https://support.curseforge.com/support/solutions/articles/9000209856-multi-toc-for-world-of-warcraft-addons
+This file records the external platform and distribution contracts used by the release pipeline. Runtime/live acceptance remains a separate gate.
 
 ## Blizzard / WoW
-- World of Warcraft UI Add-On Development Policy: https://us.forums.blizzard.com/en/wow/t/ui-add-on-development-policy/24534/1
-- Current content-update notes / live Curse of Ula'tek context: https://worldofwarcraft.blizzard.com/en-us/content-update-notes
-- Blizzard Season 2 announcement / dungeon pool: https://worldofwarcraft.blizzard.com/en-us/news/24280285
-- The 12.1 content update is live; Midnight Season 2 itself starts Aug 18 (NA) / Aug 19 (EU).
-- The packaged Retail TOC keeps `120007, 120100` as transition compatibility. Final publish verification should still confirm the actual client with `GetBuildInfo()`.
-- Supplemental API/TOC reference for 12.1.0 interface `120100`: https://warcraft.wiki.gg/wiki/Patch_12.1.0/API_changes (secondary reference; final runtime truth remains the installed client).
+
+- WoW UI Add-On Development Policy: https://eu.forums.blizzard.com/en/wow/t/wow-user-interface-add-on-development-policy/1642
+  - Addons must be free, visible/unobfuscated, must not advertise or solicit donations in-game, and must avoid negative game/realm/player impact.
+- Current Blizzard content-update notes: https://worldofwarcraft.blizzard.com/en-us/content-update-notes
+- The packaged Retail TOC keeps `120007, 120100` as transition compatibility. Final publication still verifies the actual installed client and the intended Retail build.
+
+## CurseForge
+
+- WoW file processor requirements: https://support.curseforge.com/support/solutions/articles/9000210425-curseforge-file-processor-rejections-and-how-to-solve-them
+- File release types / additional fields: https://support.curseforge.com/support/solutions/articles/9000197242
+- Project submission/file requirements: https://support.curseforge.com/support/solutions/articles/9000197241-creating-and-submitting-a-project
+- Multi-TOC guidance: https://support.curseforge.com/support/solutions/articles/9000209856-multi-toc-for-world-of-warcraft-addons
+- PackageMeta format: https://support.curseforge.com/support/solutions/articles/9000197952-preparing-the-packagemeta-file
+
+KeystoneLens uses a custom deterministic packager rather than relying on automatic CurseForge packaging. The generated Bridge archive is nevertheless checked against the same distribution contract: one `KeystoneLensBridge/` root, matching `KeystoneLensBridge.toc`, no executable payload and retained license notices.
+
+## GitHub / supply chain
+
+- Secure use of GitHub Actions: https://docs.github.com/en/actions/reference/security/secure-use
+- Artifact attestations: https://docs.github.com/en/actions/concepts/security/artifact-attestations
+- Supply-chain build hardening: https://docs.github.com/en/code-security/tutorials/implement-supply-chain-best-practices/securing-builds
+
+Actions used by the repository are pinned to immutable full commit SHAs. Public release assets are produced from an exact `v<VERSION>` tag, checksummed, attested and published as GitHub Release assets rather than committed back to `main`.
 
 ## Windows / Microsoft
+
 - Windows application best practices: https://learn.microsoft.com/en-us/windows/apps/get-started/best-practices
-- Known Folder guidance / SHGetKnownFolderPath: https://learn.microsoft.com/en-us/windows/win32/shell/known-folders
-- GetSystemDirectoryW: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemdirectoryw
 - Code signing options: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options
 - Authenticode RFC 3161/SHA-256 timestamping: https://learn.microsoft.com/en-us/windows/win32/seccrypto/time-stamping-authenticode-signatures
 - Setup UX guidance: https://learn.microsoft.com/en-us/windows/win32/uxguide/exper-setup
 
+Public Windows release requires a real publisher identity. The current release scripts use SHA-256 Authenticode, RFC 3161/SHA-256 timestamping and post-sign verification. Signing secrets must stay outside source control.
+
 ## Python runtime
-- Python 3.13 Windows installer options, including custom `TargetDir`, feature toggles and the distinction between the full installer and embeddable distribution: https://docs.python.org/3.13/using/windows.html
-- Python 3.13.15 release / Windows installer: https://www.python.org/downloads/release/python-31315/
-- KeystoneLens uses the full installer in a dedicated per-user target because the UI requires Tcl/Tk and Setup requires pip; the embeddable distribution is deliberately not claimed or used.
+
+- Python 3.13 Windows guidance: https://docs.python.org/3.13/using/windows.html
+- Python 3.13.15 release: https://www.python.org/downloads/release/python-31315/
+
+KeystoneLens uses a dedicated per-user CPython runtime because the Companion UI requires Tcl/Tk and Setup requires pip; the embeddable distribution is deliberately not claimed or used.
 
 ## Python package provenance
+
 - Requests 2.34.2: https://pypi.org/project/requests/2.34.2/
 - Pillow 12.3.0: https://pypi.org/project/pillow/12.3.0/
 - zxing-cpp 3.1.1: https://pypi.org/project/zxing-cpp/3.1.1/
@@ -38,8 +53,4 @@ The dependency/platform reference set below was checked on 2026-08-12 for the 0.
 - urllib3 2.7.0: https://pypi.org/project/urllib3/2.7.0/
 - certifi 2026.7.22: https://pypi.org/project/certifi/2026.7.22/
 
-## Season 2 compatibility verification — 2026-08-12
-- Blizzard's Curse of Ula'tek announcement lists the Season 2 Mythic+ pool as Altar of Fangs, Murder Row, Den of Nalorakk, The Blinding Vale, Voidscar Arena, King’s Rest, Ruby Life Pools and Temple of Sethraliss; KeystoneLens canonicalizes Blizzard's `King’s Rest` label to the external-service spelling `Kings' Rest`.
-- Blizzard schedules Midnight Season 2 for Aug 18 (NA) / Aug 19 (EU); this build is transition-ready before that weekly reset.
-- WoW 12.1.0 uses TOC interface `120100`; WoW supports comma-delimited Interface values, so the release declares `120007, 120100` during the transition.
-- Warcraft Logs zone 56 currently exposes the same eight Season 2 dungeons but is still labeled PTR before the live reset; the Companion resolves Season 2 encounter IDs dynamically and requires one post-reset validation before claiming live WCL coverage.
+The exact Windows runtime lock remains the production dependency source; the weekly dependency-audit workflow scans both the declared application requirements and exact runtime package set.

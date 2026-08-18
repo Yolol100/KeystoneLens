@@ -1,16 +1,20 @@
 # CurseForge upload — KeystoneLens Bridge 0.12.8
 
-Upload this file only:
+Upload the generated Bridge artifact from the tagged release:
 
 `KeystoneLensBridge-0.12.8-CurseForge.zip`
 
-Do **not** upload the master `KeystoneLens-Release-0.12.8.zip` as the WoW addon file. The master release also contains a Windows executable and documentation, while the nested CurseForge archive is intentionally limited to the WoW addon tree.
+Do **not** upload the Companion source bundle or Windows installer as the WoW addon file.
+
+The release build verifies that the archive contains exactly one addon root, `KeystoneLensBridge/`, with a matching `KeystoneLensBridge/KeystoneLensBridge.toc`, and that no executable is present. Keep the root folder name unversioned; the file name may carry the version.
 
 Recommended file settings:
-- release type: Release after final live verification;
-- for this release, the TOC supports both 12.0.7 (`120007`) and 12.1.0 (`120100`) during the transition; tag only game versions you actually validate in the released client;
-- paste the English project copy from `CURSEFORGE-BESCHRIJVING.md`;
-- use the 0.12.8 correctness/release-integrity changelog entry;
-- retain the included license notices and credits.
 
-Actual CurseForge approval remains a moderator/platform decision and cannot be pre-certified locally.
+- use **Beta** while live WoW/Season 2 acceptance is still open;
+- change to **Release** only after the final live acceptance matrix passes;
+- select only Retail game versions actually validated on the released client;
+- retain the included MIT and third-party notices;
+- configure dependencies/optional dependencies consistently with the project metadata and TOC;
+- use the 0.12.8 release notes/project copy from `CURSEFORGE-BESCHRIJVING.md`.
+
+CurseForge approval remains a platform/moderation decision and cannot be pre-certified by local CI.

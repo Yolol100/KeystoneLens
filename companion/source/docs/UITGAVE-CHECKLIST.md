@@ -1,40 +1,64 @@
 # Uitgavechecklist 0.12.8
 
-- exact één Companion-spelerslijst met instelbare KL-score-range (0–100);
-- Score, Class en Role filters combineren deterministisch; gekoppelde Class/Role filters verdwijnen wanneer hun kolom verborgen is;
-- kolommen KL, Role, Player, Class, Spec, Raider.IO, WCL;
-- exacte 50/50-formule zonder meta/group/setup-score;
-- RIO-component current-dungeon-only;
-- WCL-average role-aware en current-dungeon-only;
-- WCL-hot-path gebruikt gebatchte rankingmetrics en geen blokkerende raw-report/eventscan;
-- queues met meer dan zes applicants worden volledig vervoerd; alleen definitieve kandidaten binnen de actieve filters worden gerenderd;
-- delist/re-queue wist de oude queue-generatie en negeert vertraagde oude frames/results;
-- `/kl stop|off`, `/kl on`, `/kl status`, `/kl sync`, `/kl help` functioneren;
-- stop verstuurt terminal clear en leegt queued enrichment;
-- auto-resume bij nieuwe listing en opnieuw openen applicantviewer;
-- Python compile en regressietests groen;
-- Bridge standalone en embedded bytegelijk;
-- geen secrets, config, cache, screenshots, `.venv`, `__pycache__` of testfiles in ZIP;
-- ZIP heeft exact één juiste top-level map;
-- `unzip -t` groen;
-- echte WoW/Windows/WCL runtime handmatig testen voor productie-GO.
+## Product/runtime
 
-## 0.12.8 correctness/release gates
-- [x] Tooltip cache is schema v2 and bound to exact activity, target key and applicant spec.
-- [x] Schema v2 clears the legacy name-only global and uses a separate v2 global so rollback fails closed.
-- [x] Canonical `VERSION` drives Companion, Bridge, Windows metadata and versioned package names.
-- [x] Release CI runs against the exact production runtime dependency versions.
-- [x] Release build runs twice and requires byte-identical deterministic outputs.
-- [x] Malformed/short APS1 transport is rejected without uncontrolled exceptions.
-- [x] Non-finite score/WCL cache evidence cannot increase a score.
-- [x] RIO/WCL caches enforce TTL/future-skew/size or evidence bounds.
-- [x] Setup/uninstall unsafe-path guards pass source contract tests.
-- [x] Dedicated per-user runtime is CPython 3.13.15 with the published python.org SHA-256.
-- [x] APS1 v12/v13 record alignment tests pass.
-- [x] Raider.IO/WCL parser contract tests pass.
-- [x] Installer/Repair/Uninstall concurrency and exact-process contracts pass.
-- [x] Source ZIP extracts and `pytest -q` passes from its root.
-- [x] Master SHA-256 manifest validates after extraction.
-- [x] Standalone Setup/CurseForge/source artifacts are byte-identical to the copies inside the master ZIP.
-- [ ] All public Windows executables are Authenticode-signed and RFC 3161 timestamped before public distribution.
-- [ ] Live WoW tooltip-context/rollback matrix passes on the released Retail client.
+- [x] Exact één Companion-spelerslijst met instelbare KL-score-range (0–100).
+- [x] Score, Class en Role filters combineren deterministisch.
+- [x] Kolommen KL, Role, Player, Class, Spec, Raider.IO en WCL.
+- [x] Exacte 50/50-formule zonder meta/group/setup-score.
+- [x] Raider.IO-component is current-dungeon-only.
+- [x] WCL-average is role-aware en current-dungeon-only.
+- [x] WCL-hot-path gebruikt gebatchte rankingmetrics en geen blokkerende raw-report/eventscan.
+- [x] Delist/re-queue wist de oude queue-generatie en negeert vertraagde oude frames/results.
+- [x] `/kl stop|off`, `/kl on`, `/kl status`, `/kl sync`, `/kl help` functioneren volgens de source-contracttests.
+- [x] Stop verstuurt terminal clear en leegt queued enrichment.
+- [x] Tooltip cache is schema v2 en gebonden aan exacte activity, target key en applicant spec.
+- [x] Schema v2 wist de legacy name-only global en gebruikt een aparte v2 global zodat rollback fail-closed is.
+- [x] Malformed/short APS1 transport wordt gecontroleerd geweigerd.
+- [x] Non-finite score/WCL-cachebewijs kan een score niet verhogen.
+- [x] Raider.IO/WCL-caches begrenzen TTL/future-skew/omvang of bewijs.
+
+## Source/repository
+
+- [x] `companion/source/VERSION` is de enige canonical release identity voor Companion, Bridge, data-addon en Windows metadata.
+- [x] Repository-audit blokkeert tracked ZIP/EXE/build/release/cachebestanden en gangbare secrets/private-keybestanden.
+- [x] Generated release-assets worden niet in `main` opgeslagen.
+- [x] `.gitignore`, `.gitattributes` en `.editorconfig` leggen lokale output, binary/text en LF-regels vast.
+- [x] GitHub Actions gebruikt immutable full-SHA action pins.
+- [x] Dependabot onderhoudt GitHub Actions-dependencies.
+- [x] `LICENSE-SCOPE.md` maakt duidelijk welke component expliciet gelicenseerd is zonder automatisch een repository-wide licentie te verlenen.
+- [x] Python compile, volledige regressietests en native Windows-tests zijn releasegates.
+- [x] Exacte production runtime dependency-versies worden in CI gebruikt en wekelijks met `pip-audit` gecontroleerd.
+
+## Packaging/supply chain
+
+- [x] Bridge standalone en embedded source zijn bytegelijk in de buildflow.
+- [x] CurseForge ZIP heeft exact één top-level `KeystoneLensBridge/` map met `KeystoneLensBridge/KeystoneLensBridge.toc`.
+- [x] CurseForge ZIP bevat geen EXE en behoudt license/third-party notices.
+- [x] Bron-ZIP bevat geen secrets, config, cache, screenshots, `.venv`, `__pycache__`, build-output of Windows binaries.
+- [x] ZIP-integriteit wordt met `unzip -t` gecontroleerd.
+- [x] Releasebuild draait tweemaal en vereist byte-identieke deterministische outputs.
+- [x] Release-assets krijgen een `SHA256SUMS.txt` manifest.
+- [x] Getagde release-assets krijgen GitHub artifact attestations/provenance.
+- [x] Een tag moet exact `v<VERSION>` zijn; anders stopt de workflow.
+- [x] De releaseworkflow muteert geen bestaande GitHub Release en commit geen generated binaries terug naar `main`.
+
+## Windows public-release gate
+
+- [x] `sign-release.ps1` leest de canonical `VERSION`; geen hard-coded releaseversie.
+- [x] Signing gebruikt SHA-256 Authenticode en RFC 3161/SHA-256 timestamping.
+- [x] Payload binaries worden eerst getekend, daarna wordt Setup met de signed payload opnieuw gebouwd en zelf getekend.
+- [x] `signtool verify` én `Get-AuthenticodeSignature` moeten alle vier publieke binaries als geldig bevestigen.
+- [ ] Repository secrets `KEYSTONELENS_PFX_BASE64` en `KEYSTONELENS_PFX_PASSWORD` (of een later beheerde signing service) zijn veilig geconfigureerd voor de tag-release.
+- [ ] Alle publieke Windows executables zijn met de echte publisher identity getekend en getimestamped.
+- [ ] Clean-Windows install/repair/uninstall, taskbar/DPI en SmartScreen/AV acceptance zijn handmatig geslaagd.
+
+## WoW / Season 2 public-release gate
+
+- [ ] Live WoW tooltip-context/rollbackmatrix slaagt op de beoogde Retail client.
+- [ ] Screenshot transport en Bridge + Companion Data co-load zijn live geslaagd.
+- [ ] Eerste live Season 2 Warcraft Logs parse-matrix is gecontroleerd.
+- [ ] CurseForge game-versionselectie is beperkt tot daadwerkelijk live gevalideerde Retail-versies.
+- [ ] `0.12.8` wordt pas als **Release** gepubliceerd na live acceptance; gebruik **Beta** zolang die gate nog openstaat.
+
+Een groene CI-run bewijst source/buildcorrectheid. De drie handmatige omgevingsgates hierboven blijven vereist voordat KeystoneLens als volledig publiek production-ready wordt verklaard.

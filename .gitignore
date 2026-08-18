@@ -1,0 +1,33 @@
+# Generated release/build output
+/SHA256SUMS.txt
+*.zip
+*.exe
+/companion/source/release/
+/companion/source/addon/
+/companion/source/installer/windows/build/
+/companion/source/installer/windows/bootstrap/payload.zip
+
+# Python/local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs and local secrets
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx

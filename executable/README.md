@@ -1,9 +1,11 @@
 # KeystoneLens Windows Installer
 
-De actuele releaseversie staat in `companion/source/VERSION`. De publish-workflow controleert die versie tegen Companion-, Bridge- en Windows-buildmetadata voordat een installer wordt gepubliceerd.
+De actuele releaseversie staat in `companion/source/VERSION`. De releaseworkflow controleert die versie tegen Companion-, Bridge-, data-addon- en Windows-buildmetadata voordat release-assets worden aangemaakt.
 
-Bestandsnaam: `KeystoneLens-Setup-v<VERSION>-Windows-x64.exe`.
+Publieke bestandsnaam: `KeystoneLens-Setup-v<VERSION>-Windows-x64.exe`.
 
-Gebruik voor integriteitscontrole uitsluitend `SHA256SUMS.txt` in de repository-root. Dat manifest wordt door de geverifieerde publish-workflow opnieuw opgebouwd en met `sha256sum -c` gecontroleerd, zodat er geen tweede handmatig checksumgetal kan verouderen.
+De installer wordt niet in `main` bewaard. Een getagde release bouwt hem vanaf de exacte tag, ondertekent de geïnstalleerde launcher/uninstaller/WoW watcher vóór het opnieuw embedden van de payload, ondertekent daarna Setup zelf en controleert alle Authenticode-signatures. Ontbrekende signing-secrets blokkeren de tag-release in plaats van een unsigned EXE te publiceren.
 
-De installer bevat de branded setupflow, progress/details, desktopkeuze, Windows-autostart, optionele WoW Retail-startmodus, repair en uninstall. Authenticode signing blijft een aparte externe releasepoort totdat een echt publishercertificaat/private key beschikbaar is; distribueer de EXE niet als publiek vertrouwde Windows-release voordat die ondertekening en Windows-acceptatietest zijn afgerond.
+Gebruik voor integriteitscontrole de `SHA256SUMS.txt` die als GitHub Release-asset naast de uiteindelijke binaries wordt gepubliceerd. GitHub artifact attestations leggen daarnaast de build provenance van de release-assets vast.
+
+Een public release vereist na signing nog een clean-Windows installatie/repair/uninstall- en SmartScreen/AV-acceptatietest.
