@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - '.github/workflows/dependency-review.yml'
+      - '.github/workflows/dependency-audit-pr.yml'
       - 'companion/source/app/requirements.txt'
       - 'companion/source/installer/windows/requirements-runtime.txt'
       - 'companion/source/installer/windows/requirements-runtime.lock'
