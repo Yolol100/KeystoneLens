@@ -2,7 +2,7 @@
 ## Title: |cff5da8ffKeystoneLens Bridge|r
 ## Notes: Mythic+ Group Finder bridge for the KeystoneLens Companion, with cached WCL lines below Raider.IO tooltips.
 ## Author: KeystoneLens (transport fork based on ApplicantScout by Antrakt)
-## Version: 0.12.7
+## Version: 0.12.8
 ## IconTexture: Interface\AddOns\KeystoneLensBridge\Media\KeystoneLensIcon
 ## SavedVariables: KeystoneLensBridgeDB
 ## OptionalDeps: RaiderIO, KeystoneLensCompanionData, LibKeystone
