@@ -5,6 +5,7 @@ import math
 from .constants import HEALER_SPECS
 from .models import Applicant, Listing, ScoreBreakdown, WCLBracket, WCLResult
 from .rio import RIOResult
+from .registries import use_season1_carryover
 
 # KeystoneLens deliberately has only two scoring pillars.
 # Nothing else can add or subtract points from the displayed KL Score.
@@ -67,6 +68,11 @@ def effective_rio_rating(a: Applicant, rio: RIOResult | None = None) -> int:
         return rio.role_score
     if _usable_rio(rio) and rio and rio.score > 0:
         return rio.score
+    if _usable_rio(rio) and rio and use_season1_carryover():
+        if rio.previous_role_score > 0:
+            return rio.previous_role_score
+        if rio.previous_score > 0:
+            return rio.previous_score
     return a.rio_score if a.rio_score > 0 else max(0, a.rio_main_score)
 
 
@@ -273,7 +279,11 @@ def calculate_score(
     if wcl_score is not None:
         metrics = wcl_metric_scores(a, wcl)
         metric_names = ", ".join(name.upper() for name, _value in metrics)
-        context = " in this dungeon" if context_bracket else ""
+        context = (
+            " from Midnight Season 1 carry-over"
+            if wcl and wcl.source_season == "midnight-s1"
+            else " in this dungeon" if context_bracket else ""
+        )
         wcl_text = (
             f"WCL average {wcl_score:.0f}/100{context} "
             f"({run_count} parse{'s' if run_count != 1 else ''}; {metric_names or '1 metric'})"

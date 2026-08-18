@@ -20,6 +20,7 @@ from .filters import (
 )
 from .models import ApplicantView, EngineState
 from .scoring import wcl_metric_scores
+from .registries import use_season1_carryover
 
 FONT = "Segoe UI"
 RAIDER_IO_URL = "https://raider.io"
@@ -84,6 +85,22 @@ def pct_colour(pct: float | None) -> str:
     if pct >= 25:
         return GREEN
     return MUTED
+
+
+def _rio_rating_text(view: ApplicantView) -> str:
+    """Format the visible Raider.IO rating without changing KL score semantics."""
+    live = view.rio if view.rio and not view.rio.error and not view.rio.not_found else None
+    main_rio = max(0, view.applicant.rio_main_score)
+    if live is not None:
+        current = max(0, live.role_score or live.score)
+        if use_season1_carryover():
+            previous = max(0, live.previous_role_score or live.previous_score)
+            return f"{current} / {previous}" if previous else f"{current} / —"
+        return str(current)
+    local_rio = max(0, view.applicant.rio_score)
+    if local_rio:
+        return str(local_rio)
+    return f"M {main_rio}" if main_rio else "—"
 
 
 def validate_settings_values(client_id: str, client_secret: str, screenshots_path: str) -> str:
@@ -1430,17 +1447,14 @@ class OverlayWindow:
         spec_name = SPEC_NAMES.get(view.applicant.spec_id, "?")
         player_name = view.applicant.name.split("-", 1)[0]
 
-        live_rio = view.rio.score if view.rio and not view.rio.error and not view.rio.not_found else 0
-        role_rio = view.rio.role_score if view.rio and not view.rio.error and not view.rio.not_found else 0
-        current_rio = max(0, role_rio or live_rio or view.applicant.rio_score)
-        main_rio = max(0, view.applicant.rio_main_score)
-        rio_raw = str(current_rio) if current_rio else (f"M {main_rio}" if main_rio else "—")
+        rio_raw = _rio_rating_text(view)
         same = view.score.same_dungeon_key if view.score else view.applicant.rio_best_dungeon_key
         rio_text = rio_raw + (f" · dungeon +{same}" if same else "")
 
         if view.score and view.score.wcl_score is not None:
             average = view.score.wcl_score
-            wtext, wfg = f"{int(round(average))}/100", pct_colour(average)
+            source = "S1 " if view.wcl and view.wcl.source_season == "midnight-s1" else ""
+            wtext, wfg = f"{source}{int(round(average))}/100", pct_colour(average)
         elif view.wcl_status == "loading":
             wtext, wfg = "loading…", MUTED
         elif view.wcl_status == "error":
@@ -1557,10 +1571,11 @@ class OverlayWindow:
             fg=score_colour(score.score),
         )
 
+        wcl_source_label = "Warcraft Logs S1 carry-over" if view.wcl and view.wcl.source_season == "midnight-s1" else "Warcraft Logs"
         components = [
             f"Raider.IO {score.rio_score:.0f}/100 · 50%",
-            (f"Warcraft Logs {score.wcl_score:.0f}/100 · 50%"
-             if score.wcl_score is not None else "Warcraft Logs 0/100 · 50% · No public data"),
+            (f"{wcl_source_label} {score.wcl_score:.0f}/100 · 50%"
+             if score.wcl_score is not None else f"{wcl_source_label} 0/100 · 50% · No public data"),
         ]
         self.detail_line1.configure(text="  |  ".join(components), fg=TEXT)
 

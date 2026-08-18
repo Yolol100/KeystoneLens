@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 from . import __version__
-from .registries import canonical_dungeon_name
+from .registries import canonical_dungeon_name, use_season1_carryover
 
 PROFILE_URL = "https://raider.io/api/v1/characters/profile"
 PROFILE_TTL_SECONDS = 15 * 60
@@ -19,6 +19,7 @@ MAX_CACHE_FUTURE_SKEW_SECONDS = 5 * 60
 REQUEST_TIMEOUT_SECONDS = 8
 # Stay comfortably below Raider.IO's documented unauthenticated 200 req/min.
 MIN_REQUEST_INTERVAL_SECONDS = 0.36
+_PREVIOUS_SEASON_SCORES_KEY = "_keystonelens_previous_scores_by_season"
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,9 @@ class RIOResult:
     score: int = 0
     role_score: int = 0
     role_score_available: bool = False
+    previous_score: int = 0
+    previous_role_score: int = 0
+    previous_role_score_available: bool = False
     best_key: int = 0
     best_dungeon_key: int = 0
     best_dungeon_run_score: float = 0.0
@@ -226,6 +230,32 @@ class RIOClient:
                     name, realm, region, dungeon, target_key, fetched_at=now,
                     error="Raider.IO returned malformed character data",
                 )
+
+            # During the first Season 2 lockout, keep the new score and previous
+            # score side by side. Previous-season enrichment is optional: a bad
+            # or unavailable carry-over request must never invalidate fresh data.
+            if use_season1_carryover():
+                previous_params: dict[str, object] = {
+                    "region": region.lower(),
+                    "realm": realm,
+                    "name": name,
+                    "fields": "mythic_plus_scores_by_season:previous",
+                }
+                try:
+                    previous_response = self._get(PROFILE_URL, params=previous_params)
+                except RuntimeError:
+                    previous_response = None
+                if previous_response is not None and previous_response.status_code == 200:
+                    try:
+                        previous_payload = previous_response.json()
+                    except ValueError:
+                        previous_payload = None
+                    if isinstance(previous_payload, dict):
+                        rows = previous_payload.get("mythic_plus_scores_by_season")
+                        if isinstance(rows, list):
+                            payload = dict(payload)
+                            payload[_PREVIOUS_SEASON_SCORES_KEY] = rows
+
             with self._lock:
                 self._raw_profiles[raw_key] = (now, payload, False)
                 self._prune_cache_locked(now)
@@ -325,6 +355,13 @@ def _season_score(payload: dict[str, Any], role: str = "") -> tuple[int, int, bo
     return overall, role_score, role_score_available
 
 
+def _previous_season_score(payload: dict[str, Any], role: str = "") -> tuple[int, int, bool]:
+    rows = payload.get(_PREVIOUS_SEASON_SCORES_KEY)
+    if not isinstance(rows, list):
+        return 0, 0, False
+    return _season_score({"mythic_plus_scores_by_season": rows}, role)
+
+
 def _parse_profile(
     payload: dict[str, Any], name: str, realm: str, region: str,
     dungeon: str, target_key: int, now: float, role: str = "",
@@ -404,6 +441,7 @@ def _parse_profile(
             consider_same_dungeon(raw)
 
     overall_score, role_score, role_score_available = _season_score(payload, role)
+    previous_score, previous_role_score, previous_role_score_available = _previous_season_score(payload, role)
     return RIOResult(
         name=str(payload.get("name") or name),
         realm=realm,
@@ -413,6 +451,9 @@ def _parse_profile(
         score=overall_score,
         role_score=role_score,
         role_score_available=role_score_available,
+        previous_score=previous_score,
+        previous_role_score=previous_role_score,
+        previous_role_score_available=previous_role_score_available,
         best_key=best_key,
         best_dungeon_key=best_dungeon,
         best_dungeon_run_score=best_dungeon_run_score,
