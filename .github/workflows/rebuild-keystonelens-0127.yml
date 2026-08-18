@@ -10,6 +10,12 @@ on:
       - 'addon/KeystoneLensBridge/**'
       - 'companion/source/**'
       - 'executable/README.md'
+  pull_request:
+    paths:
+      - '.github/workflows/rebuild-keystonelens-0127.yml'
+      - 'addon/KeystoneLensBridge/**'
+      - 'companion/source/**'
+      - 'executable/README.md'
 
 permissions:
   contents: read

@@ -6,15 +6,57 @@ local addonName = ...
 local hooked = setmetatable({}, { __mode = "k" })
 local tooltipKey = nil
 local KL_ICON = "|TInterface\\AddOns\\KeystoneLensBridge\\Media\\KeystoneLensIcon:16:16:0:0|t"
+local REQUIRED_CACHE_VERSION = 2
+
+local function IsSecretValue(value)
+    local api = _G.issecretvalue
+    if api == nil then return false end
+    if type(api) ~= "function" then return true end
+    local ok, secret = pcall(api, value)
+    return not ok or secret == true
+end
 
 local function NormalizeFullName(fullName)
-    if type(fullName) ~= "string" or fullName == "" then return nil end
+    if IsSecretValue(fullName) or type(fullName) ~= "string" or fullName == "" then return nil end
     return fullName
 end
 
-local function GetFreshEntry(fullName)
+local function CurrentListingContext()
+    if not C_LFGList
+       or type(C_LFGList.GetActiveEntryInfo) ~= "function"
+       or type(C_LFGList.GetKeystoneForActivity) ~= "function" then
+        return nil
+    end
+
+    local ok, entry = pcall(C_LFGList.GetActiveEntryInfo)
+    if not ok or IsSecretValue(entry) or type(entry) ~= "table" then return nil end
+    local activityIDs = entry.activityIDs
+    if IsSecretValue(activityIDs) or type(activityIDs) ~= "table" then return nil end
+    local activityID = activityIDs[1]
+    if IsSecretValue(activityID) then return nil end
+    activityID = tonumber(activityID)
+    if not activityID or activityID <= 0 then return nil end
+
+    local keyOK, keyLevel = pcall(C_LFGList.GetKeystoneForActivity, activityID)
+    if not keyOK or IsSecretValue(keyLevel) then return nil end
+    keyLevel = tonumber(keyLevel)
+    if not keyLevel or keyLevel <= 0 then return nil end
+    return activityID, keyLevel
+end
+
+local function GetFreshEntry(fullName, specID)
     local cache = _G.KeystoneLensTooltipCache
-    if type(cache) ~= "table" or type(cache.entries) ~= "table" then return nil end
+    if type(cache) ~= "table"
+       or tonumber(cache.version) ~= REQUIRED_CACHE_VERSION
+       or type(cache.entries) ~= "table" then
+        return nil
+    end
+
+    specID = IsSecretValue(specID) and nil or tonumber(specID)
+    if not specID or specID <= 0 then return nil end
+    local activityID, keyLevel = CurrentListingContext()
+    if not activityID or not keyLevel then return nil end
+
     local key = NormalizeFullName(fullName)
     if not key then return nil end
     local entry = cache.entries[key]
@@ -27,6 +69,16 @@ local function GetFreshEntry(fullName)
         if type(entry) == "table" then key = legacyKey end
     end
     if type(entry) ~= "table" then return nil end
+
+    -- A score is only valid for the exact listing/spec context that produced
+    -- it. Fail closed when Data.lua came from another dungeon/key or from the
+    -- same character playing a different specialization.
+    if tonumber(entry.activityID) ~= activityID
+       or tonumber(entry.keyLevel) ~= keyLevel
+       or tonumber(entry.specID) ~= specID then
+        return nil
+    end
+
     local now = time and time() or 0
     local fetched = tonumber(entry.fetchedAt) or tonumber(cache.generatedAt) or 0
     local maxAge = tonumber(cache.maxAge) or 43200
@@ -42,8 +94,8 @@ local function ScoreColor(score)
     return 0.93, 0.34, 0.34
 end
 
-local function AppendCachedLines(fullName)
-    local entry, key = GetFreshEntry(fullName)
+local function AppendCachedLines(fullName, specID)
+    local entry, key = GetFreshEntry(fullName, specID)
     if not entry or tooltipKey == key then return end
     if not GameTooltip or not GameTooltip:IsShown() then return end
 
@@ -104,20 +156,29 @@ local function OnMemberEnter(self)
         applicantID = parent and parent.applicantID
     end
     if not memberIdx or not applicantID or not C_LFGList or not C_LFGList.GetApplicantMemberInfo then return end
-    local ok, fullName = pcall(C_LFGList.GetApplicantMemberInfo, applicantID, memberIdx)
-    if not ok or not fullName then return end
-    if type(issecretvalue) == "function" and issecretvalue(fullName) then return end
+
+    -- Current Retail returns specID as the sixteenth result. Keep the raw
+    -- applicant token for Blizzard's API and cleanse both identity and spec
+    -- before comparing them with generated cache data.
+    local results = { pcall(C_LFGList.GetApplicantMemberInfo, applicantID, memberIdx) }
+    if results[1] ~= true then return end
+    local fullName = results[2]
+    local specID = results[17]
+    if not NormalizeFullName(fullName) or IsSecretValue(specID) then return end
+    specID = tonumber(specID)
+    if not specID or specID <= 0 then return end
+
     -- Raider.IO also hooks this button. Defer one frame so its lines are present
     -- first, making KeystoneLens appear immediately underneath them.
     if C_Timer and C_Timer.After then
         local button = self
         C_Timer.After(0, function()
             if button and button.IsMouseOver and button:IsMouseOver() then
-                AppendCachedLines(fullName)
+                AppendCachedLines(fullName, specID)
             end
         end)
     else
-        AppendCachedLines(fullName)
+        AppendCachedLines(fullName, specID)
     end
 end
 
