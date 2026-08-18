@@ -1,4 +1,4 @@
-# KeystoneLens Companion 0.12.7
+# KeystoneLens Companion 0.12.8
 
 KeystoneLens spiegelt applicants uit je eigen WoW Retail Mythic+ Group Finder-listing naar één Windows-lijst en verrijkt alleen die spelers met Raider.IO en Warcraft Logs.
 
@@ -70,6 +70,6 @@ Het kruisje in de Windows Companion stopt de lokale screenshotwatcher, Raider.IO
 
 ### WoW addon
 
-Installeer alleen `KeystoneLensBridge-0.12.7-CurseForge.zip` via CurseForge/manual AddOns-installatie en doe `/reload`. De Companion-executable zit bewust niet in de CurseForge-addon-ZIP.
+Installeer alleen `KeystoneLensBridge-0.12.8-CurseForge.zip` via CurseForge/manual AddOns-installatie en doe `/reload`. De Companion-executable zit bewust niet in de CurseForge-addon-ZIP.
 
 KeystoneLens nodigt, weigert of kickt nooit automatisch spelers.
