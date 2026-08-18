@@ -1,4 +1,4 @@
-# Companion runtime dependencies — 0.12.7
+# Companion runtime dependencies — 0.12.8
 
 KeystoneLens Setup uses CPython **3.13.15 x64** in a dedicated per-user KeystoneLens runtime directory. The official python.org installer is downloaded over HTTPS and must match SHA-256:
 
