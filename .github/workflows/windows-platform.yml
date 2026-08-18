@@ -5,11 +5,13 @@ on:
   push:
     paths:
       - '.github/workflows/windows-platform.yml'
+      - 'addon/**'
       - 'companion/source/app/**'
       - 'companion/source/installer/windows/**'
   pull_request:
     paths:
       - '.github/workflows/windows-platform.yml'
+      - 'addon/**'
       - 'companion/source/app/**'
       - 'companion/source/installer/windows/**'
 
@@ -40,6 +42,17 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check 'pytest==9.0.2'
           python -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes --no-deps -r companion/source/installer/windows/requirements-runtime.lock
+
+      - name: Sync canonical Bridge test source
+        shell: pwsh
+        run: |
+          $target = 'companion/source/addon'
+          if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+          New-Item -ItemType Directory -Path $target | Out-Null
+          Copy-Item -LiteralPath 'addon/KeystoneLensBridge' -Destination $target -Recurse
+          if (-not (Test-Path -LiteralPath 'companion/source/addon/KeystoneLensBridge/KeystoneLensBridge.toc' -PathType Leaf)) {
+            throw 'Canonical Bridge test source sync failed.'
+          }
 
       - name: Run full companion suite on native Windows
         shell: pwsh
