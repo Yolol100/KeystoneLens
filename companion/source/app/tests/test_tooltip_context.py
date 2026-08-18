@@ -43,3 +43,11 @@ def test_tooltip_cache_rejects_rows_without_complete_context():
     ], now=1_700_000_000)
 
     assert '["Applicant-Realm"]' not in rendered
+
+
+def test_tooltip_cache_isolated_from_legacy_name_only_consumer():
+    rendered = render_tooltip_cache([_view()], now=1_700_000_000)
+
+    assert "_G.KeystoneLensTooltipCache = nil" in rendered
+    assert "_G.KeystoneLensTooltipCacheV2 = {" in rendered
+    assert "KeystoneLensTooltipCache = {" not in rendered
