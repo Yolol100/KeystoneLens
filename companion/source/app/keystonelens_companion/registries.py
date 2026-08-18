@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 
 @dataclass(frozen=True)
@@ -78,6 +78,11 @@ MIDNIGHT_SEASON_2_START_BY_REGION = {
 }
 MIDNIGHT_SEASON_2_MYTHIC_PLUS_START = MIDNIGHT_SEASON_2_START_BY_REGION["EU"]
 MIDNIGHT_SEASON_2_WEEK2_START = MIDNIGHT_SEASON_2_MYTHIC_PLUS_START + timedelta(days=7)
+# Blizzard's published EU weekly reset is permanently 05:00 CET, i.e. 04:00 UTC
+# year-round (06:00 local CEST during August). This exact boundary avoids the
+# calendar-day implementation switching Dutch/EU users roughly six hours early.
+MIDNIGHT_SEASON_2_EU_START_UTC = datetime(2026, 8, 19, 4, 0, tzinfo=timezone.utc)
+MIDNIGHT_SEASON_2_EU_WEEK2_UTC = MIDNIGHT_SEASON_2_EU_START_UTC + timedelta(days=7)
 
 
 def season2_start_for_region(region: str = "EU") -> date:
@@ -85,9 +90,27 @@ def season2_start_for_region(region: str = "EU") -> date:
     return MIDNIGHT_SEASON_2_START_BY_REGION.get(key, MIDNIGHT_SEASON_2_MYTHIC_PLUS_START)
 
 
+def season2_transition_phase_at(moment: datetime, *, region: str = "EU") -> str:
+    """Resolve the transition at an exact instant where a verified reset exists."""
+    if moment.tzinfo is None:
+        raise ValueError("season transition moment must be timezone-aware")
+    key = str(region or "EU").strip().upper()
+    if key == "EU":
+        current_utc = moment.astimezone(timezone.utc)
+        if current_utc < MIDNIGHT_SEASON_2_EU_START_UTC:
+            return "preseason"
+        if current_utc < MIDNIGHT_SEASON_2_EU_WEEK2_UTC:
+            return "week1"
+        return "current"
+    return season2_transition_phase(moment.date(), region=key)
+
+
 def season2_transition_phase(on_date: date | None = None, *, region: str = "EU") -> str:
+    key = str(region or "EU").strip().upper()
+    if on_date is None and key == "EU":
+        return season2_transition_phase_at(datetime.now(timezone.utc), region=key)
     current = on_date or date.today()
-    start = season2_start_for_region(region)
+    start = season2_start_for_region(key)
     if current < start:
         return "preseason"
     if current < start + timedelta(days=7):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timezone
 import time
 from unittest.mock import Mock, patch
 
@@ -13,6 +13,7 @@ from keystonelens_companion.registries import (
     MIDNIGHT_SEASON_1,
     is_season1_carryover_source,
     season2_transition_phase,
+    season2_transition_phase_at,
     use_season1_carryover,
     wcl_source_season_for_dungeon,
 )
@@ -241,6 +242,27 @@ def test_transition_uses_published_region_windows(region, pre, start, last_week1
     assert season2_transition_phase(start, region=region) == "week1"
     assert season2_transition_phase(last_week1, region=region) == "week1"
     assert season2_transition_phase(week2, region=region) == "current"
+
+
+
+def test_eu_transition_uses_exact_weekly_reset_instant_not_midnight():
+    assert season2_transition_phase_at(
+        datetime(2026, 8, 19, 3, 59, 59, tzinfo=timezone.utc), region="EU"
+    ) == "preseason"
+    assert season2_transition_phase_at(
+        datetime(2026, 8, 19, 4, 0, 0, tzinfo=timezone.utc), region="EU"
+    ) == "week1"
+    assert season2_transition_phase_at(
+        datetime(2026, 8, 26, 3, 59, 59, tzinfo=timezone.utc), region="EU"
+    ) == "week1"
+    assert season2_transition_phase_at(
+        datetime(2026, 8, 26, 4, 0, 0, tzinfo=timezone.utc), region="EU"
+    ) == "current"
+
+
+def test_transition_instant_must_be_timezone_aware():
+    with pytest.raises(ValueError, match="timezone-aware"):
+        season2_transition_phase_at(datetime(2026, 8, 19, 4, 0), region="EU")
 
 
 def test_unknown_region_falls_back_to_eu_window():
