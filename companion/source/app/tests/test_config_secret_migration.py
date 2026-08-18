@@ -19,6 +19,13 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
     def _load_disk(self, path: Path) -> dict[str, object]:
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def _common_patches(self, path: Path, *, windows: bool):
+        return (
+            patch.object(config, "config_path", return_value=path),
+            patch.object(config, "_is_windows", return_value=windows),
+            patch.object(config, "autodetect_screenshots_path", return_value=""),
+        )
+
     def test_plaintext_legacy_secret_is_migrated_to_dpapi_on_windows(self):
         with tempfile.TemporaryDirectory() as root:
             path = self._path(root)
@@ -27,9 +34,11 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 "client_secret": "legacy-secret",
                 "screenshots_path": r"C:\\WoW\\_retail_\\Screenshots",
             })
+            path_patch, windows_patch, autodetect_patch = self._common_patches(path, windows=True)
             with (
-                patch.object(config, "config_path", return_value=path),
-                patch.object(config.os, "name", "nt"),
+                path_patch,
+                windows_patch,
+                autodetect_patch,
                 patch.object(config, "_protect_secret", return_value="dpapi:v1:protected"),
             ):
                 cfg = config.load_config()
@@ -47,9 +56,11 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 "client_secret": "stale-plaintext",
                 "client_secret_protected": "dpapi:v1:old",
             })
+            path_patch, windows_patch, autodetect_patch = self._common_patches(path, windows=True)
             with (
-                patch.object(config, "config_path", return_value=path),
-                patch.object(config.os, "name", "nt"),
+                path_patch,
+                windows_patch,
+                autodetect_patch,
                 patch.object(config, "_unprotect_secret", return_value="trusted-secret"),
                 patch.object(config, "_protect_secret", return_value="dpapi:v1:refreshed"),
             ):
@@ -68,9 +79,11 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 "client_secret": "must-not-be-used",
                 "client_secret_protected": "dpapi:v1:broken",
             })
+            path_patch, windows_patch, autodetect_patch = self._common_patches(path, windows=True)
             with (
-                patch.object(config, "config_path", return_value=path),
-                patch.object(config.os, "name", "nt"),
+                path_patch,
+                windows_patch,
+                autodetect_patch,
                 patch.object(config, "_unprotect_secret", side_effect=ValueError("bad blob")),
             ):
                 cfg = config.load_config()
@@ -87,9 +100,11 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 "client_id": "client-id",
                 "client_secret": "legacy-secret",
             })
+            path_patch, windows_patch, autodetect_patch = self._common_patches(path, windows=True)
             with (
-                patch.object(config, "config_path", return_value=path),
-                patch.object(config.os, "name", "nt"),
+                path_patch,
+                windows_patch,
+                autodetect_patch,
                 patch.object(config, "_protect_secret", side_effect=OSError("DPAPI unavailable")),
             ):
                 cfg = config.load_config()
@@ -107,10 +122,8 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 "client_id": "client-id",
                 "client_secret": "legacy-secret",
             })
-            with (
-                patch.object(config, "config_path", return_value=path),
-                patch.object(config.os, "name", "posix"),
-            ):
+            path_patch, windows_patch, autodetect_patch = self._common_patches(path, windows=False)
+            with path_patch, windows_patch, autodetect_patch:
                 cfg = config.load_config()
 
             self.assertEqual(cfg.client_secret, "")
@@ -125,9 +138,11 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 "score_min": 84,
             }
             self._write(path, original)
+            path_patch, windows_patch, autodetect_patch = self._common_patches(path, windows=True)
             with (
-                patch.object(config, "config_path", return_value=path),
-                patch.object(config.os, "name", "nt"),
+                path_patch,
+                windows_patch,
+                autodetect_patch,
                 patch.object(config, "_unprotect_secret", return_value="secret") as unprotect,
                 patch.object(config, "_protect_secret") as protect,
             ):
@@ -145,7 +160,6 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 "client_id": "client-id",
                 "client_secret": "legacy-secret",
             })
-            real_atomic_write = config._atomic_write_config
             calls = 0
 
             def fail_writes(target: Path, data: dict[str, object]) -> None:
@@ -153,9 +167,11 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
                 calls += 1
                 raise OSError("read-only config")
 
+            path_patch, windows_patch, autodetect_patch = self._common_patches(path, windows=True)
             with (
-                patch.object(config, "config_path", return_value=path),
-                patch.object(config.os, "name", "nt"),
+                path_patch,
+                windows_patch,
+                autodetect_patch,
                 patch.object(config, "_protect_secret", return_value="dpapi:v1:new"),
                 patch.object(config, "_atomic_write_config", side_effect=fail_writes),
             ):
@@ -166,7 +182,6 @@ class ConfigSecretMigrationScenarios(unittest.TestCase):
             # A genuinely read-only file cannot be repaired in-process, but the
             # application must still refuse to use its plaintext credential.
             self.assertEqual(self._load_disk(path)["client_secret"], "legacy-secret")
-            self.assertIsNotNone(real_atomic_write)
 
 
 if __name__ == "__main__":
