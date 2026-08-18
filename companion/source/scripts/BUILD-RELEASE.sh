@@ -109,7 +109,11 @@ cp "$ADDON_ZIP" "$STAGE/CurseForge-Upload/$(basename "$ADDON_ZIP")"
 cp "$SETUP_OUT" "$STAGE/Companion/KeystoneLens-Setup.exe"
 cp "$SOURCE_ZIP" "$STAGE/Source/$(basename "$SOURCE_ZIP")"
 cp "$ROOT/README-NL.md" "$STAGE/Documentation/README-NL.md"
-cp "$ROOT/docs/CHANGELOG.md" "$STAGE/Documentation/CHANGELOG.md"
+# The release package's CHANGELOG must describe the current artifact. Keep the
+# historical repository changelog separately instead of presenting 0.12.7 as
+# the newest entry in a 0.12.8 package.
+cp "$RELEASE_NOTES" "$STAGE/Documentation/CHANGELOG.md"
+cp "$ROOT/docs/CHANGELOG.md" "$STAGE/Documentation/HISTORY.md"
 cp "$RELEASE_NOTES" "$STAGE/Documentation/RELEASE-NOTES.md"
 cp "$AUDIT_REPORT" "$STAGE/Documentation/AUDIT-REPORT.md"
 cp "$ROOT/docs/CURSEFORGE-UPLOAD.md" "$STAGE/Documentation/CURSEFORGE-UPLOAD.md"
@@ -168,6 +172,9 @@ grep -Fx "$VERSION" "$VERIFY_DIR/source/VERSION" >/dev/null
 grep -Fx "__version__ = \"$VERSION\"" "$VERIFY_DIR/source/app/keystonelens_companion/__init__.py" >/dev/null
 grep -Fx "## Version: $VERSION" "$VERIFY_DIR/source/addon/KeystoneLensBridge/KeystoneLensBridge.toc" >/dev/null
 grep -Fx "\$Version = '$VERSION'" "$VERIFY_DIR/source/installer/windows/bootstrap/installer.ps1" >/dev/null
+
+grep -F "# KeystoneLens $VERSION" "$VERIFY_DIR/master/Documentation/CHANGELOG.md" >/dev/null
+grep -F "# KeystoneLens $VERSION" "$VERIFY_DIR/master/Documentation/RELEASE-NOTES.md" >/dev/null
 
 python3 - "$ADDON_ZIP" <<'PY'
 import sys, zipfile
