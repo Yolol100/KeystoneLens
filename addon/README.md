@@ -1,7 +1,7 @@
 # KeystoneLens AddOn
 
-World of Warcraft AddOn voor KeystoneLens 0.12.7.
+De actuele releaseversie staat in `companion/source/VERSION` en wordt tijdens de releasebuild gecontroleerd tegen `addon/KeystoneLensBridge/KeystoneLensBridge.toc`.
 
-Distributiebestand: `KeystoneLensBridge-0.12.7-CurseForge.zip`
+Distributiebestand: `KeystoneLensBridge-<VERSION>-CurseForge.zip`.
 
 De AddOn-bron staat onder `addon/KeystoneLensBridge/`.

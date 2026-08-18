@@ -1,4 +1,4 @@
-# Uitgavechecklist 0.12.7
+# Uitgavechecklist 0.12.8
 
 - exact één Companion-spelerslijst met instelbare KL-score-range (0–100);
 - Score, Class en Role filters combineren deterministisch; gekoppelde Class/Role filters verdwijnen wanneer hun kolom verborgen is;
@@ -19,7 +19,12 @@
 - `unzip -t` groen;
 - echte WoW/Windows/WCL runtime handmatig testen voor productie-GO.
 
-## 0.12.7 hardening gates
+## 0.12.8 correctness/release gates
+- [x] Tooltip cache is schema v2 and bound to exact activity, target key and applicant spec.
+- [x] Schema v2 clears the legacy name-only global and uses a separate v2 global so rollback fails closed.
+- [x] Canonical `VERSION` drives Companion, Bridge, Windows metadata and versioned package names.
+- [x] Release CI runs against the exact production runtime dependency versions.
+- [x] Release build runs twice and requires byte-identical deterministic outputs.
 - [x] Malformed/short APS1 transport is rejected without uncontrolled exceptions.
 - [x] Non-finite score/WCL cache evidence cannot increase a score.
 - [x] RIO/WCL caches enforce TTL/future-skew/size or evidence bounds.
@@ -32,3 +37,4 @@
 - [x] Master SHA-256 manifest validates after extraction.
 - [x] Standalone Setup/CurseForge/source artifacts are byte-identical to the copies inside the master ZIP.
 - [ ] All public Windows executables are Authenticode-signed and RFC 3161 timestamped before public distribution.
+- [ ] Live WoW tooltip-context/rollback matrix passes on the released Retail client.

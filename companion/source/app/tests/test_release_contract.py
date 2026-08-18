@@ -34,7 +34,8 @@ def test_installer_exposes_real_repair_path_and_dedicated_runtime():
 
 
 def test_release_version_is_consistent_in_primary_metadata():
-    expected = "0.12.7"
+    expected = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert expected and expected.count(".") == 2
     paths = [
         ROOT / "app/keystonelens_companion/__init__.py",
         ROOT / "addon/KeystoneLensBridge/KeystoneLensBridge.toc",
@@ -188,7 +189,6 @@ def test_interrupted_atomic_swap_recovers_last_good_backup_before_new_install_wo
     assert staged_verified < first_backup_delete
 
 
-
 def test_installer_has_branded_decision_progress_and_completion_flow():
     installer = (ROOT / "installer/windows/bootstrap/installer.ps1").read_text(encoding="utf-8")
     assert 'xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"' in installer
@@ -250,9 +250,6 @@ def test_bootstrap_uses_result_marker_to_avoid_duplicate_normal_error_dialogs():
     assert 'os.Exit(2)' in bootstrap
 
 
-
-
-
 def test_closing_setup_before_install_is_reported_as_cancellation():
     installer = (ROOT / "installer/windows/bootstrap/installer.ps1").read_text(encoding="utf-8")
     assert "Closing the decision page is a user cancellation, not a successful setup." in installer
@@ -260,6 +257,7 @@ def test_closing_setup_before_install_is_reported_as_cancellation():
     canceled = installer.index("$script:InstallCanceled = $true", closing)
     status = installer.index("$status = if ($script:InstallSucceeded)", closing)
     assert closing < canceled < status
+
 
 def test_installer_xaml_is_well_formed_xml_with_x_namespace():
     installer = (ROOT / "installer/windows/bootstrap/installer.ps1").read_text(encoding="utf-8")

@@ -1,4 +1,4 @@
-# Testscenario's 0.12.7
+# Testscenario's 0.12.8
 
 ## Eén lijst
 
@@ -73,6 +73,9 @@
 - Forceer een generated `Data.lua` write-failure: de Companion toont een tooltip-syncfout in plaats van een normale live-status.
 - Forceer die write-failure bij de allereerste generated-addon sync: er mag geen TOC achterblijven dat naar een ontbrekende `Data.lua` verwijst.
 - Verwijder na een geslaagde sync alleen de generated TOC en voer dezelfde semantische sync opnieuw uit: de TOC wordt hersteld zonder onnodige Data.lua-wijziging.
+- Laat een score voor dungeon/key/spec A schrijven, wijzig de actieve listing naar dungeon/key B en verifieer dat de oude KL-regels niet verschijnen.
+- Wijzig dezelfde applicant naar een andere spec en verifieer opnieuw fail-closed gedrag.
+- Schrijf v2-data met 0.12.8, laad daarna een oude name-only Bridge: `_G.KeystoneLensTooltipCache` moet nil blijven en de oude Bridge mag geen KL-score tonen.
 
 ## Protocol / lifecycle hardening
 - Decode a non-empty APS1 v12 and v13 applicant record and verify member count, RIO fields and Blizzard fallback fields remain byte-aligned.
@@ -96,4 +99,4 @@
 10. Update/repair preserves the previously selected launch mode and current desktop-shortcut preference unless the user changes them.
 11. Force a normal Setup error after the WPF UI has loaded: show one branded error page, not a second generic bootstrap MessageBox.
 12. Uninstall removes both possible Startup shortcuts, stops the exact installed WoW watcher, and removes the new helper with the installation tree.
-13. Verify Setup, launcher, uninstaller and WoW watcher PE resources all report version `0.12.7.0`. Public direct-download signing remains a separate external gate.
+13. Verify Setup, launcher, uninstaller and WoW watcher PE resources all report version `0.12.8.0`. Public direct-download signing remains a separate external gate.

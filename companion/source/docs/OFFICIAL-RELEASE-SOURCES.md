@@ -1,6 +1,6 @@
-# Official release references checked for KeystoneLens 0.12.7
+# Official release references for KeystoneLens 0.12.8
 
-Checked on 2026-08-12 before packaging.
+The dependency/platform reference set below was checked on 2026-08-12 for the 0.12.7 baseline. KeystoneLens 0.12.8 changes tooltip-cache correctness and release integrity only; it does not change the listed runtime dependency versions, WoW interface targets or Season 2 registry. Live-runtime acceptance remains a separate release gate.
 
 ## CurseForge
 - WoW addon file processor requirements: https://support.curseforge.com/support/solutions/articles/9000210425-curseforge-file-processor-rejections-and-how-to-solve-them

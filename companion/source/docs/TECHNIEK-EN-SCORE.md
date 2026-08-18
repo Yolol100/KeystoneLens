@@ -1,4 +1,4 @@
-# Techniek en KL Score — 0.12.7
+# Techniek en KL Score — 0.12.8
 
 ## Source of truth
 
@@ -49,6 +49,10 @@ Om dubbele weging te voorkomen worden sterk gecorreleerde metrics eerst samengev
 `WCL gem.` is daarna het rekenkundig gemiddelde van de beschikbare categorieën. Alle onderliggende rankingmetrics blijven zichtbaar in de detailregel. Ontbrekende data wordt niet verzonnen en wordt niet als kunstmatige nul in een categorie gestopt.
 
 De WCL-cache is per character/spec/dungeon. Een re-queue naar een ander keylevel in dezelfde dungeon hergebruikt daarom geldige rankingdata. Realmcanonicalisatie wordt alleen opgehaald wanneer de normale realm-slug geen character oplevert, zodat een gezonde eerste batch geen extra realm-catalogrequest nodig heeft.
+
+## Tooltipcache
+
+De door de Companion gegenereerde tooltipcache gebruikt schema v2. Elke score-entry bevat de Group Finder activity, target keylevel en applicant spec waarmee de score is berekend. De Bridge toont een entry alleen wanneer alle drie nog exact overeenkomen met de huidige listingcontext. Schema v2 gebruikt een aparte `KeystoneLensTooltipCacheV2`-global en wist de oude name-only global, zodat een rollback naar een oudere Bridge nieuwe v2-data niet als geldige name-only score kan interpreteren.
 
 ## Stop/start lifecycle
 

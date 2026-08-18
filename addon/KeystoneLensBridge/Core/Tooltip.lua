@@ -45,7 +45,10 @@ local function CurrentListingContext()
 end
 
 local function GetFreshEntry(fullName, specID)
-    local cache = _G.KeystoneLensTooltipCache
+    -- Schema v2 intentionally uses a distinct global. Data.lua also clears the
+    -- legacy v1 global so rolling the Bridge back cannot make a v2 score look
+    -- like a valid name-only cache entry.
+    local cache = _G.KeystoneLensTooltipCacheV2
     if type(cache) ~= "table"
        or tonumber(cache.version) ~= REQUIRED_CACHE_VERSION
        or type(cache.entries) ~= "table" then

@@ -1,9 +1,12 @@
-# KeystoneLens 0.12.7 - GitHub upload bundle
+# KeystoneLens 0.12.8 - GitHub upload bundle
 
-This archive is arranged for the `Yolol100/KeystoneLens` repository.
+This repository contains the source and versioned release artifacts for KeystoneLens.
 
-- `addon/` - complete WoW AddOn source plus the CurseForge-ready ZIP.
-- `companion/` - complete Companion/product source excluding the duplicated AddOn source, plus the original source ZIP and audit report.
-- `executable/` - tested Windows x64 installer.
+- `addon/` - complete WoW AddOn source plus versioned CurseForge-ready ZIPs.
+- `companion/` - complete Companion/product source excluding the duplicated AddOn source, plus versioned source ZIPs and audit reports.
+- `executable/` - versioned Windows x64 installers.
+- `companion/source/VERSION` - canonical release identity used by build and package validation.
 
-The source version is 0.12.7. The functional fixes from the final audited build are preserved.
+Current source version: **0.12.8**.
+
+0.12.7 remains historical. 0.12.8 contains the post-audit tooltip-context/rollback hardening and release-integrity corrections. Use `SHA256SUMS.txt` as the repository artifact-integrity source of truth.

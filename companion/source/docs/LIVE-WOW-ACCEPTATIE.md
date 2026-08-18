@@ -1,4 +1,4 @@
-# Live WoW acceptatie — 0.12.7
+# Live WoW acceptatie — 0.12.8
 
 Handmatig testen op actuele WoW Retail + Windows:
 
@@ -14,7 +14,10 @@ Handmatig testen op actuele WoW Retail + Windows:
 10. `/kl stop`, delist, nieuwe listing: Bridge schakelt automatisch weer AAN.
 11. `/kl on`, `/kl status`, `/kl sync`, `/kl help` testen.
 12. WCL auth/no-data/rate-limit testen.
-13. Tooltipcache na `/reload` testen.
-14. Companion minimaliseren/sluiten testen.
+13. Tooltipcache na `/reload` testen voor dezelfde dungeon/key/spec.
+14. Re-queue dezelfde speler in een andere dungeon/key en controleer dat oude KL-regels niet worden getoond vóór een geldige nieuwe sync/reload.
+15. Wissel dezelfde applicant naar een andere spec en controleer dezelfde fail-closed contextbinding.
+16. Test downgrade/rollback: met door 0.12.8 geschreven v2-data mag een oude name-only Bridge geen KL-score tonen.
+17. Companion minimaliseren/sluiten testen.
 
-Noteer per stap: Geslaagd / Mislukt / Geblokkeerd + WoW build, dungeon/key en evidence.
+Noteer per stap: Geslaagd / Mislukt / Geblokkeerd + WoW build, dungeon/key/spec en evidence.
