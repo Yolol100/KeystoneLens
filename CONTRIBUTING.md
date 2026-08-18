@@ -23,7 +23,7 @@ python -m compileall -q app/keystonelens_companion
 bash scripts/BUILD-RELEASE.sh
 ```
 
-Windows installer, launcher, uninstall or watcher changes must also pass the native Windows workflow. Dependency changes must pass both the scheduled dependency audit and pull-request dependency review. Python and Go source changes are scanned by CodeQL.
+Windows installer, launcher, uninstall or watcher changes must also pass the native Windows workflow. Dependency changes must pass both the scheduled dependency audit and the PR dependency audit. Python and Go source changes are scanned by CodeQL.
 
 ## Pull request expectations
 
