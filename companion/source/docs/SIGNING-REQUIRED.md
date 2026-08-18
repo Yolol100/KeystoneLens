@@ -1,4 +1,4 @@
-# Windows signing gate — 0.12.7
+# Windows signing gate — 0.12.8
 
 The generated Windows PE files remain **unsigned** until a real publisher certificate/private key is supplied. A self-signed certificate is not a substitute for public distribution trust.
 
