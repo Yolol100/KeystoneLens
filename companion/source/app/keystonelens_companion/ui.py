@@ -20,7 +20,7 @@ from .filters import (
 )
 from .models import ApplicantView, EngineState
 from .scoring import wcl_metric_scores
-from .registries import use_season1_carryover
+from .registries import is_season1_carryover_source, use_season1_carryover
 
 FONT = "Segoe UI"
 RAIDER_IO_URL = "https://raider.io"
@@ -1453,7 +1453,15 @@ class OverlayWindow:
 
         if view.score and view.score.wcl_score is not None:
             average = view.score.wcl_score
-            source = "S1 " if view.wcl and view.wcl.source_season == "midnight-s1" else ""
+            source = (
+                "S1 "
+                if view.wcl
+                and view.snapshot_listing
+                and is_season1_carryover_source(
+                    view.snapshot_listing.dungeon_name, view.wcl.source_season
+                )
+                else ""
+            )
             wtext, wfg = f"{source}{int(round(average))}/100", pct_colour(average)
         elif view.wcl_status == "loading":
             wtext, wfg = "loading…", MUTED
@@ -1596,7 +1604,13 @@ class OverlayWindow:
                 context_bracket = next(iter(view.wcl.metric_brackets.values()), None)
             context_text = ""
             if context_bracket:
-                if view.wcl and view.wcl.source_season == "midnight-s1":
+                if (
+                    view.wcl
+                    and view.snapshot_listing
+                    and is_season1_carryover_source(
+                        view.snapshot_listing.dungeon_name, view.wcl.source_season
+                    )
+                ):
                     scope = "Season 1 aggregate"
                 else:
                     scope = "full dungeon" if context_bracket.key_level <= 0 else f"+{context_bracket.key_level}"

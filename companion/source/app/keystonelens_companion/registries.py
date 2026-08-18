@@ -149,3 +149,13 @@ def wcl_source_season_for_dungeon(name: str, on_date: date | None = None, *, reg
     if use_previous_wcl_for_dungeon(name, on_date, region=region):
         return MIDNIGHT_SEASON_1.key
     return season.key
+
+
+def is_season1_carryover_source(name: str, source_season: str) -> bool:
+    """True only when Season 1 evidence stands in for a Season 2 listing."""
+    season = season_for_dungeon(name)
+    return bool(
+        season
+        and season.key == MIDNIGHT_SEASON_2.key
+        and source_season == MIDNIGHT_SEASON_1.key
+    )

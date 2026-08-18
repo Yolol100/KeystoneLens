@@ -11,6 +11,7 @@ from keystonelens_companion import engine, rio, ui
 from keystonelens_companion.models import Applicant, ApplicantView, Listing, WCLBracket, WCLResult
 from keystonelens_companion.registries import (
     MIDNIGHT_SEASON_1,
+    is_season1_carryover_source,
     season2_transition_phase,
     use_season1_carryover,
     wcl_source_season_for_dungeon,
@@ -429,3 +430,5 @@ def test_real_season1_listing_is_not_mistaken_for_s2_carryover():
 
     assert use_previous_wcl_for_dungeon("Magisters' Terrace", date(2026, 8, 25)) is False
     assert wcl_source_season_for_dungeon("Magisters' Terrace", date(2026, 8, 25)) == "midnight-s1"
+    assert is_season1_carryover_source("Magisters' Terrace", "midnight-s1") is False
+    assert is_season1_carryover_source("Altar of Fangs", "midnight-s1") is True
