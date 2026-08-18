@@ -1,4 +1,4 @@
-# KeystoneLens Bridge 0.12.7 — CurseForge project copy
+# KeystoneLens Bridge 0.12.8 — CurseForge project copy
 
 ## Summary
 
