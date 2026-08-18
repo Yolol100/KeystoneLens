@@ -299,6 +299,29 @@ def test_wcl_explicit_source_is_never_relabelled_after_request_boundary():
     assert engine._with_wcl_source(previous, "midnight-s2").source_season == "midnight-s1"
 
 
+
+def test_wcl_success_from_prior_phase_is_rejected_when_it_arrives_after_cutover():
+    listing = Listing(key_level=10, dungeon_name="Altar of Fangs")
+    stale = WCLResult(
+        "Applicant", "Realm", "Altar of Fangs", 71,
+        WCLBracket(0, 80, 80, 1, 80), time.time(), target_key=10,
+        source_season="midnight-s1",
+    )
+    with patch.object(engine, "wcl_source_season_for_dungeon", return_value="midnight-s2"):
+        assert engine._wcl_result_assignable(stale, listing, "EU") is False
+
+
+def test_wcl_current_phase_result_is_assignable():
+    listing = Listing(key_level=10, dungeon_name="Altar of Fangs")
+    current = WCLResult(
+        "Applicant", "Realm", "Altar of Fangs", 71,
+        WCLBracket(10, 55, 55, 1, 55), time.time(), target_key=10,
+        source_season="midnight-s2",
+    )
+    with patch.object(engine, "wcl_source_season_for_dungeon", return_value="midnight-s2"):
+        assert engine._wcl_result_assignable(current, listing, "EU") is True
+
+
 def test_wcl_current_result_gets_source_bound_at_routing_time():
     current = WCLResult(
         "Applicant", "Realm", "Altar of Fangs", 71,

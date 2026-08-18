@@ -57,6 +57,15 @@ def _with_wcl_source(result: WCLResult | None, expected_source: str) -> WCLResul
     return replace(result, source_season=expected_source)
 
 
+def _wcl_result_assignable(
+    result: WCLResult | None, listing: Listing | None, region: str
+) -> bool:
+    """Reject successful evidence that became stale while its request was in flight."""
+    if result is None or result.error:
+        return True
+    return _result_matches_listing(result, listing, region)
+
+
 def _fetch_wcl_batch(client: WCLClient, jobs):
     """Route WCL by region and bind source identity before network work returns."""
     if not jobs:
@@ -520,7 +529,10 @@ class ApplicantEngine:
                         and current_realm.casefold() == realm.casefold()
                     )
                     same_spec = bool(view and view.applicant.spec_id == spec_id)
-                    if view and same_context and same_character and same_spec:
+                    source_is_current = bool(
+                        view and _wcl_result_assignable(result, view.snapshot_listing, region)
+                    )
+                    if view and same_context and same_character and same_spec and source_is_current:
                         view.wcl = result
                         if result is None:
                             view.wcl_status = "disabled"
