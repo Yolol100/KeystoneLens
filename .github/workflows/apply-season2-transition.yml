@@ -1,0 +1,51 @@
+name: Apply Season 2 transition patch
+
+on:
+  push:
+    branches:
+      - agent/season2-week1-carryover-20260819
+    paths:
+      - '.github/workflows/apply-season2-transition.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13.15'
+
+      - name: Apply verified source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import gzip
+          from pathlib import Path
+          import subprocess
+
+          encoded = Path('scripts/season2-transition.patch.gz.b64').read_text(encoding='utf-8').strip()
+          patch = gzip.decompress(base64.b64decode(encoded))
+          subprocess.run(['git', 'apply', '--index', '--whitespace=error', '-'], input=patch, check=True)
+          PY
+          git diff --cached --check
+          python -m py_compile companion/source/app/keystonelens_companion/*.py companion/source/app/tests/test_season_transition.py
+
+      - name: Commit applied source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Add Season 2 week-one carry-over'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
