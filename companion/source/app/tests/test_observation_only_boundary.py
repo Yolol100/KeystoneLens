@@ -2,15 +2,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-REPO = ROOT.parents[1]
-AUDIT = REPO / "companion/source/scripts/audit_repository.py"
+SOURCE_ROOT = Path(__file__).resolve().parents[2]
+AUDIT = SOURCE_ROOT / "scripts/audit_repository.py"
 
-PRODUCTION_ROOTS = (
-    REPO / "companion/source/app/keystonelens_companion",
-    REPO / "companion/source/installer/windows",
-    REPO / "executable",
-)
+# These roots exist both in the repository and in the verified source archive.
+PRODUCTION_ROOTS = [
+    SOURCE_ROOT / "app/keystonelens_companion",
+    SOURCE_ROOT / "installer/windows",
+]
+
+# The repository also contains a top-level executable source tree. Include it when
+# this test runs from a full checkout, but do not require it from the intentionally
+# scoped source release archive.
+REPO_ROOT = SOURCE_ROOT.parents[1]
+REPO_EXECUTABLE = REPO_ROOT / "executable"
+if REPO_EXECUTABLE.exists():
+    PRODUCTION_ROOTS.append(REPO_EXECUTABLE)
+
 TEXT_SUFFIXES = {".py", ".go", ".ps1", ".sh", ".lua", ".toml", ".json", ".txt"}
 FORBIDDEN_TOKENS = (
     "SendInput",
@@ -48,13 +56,13 @@ def test_production_companion_has_no_input_or_process_memory_automation():
         checked += 1
         source = path.read_text(encoding="utf-8")
         for token in FORBIDDEN_TOKENS:
-            assert token not in source, f"forbidden automation/process surface {token} in {path.relative_to(REPO)}"
+            assert token not in source, f"forbidden automation/process surface {token} in {path}"
     assert checked > 0, "observation-only scan did not inspect production source"
 
 
 def test_legitimate_windows_observation_and_secret_apis_remain_allowed():
-    config = (REPO / "companion/source/app/keystonelens_companion/config.py").read_text(encoding="utf-8")
-    watcher = (REPO / "companion/source/installer/windows/wowwatcher/main.go").read_text(encoding="utf-8")
+    config = (SOURCE_ROOT / "app/keystonelens_companion/config.py").read_text(encoding="utf-8")
+    watcher = (SOURCE_ROOT / "installer/windows/wowwatcher/main.go").read_text(encoding="utf-8")
     assert "CryptProtectData" in config and "CryptUnprotectData" in config
     assert "QueryFullProcessImageNameW" in watcher
     assert "CreateToolhelp32Snapshot" in watcher
