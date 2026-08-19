@@ -24,10 +24,16 @@
 - Repository hygiene now has explicit `.gitignore`, `.gitattributes`, `.editorconfig`, release-output/secret checks and GitHub Actions dependency maintenance.
 - A repository audit rejects generated binaries, local build/cache output, common secret/key patterns, version drift, mutable/unpinned Actions and workflows that try to commit release artifacts back to `main`.
 - The audit also protects its own critical verification surface, rejects high-risk Actions triggers and direct untrusted pull-request metadata interpolation, and requires every checkout to set `persist-credentials: false`.
+- GitHub Dependency Review now runs on pull requests with its action pinned to an immutable full commit SHA and rejects newly introduced vulnerabilities of moderate severity or higher.
+- Dependabot now reviews GitHub Actions plus both Python dependency roots weekly; CODEOWNERS explicitly covers workflow, dependency, Companion runtime, installer, audit, SBOM, VERSION and security-policy trust boundaries.
+- The production Companion is additionally gated against shell/process execution, inbound listeners/servers, TLS verification bypasses, unsafe archive extraction, unsafe deserialization/dynamic execution and plaintext HTTP endpoints.
+- Warcraft Logs enrichment is machine-locked to the HTTPS OAuth token endpoint plus the public `/api/v2/client` client-credentials API; the private `/api/v2/user` surface is rejected because KeystoneLens has no user-authorization flow.
+- Raider.IO enrichment is machine-locked to the documented HTTPS API, keeps request pacing below the public unauthenticated quota, requires 429/Retry-After handling and preserves Raider.IO attribution.
+- The checked-in CycloneDX SBOM must remain parseable, match the canonical KeystoneLens version and contain every direct exact-pinned Python runtime dependency at the same version.
 - CI release validation uses the same exact production dependency versions as the Windows runtime lock, compiles Lua, runs the full Python suite and proves deterministic packaging with two builds.
 - CodeQL, native Windows validation and both dependency-audit workflows run independently of the primary release build where their path filters apply.
 - Public tag releases require `v<VERSION>` parity and fail closed unless the real publisher signing secrets are configured.
-- Windows public-release builds sign and RFC 3161 timestamp the three payload executables first, rebuild Setup with that signed payload, sign Setup and verify every signature.
+- Windows public-release builds sign and RFC 3161 timestamp the three payload executables first, rebuild Setup with that signed payload, sign Setup and verify every signature with Authenticode policy plus timestamp verification.
 - Final tagged assets receive SHA-256 checksums and GitHub artifact attestations; the workflow creates a draft GitHub Release rather than publishing before live acceptance.
 - `LICENSE-SCOPE.md` documents the existing Bridge/third-party license boundary without inventing a repository-wide Companion/installer license.
 
@@ -38,4 +44,4 @@
 - Live World of Warcraft Midnight Season 2 Group Finder/screenshot/tooltip validation remains a live-client acceptance gate. The expanded matrix now covers secret LFG fields, active-dungeon and party-full pause behavior, screenshot success/failure and CVar restoration, representative resolutions/UI scales, Raider.IO/no-data behavior, Companion Data co-load, Season transitions and a repeated-capture soak.
 - Warcraft Logs Season 2 must be rechecked against first-live production parses/zone state before current-season WCL evidence is treated as the normal source.
 - The draft GitHub Release and CurseForge file should be published as Release only after those live gates pass; until then use preview/Beta distribution where appropriate.
-- Repository branch protection/rulesets and GitHub-native secret scanning/push protection remain owner/admin settings and are tracked separately; source CI cannot prove those settings are enabled.
+- Repository branch protection/rulesets, required CODEOWNER review, private vulnerability reporting and GitHub-native secret scanning/push protection remain owner/admin settings and are tracked separately; source CI cannot prove those settings are enabled.
