@@ -112,7 +112,7 @@ def bridge_runtime_entries() -> list[str]:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        entries.append(f"{BRIDGE_ROOT}/{line.replace('\\\\', '/')}")
+        entries.append(f"{BRIDGE_ROOT}/{line.replace(chr(92), '/')}")
     return entries
 
 
