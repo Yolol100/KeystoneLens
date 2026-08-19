@@ -44,7 +44,7 @@ MIDNIGHT_SEASON_2 = SeasonDefinition(
         "Ruby Life Pools",
         "Temple of Sethraliss",
     ),
-    verified_date="2026-08-12",
+    verified_date="2026-08-19",
     ruleset="retail-12.1-season2",
 )
 
