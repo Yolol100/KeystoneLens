@@ -2,7 +2,7 @@
 
 ## Verdict
 
-**SOURCE / BUILD / RELEASE PIPELINE: PASS WITH EXTERNAL LIVE + SIGNING IDENTITY + REPOSITORY-ADMIN GATES**
+**SOURCE / BUILD / RELEASE PIPELINE: PASS WITH EXTERNAL LIVE + SIGNING IDENTITY + REPOSITORY-ADMIN + POLICY REVIEW GATES**
 
 This report supersedes the 0.12.7 audit for the 0.12.8 source and future tagged release artifacts. Historical audit files remain documentation only and are not release binaries.
 
@@ -24,6 +24,14 @@ This report supersedes the 0.12.7 audit for the 0.12.8 source and future tagged 
 - Blizzard's 12.1 Group Finder overlap/refresh fixes do not relax KeystoneLens' partial/secret read protections. Last-known-good applicant state is still preserved when LFG context is unreadable, and context/source identities remain mandatory before online enrichment can be assigned.
 - No repository code depends on `ManifestInterfaceData`, so the 12.1 change that stops publishing new UI texture filenames through that database has no direct KeystoneLens compatibility impact.
 
+## Iterative error-scenario hardening — 2026-08-19
+
+- The external Companion is now machine-constrained to observation/recruitment behavior in production source. Repository validation rejects Windows/Python surfaces for input injection, process-memory read/write, remote-process injection, global input hooks and common input-automation dependencies.
+- The observation boundary deliberately does not ban legitimate platform APIs used for DPAPI secret protection, virtual-screen sizing or read-only WoW process discovery.
+- A new regression scans the production Companion/installer source for the same prohibited automation/process surfaces and is written to pass both from the full repository and from the extracted source release archive.
+- The first package run exposed that the initial test path assumed a full Git checkout. That test-oracle defect was corrected so the same security regression now runs from the exact source ZIP, and the deterministic release build subsequently passes its extracted-source pytest gate.
+- The repository audit now requires ten critical adversarial suites covering backend lifecycle, secret migration, filesystem failures, general hardening, network failures, observation-only policy, QR decoding, release contracts and Season-2 transition logic. Removing one of these suites is a release-blocking repository-audit failure instead of silently reducing test coverage.
+
 ## WoW Bridge / Midnight boundary
 
 - `KeystoneLensBridge.toc` is machine-checked as the exact tracked runtime inventory. Missing TOC entries and additional unlisted runtime Lua fail the repository audit.
@@ -41,7 +49,7 @@ This report supersedes the 0.12.7 audit for the 0.12.8 source and future tagged 
 - GitHub Actions are required by the repository audit to use immutable full commit SHA pins. Dependabot maintains GitHub Actions dependency updates.
 - High-risk `pull_request_target`, `repository_dispatch` and `workflow_run` triggers plus direct pull-request metadata interpolation are rejected by the repository audit.
 - Every `actions/checkout` call is required to set `persist-credentials: false`; the release jobs use explicit GitHub tokens/secrets only for the operations that need them.
-- Critical workflow files, the Bridge TOC, live acceptance matrix and audit script itself are required files, preventing later changes from silently deleting the verification layer.
+- Critical workflow files, the Bridge TOC, live acceptance matrix, audit script and critical adversarial test suites are required files, preventing later changes from silently deleting the verification layer.
 - The release workflow does not commit generated assets back to `main`, removing the previous unsigned artifact-bot commit from the forward release design.
 
 ## Release integrity
@@ -53,7 +61,7 @@ This report supersedes the 0.12.7 audit for the 0.12.8 source and future tagged 
 - A public tag must be exactly `v<VERSION>`.
 - Tagged core assets receive GitHub artifact attestations; final release assets receive SHA-256 checksums and final provenance attestations.
 - GitHub Release creation is draft-only so live acceptance cannot be bypassed by a successful build.
-- The 2026-08-19 hardening head passed the primary Build and stage release workflow, native Windows platform validation, CodeQL, PR dependency audit and scheduled-style dependency audit before merge. This launch-day evidence update must pass the same affected source/release gates again before merge.
+- The 2026-08-19 iterative hardening head must pass the primary Build and stage release workflow, native Windows platform validation and CodeQL on its final exact PR head before merge.
 
 ## Windows trust gate
 
@@ -68,6 +76,7 @@ The release-validation workflow derives Linux functional test dependencies from 
 
 ## Remaining external gates
 
+- Obtain an explicit owner/legal assessment of the external Companion against Blizzard's current EULA/policy boundary before claiming formal Blizzard-policy compliance; source review proves observation-only implementation constraints, not Blizzard authorization.
 - Configure the real publisher signing identity securely before creating a public Windows tag release.
 - Complete clean-Windows install/repair/uninstall, taskbar/DPI and SmartScreen/AV acceptance on the signed build.
 - Complete the expanded live WoW Retail matrix: Group Finder context churn, secret values, dungeon/full-party auto-pause, serialized screenshot/CVar recovery, representative resolutions/UI scales, Raider.IO/no-data behavior, Companion Data co-load, WCL failure/context boundaries and repeated-capture soak.

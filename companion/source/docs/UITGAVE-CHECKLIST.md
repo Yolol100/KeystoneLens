@@ -17,6 +17,7 @@
 - [x] Malformed/short APS1 transport wordt gecontroleerd geweigerd.
 - [x] Non-finite score/WCL-cachebewijs kan een score niet verhogen.
 - [x] Raider.IO/WCL-caches begrenzen TTL/future-skew/omvang of bewijs.
+- [x] Companion/installer source blijft observation-only: repository-audit blokkeert input-injectie, process-memory read/write, remote-process injection, global input hooks en bekende Python input-automationdependencies.
 
 ## Source/repository
 
@@ -25,10 +26,13 @@
 - [x] Generated release-assets worden niet in `main` opgeslagen.
 - [x] `.gitignore`, `.gitattributes` en `.editorconfig` leggen lokale output, binary/text en LF-regels vast.
 - [x] GitHub Actions gebruikt immutable full-SHA action pins.
+- [x] Iedere checkout zet `persist-credentials: false`; dit is centraal repositorybreed afgedwongen.
 - [x] Dependabot onderhoudt GitHub Actions-dependencies.
 - [x] `LICENSE-SCOPE.md` maakt duidelijk welke component expliciet gelicenseerd is zonder automatisch een repository-wide licentie te verlenen.
 - [x] Python compile, volledige regressietests en native Windows-tests zijn releasegates.
 - [x] Exacte production runtime dependency-versies worden in CI gebruikt en wekelijks met `pip-audit` gecontroleerd.
+- [x] Kritieke adversarial suites voor lifecycle, secretmigratie, filesystem, netwerk, QR, release, Season-2-transitie en observation-only policy zijn verplichte repositorybestanden; verwijderen verlaagt de suite niet stil maar breekt de audit.
+- [x] Dezelfde observation-only regressie werkt in de volledige checkout én in de opnieuw uitgepakte source release-ZIP.
 
 ## Packaging/supply chain
 
@@ -59,6 +63,7 @@
 - [ ] Screenshot transport en Bridge + Companion Data co-load zijn live geslaagd.
 - [ ] Eerste live Season 2 Warcraft Logs parse-matrix is gecontroleerd.
 - [ ] CurseForge game-versionselectie is beperkt tot daadwerkelijk live gevalideerde Retail-versies.
+- [ ] Owner/legal review heeft de observation-only externe Companion expliciet beoordeeld tegen Blizzard's actuele EULA/policygrens; source-audit alleen is geen Blizzard-autorisatie.
 - [ ] `0.12.8` wordt pas als **Release** gepubliceerd na live acceptance; gebruik **Beta** zolang die gate nog openstaat.
 
-Een groene CI-run bewijst source/buildcorrectheid. De drie handmatige omgevingsgates hierboven blijven vereist voordat KeystoneLens als volledig publiek production-ready wordt verklaard.
+Een groene CI-run bewijst source/buildcorrectheid. De handmatige WoW-, Windows-, repository-admin- en policy/legal-gates blijven afzonderlijk vereist voordat KeystoneLens als volledig publiek production-ready wordt verklaard.
