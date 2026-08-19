@@ -10,6 +10,7 @@ from keystonelens_companion.registries import (
 
 def test_midnight_season2_registry_is_release_ready_and_complete():
     assert MIDNIGHT_SEASON_2.ruleset == "retail-12.1-season2"
+    assert MIDNIGHT_SEASON_2.verified_date == "2026-08-19"
     assert MIDNIGHT_SEASON_2.dungeons == (
         "Altar of Fangs",
         "Murder Row",
