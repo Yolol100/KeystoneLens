@@ -80,6 +80,27 @@ def audit_dependency_governance() -> None:
         fail("Dependency Review must block newly introduced moderate-or-higher vulnerabilities")
 
 
+def audit_api_contracts() -> None:
+    wcl = source_text("app/keystonelens_companion/wcl.py")
+    if 'OAUTH_URL = "https://www.warcraftlogs.com/oauth/token"' not in wcl:
+        fail("Warcraft Logs OAuth endpoint drifted from the reviewed HTTPS token endpoint")
+    if 'API_URL = "https://www.warcraftlogs.com/api/v2/client"' not in wcl:
+        fail("Warcraft Logs enrichment must remain on the public client-credentials API")
+    if "/api/v2/user" in wcl:
+        fail("Warcraft Logs private user API requires explicit user authorization and is not approved")
+
+    rio = source_text("app/keystonelens_companion/rio.py")
+    if 'PROFILE_URL = "https://raider.io/api/v1/characters/profile"' not in rio:
+        fail("Raider.IO runtime enrichment must remain on the documented HTTPS API endpoint")
+    interval = re.search(r"^MIN_REQUEST_INTERVAL_SECONDS\s*=\s*([0-9.]+)\s*$", rio, re.M)
+    if not interval or float(interval.group(1)) < 0.31:
+        fail("Raider.IO request pacing no longer stays below the documented unauthenticated 200 req/min limit")
+    if "429" not in rio or "Retry-After" not in rio:
+        fail("Raider.IO 429/backoff handling is missing")
+    if "Raider.IO attribution: https://raider.io" not in rio:
+        fail("Raider.IO attribution marker is missing from the public-facing client identity")
+
+
 def audit_sbom() -> None:
     sbom_path = SOURCE_ROOT / "docs/SBOM.cdx.json"
     if not sbom_path.is_file():
@@ -143,10 +164,11 @@ def audit_libkeystone_wire_contract() -> None:
 def main() -> int:
     audit_companion_runtime()
     audit_dependency_governance()
+    audit_api_contracts()
     audit_sbom()
     audit_signing_contract()
     audit_libkeystone_wire_contract()
-    print("ok - external Companion, dependency, SBOM, signing and addon-wire security gates passed")
+    print("ok - external Companion, dependency, API, SBOM, signing and addon-wire security gates passed")
     return 0
 
 
