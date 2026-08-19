@@ -52,7 +52,7 @@ FORBIDDEN_BRIDGE_CALLS = re.compile(
     r"\b(?:CombatLogGetCurrentEventInfo|UnitAura|UnitHealth|UnitHealthMax|UnitPower|UnitPowerMax|"
     r"UnitCastingInfo|UnitChannelInfo|UnitPosition|GetPlayerMapPosition|CastSpellByID|CastSpellByName|"
     r"UseAction|TargetUnit|FocusUnit|SetRaidTarget|SetBinding|SetOverrideBinding|RegisterStateDriver|"
-    r"SendAddonMessage|SendChatMessage|loadstring|RunScript)\s*\("
+    r"SendChatMessage|loadstring|RunScript)\s*\("
 )
 FORBIDDEN_BRIDGE_TOKENS = (
     "COMBAT_LOG_EVENT_UNFILTERED",
@@ -132,25 +132,35 @@ def validate_bridge_runtime(file_set: set[str]) -> None:
     if unlisted:
         fail("Bridge runtime Lua exists outside TOC inventory: " + ", ".join(unlisted))
 
+    transport_path = f"{BRIDGE_ROOT}/Core/Transport.lua"
     for rel in entries:
         source = read_text(rel)
         match = FORBIDDEN_BRIDGE_CALLS.search(source)
         if match:
-            fail(f"Bridge must remain recruitment/display-only; forbidden combat/protected/network call in {rel}: {match.group(0).strip()}")
+            fail(f"Bridge must remain recruitment/display-only; forbidden combat/protected call in {rel}: {match.group(0).strip()}")
         for token in FORBIDDEN_BRIDGE_TOKENS:
             if token in source:
                 fail(f"Bridge must remain recruitment/display-only; forbidden runtime token in {rel}: {token}")
+        if rel != transport_path and re.search(r"\bSendAddonMessage\s*\(", source):
+            fail(f"addon messaging is approved only for the guarded LibKeystone shim: {rel}")
 
-    transport = read_text(f"{BRIDGE_ROOT}/Core/Transport.lua")
+    transport = read_text(transport_path)
+    addon_send_calls = re.findall(r"C_ChatInfo\.SendAddonMessage\s*\(", transport)
+    if len(addon_send_calls) != 1:
+        fail(f"guarded LibKeystone addon-message surface drifted: expected 1 send call, got {len(addon_send_calls)}")
     for marker in (
         "local function IsSecretValue(v)",
         "SafeStr = function(v, secretFallback)",
         "C_ChatInfo.InChatMessagingLockdown",
         "CaptureAutoPauseReason",
         "MaybeTriggerScreenshot",
+        'channel ~= "PARTY"',
+        'IsChatMessagingLockdown()',
+        'C_ChatInfo.RegisterAddonMessagePrefix',
+        'C_ChatInfo.SendAddonMessage("LibKS", payload, channel)',
     ):
         if marker not in transport:
-            fail(f"Bridge secret/lockdown/capture safety marker missing from Transport.lua: {marker}")
+            fail(f"Bridge secret/lockdown/capture/LibKeystone safety marker missing from Transport.lua: {marker}")
 
     capture_policy = read_text(f"{BRIDGE_ROOT}/Core/CapturePolicy.lua")
     for marker in (
