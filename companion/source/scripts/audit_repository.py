@@ -35,6 +35,16 @@ REQUIRED_FILES = {
     "companion/source/docs/OFFICIAL-RELEASE-SOURCES.md",
     "companion/source/docs/UITGAVE-CHECKLIST.md",
     "companion/source/scripts/audit_repository.py",
+    "companion/source/app/tests/test_backend_lifecycle.py",
+    "companion/source/app/tests/test_config_secret_migration.py",
+    "companion/source/app/tests/test_filesystem_failures.py",
+    "companion/source/app/tests/test_hardening.py",
+    "companion/source/app/tests/test_network_failures.py",
+    "companion/source/app/tests/test_observation_only_boundary.py",
+    "companion/source/app/tests/test_qr_backend.py",
+    "companion/source/app/tests/test_release_contract.py",
+    "companion/source/app/tests/test_season2.py",
+    "companion/source/app/tests/test_season_transition.py",
 }
 GENERATED_REPOSITORY_PATHS = {
     "SHA256SUMS.txt",
