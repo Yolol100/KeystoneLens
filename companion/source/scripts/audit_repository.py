@@ -60,6 +60,18 @@ FORBIDDEN_BRIDGE_TOKENS = (
     "SecureHandler",
     "C_UnitAuras.",
 )
+COMPANION_OBSERVATION_PREFIXES = (
+    "companion/source/app/keystonelens_companion/",
+    "companion/source/installer/windows/",
+    "executable/",
+)
+FORBIDDEN_COMPANION_AUTOMATION_PATTERNS: dict[str, re.Pattern[str]] = {
+    "input injection": re.compile(r"\b(?:SendInput|keybd_event|mouse_event)\b"),
+    "process memory access": re.compile(r"\b(?:ReadProcessMemory|WriteProcessMemory)\b"),
+    "remote process injection": re.compile(r"\b(?:VirtualAllocEx|CreateRemoteThread)\b"),
+    "global input hook": re.compile(r"\bSetWindowsHookEx(?:A|W)?\b"),
+    "Python input automation dependency": re.compile(r"\b(?:pyautogui|pynput)\b"),
+}
 HIGH_RISK_WORKFLOW_TRIGGERS = (
     "pull_request_target:",
     "repository_dispatch:",
@@ -184,6 +196,23 @@ def validate_bridge_runtime(file_set: set[str]) -> None:
             fail(f"Bridge serialized screenshot/CVar lease contract drifted: {marker}")
 
 
+def validate_companion_observation_boundary(files: list[str]) -> None:
+    for rel in files:
+        if not rel.startswith(COMPANION_OBSERVATION_PREFIXES):
+            continue
+        path = PurePosixPath(rel)
+        if path.suffix.lower() in BINARY_SOURCE_SUFFIXES:
+            continue
+        source = read_text(rel)
+        for label, pattern in FORBIDDEN_COMPANION_AUTOMATION_PATTERNS.items():
+            match = pattern.search(source)
+            if match:
+                fail(
+                    f"Companion must remain observation/recruitment-only; forbidden {label} "
+                    f"surface in {rel}: {match.group(0)}"
+                )
+
+
 def main() -> int:
     files = git_files()
     file_set = set(files)
@@ -223,6 +252,7 @@ def main() -> int:
                 fail(f"possible {label} committed in {rel}")
 
     validate_bridge_runtime(file_set)
+    validate_companion_observation_boundary(files)
 
     version = canonical_version()
     require_exact_line("companion/source/app/keystonelens_companion/__init__.py", f'__version__ = "{version}"')
@@ -270,7 +300,7 @@ def main() -> int:
 
     print(
         f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; "
-        "Bridge inventory/Midnight scope/workflow security enforced)"
+        "Bridge inventory/Midnight scope/Companion observation boundary/workflow security enforced)"
     )
     return 0
 
