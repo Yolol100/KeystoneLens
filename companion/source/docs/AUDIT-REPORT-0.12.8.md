@@ -26,11 +26,22 @@ This report supersedes the 0.12.7 audit for the 0.12.8 source and future tagged 
 
 ## Iterative error-scenario hardening — 2026-08-19
 
-- The external Companion is now machine-constrained to observation/recruitment behavior in production source. Repository validation rejects Windows/Python surfaces for input injection, process-memory read/write, remote-process injection, global input hooks and common input-automation dependencies.
+- The external Companion is machine-constrained to observation/recruitment behavior in production source. Repository validation rejects Windows/Python surfaces for input injection, process-memory read/write, remote-process injection, global input hooks and common input-automation dependencies.
 - The observation boundary deliberately does not ban legitimate platform APIs used for DPAPI secret protection, virtual-screen sizing or read-only WoW process discovery.
 - A new regression scans the production Companion/installer source for the same prohibited automation/process surfaces and is written to pass both from the full repository and from the extracted source release archive.
 - The first package run exposed that the initial test path assumed a full Git checkout. That test-oracle defect was corrected so the same security regression now runs from the exact source ZIP, and the deterministic release build subsequently passes its extracted-source pytest gate.
 - The repository audit now requires ten critical adversarial suites covering backend lifecycle, secret migration, filesystem failures, general hardening, network failures, observation-only policy, QR decoding, release contracts and Season-2 transition logic. Removing one of these suites is a release-blocking repository-audit failure instead of silently reducing test coverage.
+
+## Additional online-rule hardening — 2026-08-19
+
+- GitHub Dependency Review is added as a pull-request gate, pinned to the immutable v5.0.0 action commit and configured to reject newly introduced moderate-or-higher known vulnerabilities.
+- Dependabot coverage is expanded from GitHub Actions to both Python dependency roots on a weekly cadence. CODEOWNERS explicitly covers dependency, workflow, Companion, installer, audit, SBOM, VERSION and security-policy boundaries.
+- The production Companion now has a separate machine gate forbidding shell/process spawning, inbound local listeners/servers, TLS-verification bypasses, unsafe archive extraction, unsafe deserialization/dynamic execution and plaintext HTTP endpoints.
+- Warcraft Logs use is machine-bound to HTTPS OAuth plus the public `/api/v2/client` client-credentials surface. The private `/api/v2/user` surface is rejected until a deliberate user-authorization feature exists.
+- Raider.IO use is machine-bound to the documented HTTPS API, rate pacing below the public 200 requests/minute unauthenticated ceiling, explicit 429/Retry-After behavior and attribution in the client identity.
+- The CycloneDX SBOM is now a release-tested contract: JSON/schema identity, application version and every direct exact-pinned Python dependency must agree with the canonical source.
+- Windows signature verification now explicitly requires Authenticode policy and timestamp verification (`signtool verify /pa /tw /all /v`) after RFC 3161 SHA-256 timestamped signing. This protects long-term signature validity from being treated as equivalent to an untimestamped signature.
+- The external-security regression is source-package portable: repository-only governance checks run when `.github` exists, while runtime/API/SBOM/signing/LibKeystone checks also run from the exact source ZIP.
 
 ## WoW Bridge / Midnight boundary
 
@@ -54,25 +65,26 @@ This report supersedes the 0.12.7 audit for the 0.12.8 source and future tagged 
 
 ## Release integrity
 
-- Canonical release identity is `0.12.8` in `companion/source/VERSION`; no public `v0.12.8` tag existed at the launch-day review, so the verified source/evidence update does not mutate an immutable published release.
+- Canonical release identity is `0.12.8` in `companion/source/VERSION`; no public `v0.12.8` tag existed at this additional audit, so these source/evidence changes do not mutate an immutable published release.
 - Companion, Bridge, Companion Data and Windows metadata are checked against the canonical version.
 - `sign-release.ps1` reads the canonical version and rejects ambiguous/missing signing identities or non-HTTPS timestamp URLs.
 - Release output is built twice and must have identical SHA-256 manifests before staging.
 - A public tag must be exactly `v<VERSION>`.
 - Tagged core assets receive GitHub artifact attestations; final release assets receive SHA-256 checksums and final provenance attestations.
 - GitHub Release creation is draft-only so live acceptance cannot be bypassed by a successful build.
-- The 2026-08-19 iterative hardening head must pass the primary Build and stage release workflow, native Windows platform validation and CodeQL on its final exact PR head before merge.
+- The final additional-hardening head must pass the primary Build and stage release workflow, native Windows platform validation, CodeQL and pull-request Dependency Review before merge.
 
 ## Windows trust gate
 
 - Public Windows tag releases fail closed unless the real publisher PFX/password secrets are available to the ephemeral Windows runner.
 - Payload binaries are signed before embedding; Setup is rebuilt and signed afterwards.
-- Signing uses SHA-256 Authenticode with RFC 3161/SHA-256 timestamping and verifies the four binaries through SignTool and PowerShell Authenticode status.
+- Signing uses SHA-256 Authenticode with RFC 3161/SHA-256 timestamping and verifies the four binaries through SignTool plus PowerShell Authenticode status.
+- The standalone and signing-time verification contracts require `/pa /tw /all /v`, so a missing timestamp is not accepted as equivalent release evidence.
 - The signing identity itself is an external secret and is not present in source control.
 
 ## CI/runtime dependency parity
 
-The release-validation workflow derives Linux functional test dependencies from the exact Windows production runtime lock. Native Windows CI installs the same exact hashed runtime package set. The scheduled dependency-audit workflow continues to audit both declared application requirements and the exact runtime package set.
+The release-validation workflow derives Linux functional test dependencies from the exact Windows production runtime lock. Native Windows CI installs the same exact hashed runtime package set. The scheduled dependency-audit workflow continues to audit both declared application requirements and the exact runtime package set. Pull-request Dependency Review adds a pre-merge vulnerability gate on dependency changes.
 
 ## Remaining external gates
 
@@ -82,6 +94,6 @@ The release-validation workflow derives Linux functional test dependencies from 
 - Complete the expanded live WoW Retail matrix: Group Finder context churn, secret values, dungeon/full-party auto-pause, serialized screenshot/CVar recovery, representative resolutions/UI scales, Raider.IO/no-data behavior, Companion Data co-load, WCL failure/context boundaries and repeated-capture soak.
 - Recheck Warcraft Logs against live Season 2 production parses/source state before treating current Season-2 WCL evidence as the normal scoring source.
 - Publish the draft GitHub Release and CurseForge file only after those gates pass.
-- Enable branch protection/rulesets with required checks on `main` and verify GitHub-native secret scanning/push protection. These owner/admin actions are tracked in issue #17 and are not implied by source-only CI.
+- Enable branch protection/rulesets with required checks/CODEOWNER review/conversation resolution and verify GitHub-native secret scanning, push protection and private vulnerability reporting. These owner/admin actions are tracked in issue #17 and are not implied by source-only CI.
 
 No new user-facing features or settings are introduced by this hardening round.
