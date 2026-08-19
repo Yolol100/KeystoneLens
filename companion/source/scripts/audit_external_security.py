@@ -5,17 +5,22 @@ import json
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-APP_ROOT = ROOT / "companion/source/app/keystonelens_companion"
-VERSION = (ROOT / "companion/source/VERSION").read_text(encoding="utf-8").strip()
+SOURCE_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = SOURCE_ROOT.parents[1]
+APP_ROOT = SOURCE_ROOT / "app/keystonelens_companion"
+VERSION = (SOURCE_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"error - {message}")
 
 
-def text(rel: str) -> str:
-    return (ROOT / rel).read_text(encoding="utf-8")
+def source_text(rel: str) -> str:
+    return (SOURCE_ROOT / rel).read_text(encoding="utf-8")
+
+
+def repo_text(rel: str) -> str:
+    return (REPO_ROOT / rel).read_text(encoding="utf-8")
 
 
 def audit_companion_runtime() -> None:
@@ -24,10 +29,11 @@ def audit_companion_runtime() -> None:
         "inbound listener/server": re.compile(r"\b(?:HTTPServer|TCPServer|ThreadingTCPServer|socketserver|Flask\s*\(|FastAPI\s*\(|aiohttp\.web\b)|\.listen\s*\(|\.bind\s*\("),
         "TLS verification bypass": re.compile(r"\bverify\s*=\s*False\b|disable_warnings\s*\(|CERT_NONE\b|_create_unverified_context\b"),
         "unsafe archive extraction": re.compile(r"\.extractall\s*\(|\.extract\s*\("),
+        "unsafe deserialization/dynamic execution": re.compile(r"\b(?:pickle\.(?:load|loads)|marshal\.loads|yaml\.load\s*\(|eval\s*\(|exec\s*\()"),
     }
     for path in sorted(APP_ROOT.rglob("*.py")):
         source = path.read_text(encoding="utf-8")
-        rel = path.relative_to(ROOT).as_posix()
+        rel = path.relative_to(SOURCE_ROOT).as_posix()
         for label, pattern in forbidden.items():
             match = pattern.search(source)
             if match:
@@ -37,7 +43,13 @@ def audit_companion_runtime() -> None:
 
 
 def audit_dependency_governance() -> None:
-    dependabot = text(".github/dependabot.yml")
+    # Source release archives intentionally omit repository metadata. Runtime,
+    # SBOM, signing and wire checks still run there; governance is additive when
+    # this script executes from a full Git checkout.
+    if not (REPO_ROOT / ".github").is_dir():
+        return
+
+    dependabot = repo_text(".github/dependabot.yml")
     required = (
         "package-ecosystem: github-actions",
         "directory: /companion/source/app",
@@ -49,7 +61,7 @@ def audit_dependency_governance() -> None:
     if dependabot.count("interval: weekly") < 3:
         fail("Actions and both Python dependency roots must be reviewed weekly")
 
-    owners = text(".github/CODEOWNERS")
+    owners = repo_text(".github/CODEOWNERS")
     for marker in (
         "/.github/CODEOWNERS @Yolol100",
         "/.github/workflows/ @Yolol100",
@@ -61,9 +73,15 @@ def audit_dependency_governance() -> None:
         if marker not in owners:
             fail(f"critical CODEOWNER boundary missing: {marker}")
 
+    dependency_review = repo_text(".github/workflows/dependency-review.yml")
+    if "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294" not in dependency_review:
+        fail("Dependency Review Action must remain pinned to the reviewed v5.0.0 commit")
+    if "fail-on-severity: moderate" not in dependency_review:
+        fail("Dependency Review must block newly introduced moderate-or-higher vulnerabilities")
+
 
 def audit_sbom() -> None:
-    sbom_path = ROOT / "companion/source/docs/SBOM.cdx.json"
+    sbom_path = SOURCE_ROOT / "docs/SBOM.cdx.json"
     if not sbom_path.is_file():
         fail("CycloneDX SBOM is missing")
     try:
@@ -77,7 +95,7 @@ def audit_sbom() -> None:
         fail("SBOM application identity does not match canonical VERSION")
 
     requirements = {}
-    for raw in text("companion/source/app/requirements.txt").splitlines():
+    for raw in source_text("app/requirements.txt").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
@@ -96,8 +114,8 @@ def audit_sbom() -> None:
 
 
 def audit_signing_contract() -> None:
-    sign = text("companion/source/installer/windows/sign-release.ps1")
-    verify = text("companion/source/installer/windows/verify-signatures.ps1")
+    sign = source_text("installer/windows/sign-release.ps1")
+    verify = source_text("installer/windows/verify-signatures.ps1")
     for marker in ("'/fd','SHA256'", "'/tr',$TimestampUrl", "'/td','SHA256'", "verify /pa /tw /all /v"):
         if marker not in sign:
             fail(f"signing contract missing: {marker}")
@@ -106,7 +124,7 @@ def audit_signing_contract() -> None:
 
 
 def audit_libkeystone_wire_contract() -> None:
-    transport = text("addon/KeystoneLensBridge/Core/Transport.lua")
+    transport = source_text("addon/KeystoneLensBridge/Core/Transport.lua")
     prefix_match = re.search(r'RegisterAddonMessagePrefix\("([^"]+)"\)', transport)
     if not prefix_match:
         fail("LibKeystone compatibility prefix is not a fixed literal")
