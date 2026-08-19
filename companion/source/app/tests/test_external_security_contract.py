@@ -17,4 +17,4 @@ def test_external_security_contract() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "external Companion, dependency, SBOM, signing and addon-wire security gates passed" in result.stdout
+    assert "external Companion, dependency, API, SBOM, signing and addon-wire security gates passed" in result.stdout
