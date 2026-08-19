@@ -9,6 +9,8 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[3]
 VERSION_FILE = ROOT / "companion/source/VERSION"
+BRIDGE_ROOT = "addon/KeystoneLensBridge"
+BRIDGE_TOC = f"{BRIDGE_ROOT}/KeystoneLensBridge.toc"
 MAX_TEXT_BYTES = 2 * 1024 * 1024
 BINARY_SOURCE_SUFFIXES = {".ico", ".tga", ".png", ".jpg", ".jpeg", ".gif"}
 FORBIDDEN_TRACKED_SUFFIXES = {".zip", ".exe", ".pfx", ".p12", ".pem", ".key", ".pyc", ".pyo", ".log", ".tmp", ".bak", ".orig", ".rej"}
@@ -19,10 +21,20 @@ REQUIRED_FILES = {
     ".gitignore",
     ".github/CODEOWNERS",
     ".github/dependabot.yml",
+    ".github/workflows/codeql.yml",
+    ".github/workflows/dependency-audit-pr.yml",
+    ".github/workflows/dependency-audit.yml",
+    ".github/workflows/rebuild-keystonelens.yml",
+    ".github/workflows/windows-platform.yml",
     "LICENSE-SCOPE.md",
     "README.md",
     "SECURITY.md",
+    BRIDGE_TOC,
     "companion/source/VERSION",
+    "companion/source/docs/LIVE-WOW-ACCEPTATIE.md",
+    "companion/source/docs/OFFICIAL-RELEASE-SOURCES.md",
+    "companion/source/docs/UITGAVE-CHECKLIST.md",
+    "companion/source/scripts/audit_repository.py",
 }
 GENERATED_REPOSITORY_PATHS = {
     "SHA256SUMS.txt",
@@ -36,6 +48,23 @@ SECRET_PATTERNS = {
     "Slack token": re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{20,}\b"),
     "OpenAI key": re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{24,}\b"),
 }
+FORBIDDEN_BRIDGE_CALLS = re.compile(
+    r"\b(?:CombatLogGetCurrentEventInfo|UnitAura|UnitHealth|UnitHealthMax|UnitPower|UnitPowerMax|"
+    r"UnitCastingInfo|UnitChannelInfo|UnitPosition|GetPlayerMapPosition|CastSpellByID|CastSpellByName|"
+    r"UseAction|TargetUnit|FocusUnit|SetRaidTarget|SetBinding|SetOverrideBinding|RegisterStateDriver|"
+    r"SendAddonMessage|SendChatMessage|loadstring|RunScript)\s*\("
+)
+FORBIDDEN_BRIDGE_TOKENS = (
+    "COMBAT_LOG_EVENT_UNFILTERED",
+    "SecureActionButtonTemplate",
+    "SecureHandler",
+    "C_UnitAuras.",
+)
+HIGH_RISK_WORKFLOW_TRIGGERS = (
+    "pull_request_target:",
+    "repository_dispatch:",
+    "workflow_run:",
+)
 
 
 def fail(message: str) -> None:
@@ -77,6 +106,74 @@ def require_exact_line(rel: str, line: str) -> None:
         fail(f"release identity mismatch in {rel}: missing {line!r}")
 
 
+def bridge_runtime_entries() -> list[str]:
+    entries: list[str] = []
+    for raw in read_text(BRIDGE_TOC).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        entries.append(f"{BRIDGE_ROOT}/{line.replace('\\\\', '/')}")
+    return entries
+
+
+def validate_bridge_runtime(file_set: set[str]) -> None:
+    entries = bridge_runtime_entries()
+    if not entries or len(entries) != len(set(entries)):
+        fail("Bridge TOC runtime inventory is empty or contains duplicates")
+    for rel in entries:
+        if rel not in file_set:
+            fail(f"Bridge TOC runtime file is missing or untracked: {rel}")
+
+    runtime_lua = {
+        rel for rel in file_set
+        if rel.startswith(BRIDGE_ROOT + "/") and rel.endswith(".lua")
+    }
+    unlisted = sorted(runtime_lua - set(entries))
+    if unlisted:
+        fail("Bridge runtime Lua exists outside TOC inventory: " + ", ".join(unlisted))
+
+    for rel in entries:
+        source = read_text(rel)
+        match = FORBIDDEN_BRIDGE_CALLS.search(source)
+        if match:
+            fail(f"Bridge must remain recruitment/display-only; forbidden combat/protected/network call in {rel}: {match.group(0).strip()}")
+        for token in FORBIDDEN_BRIDGE_TOKENS:
+            if token in source:
+                fail(f"Bridge must remain recruitment/display-only; forbidden runtime token in {rel}: {token}")
+
+    transport = read_text(f"{BRIDGE_ROOT}/Core/Transport.lua")
+    for marker in (
+        "local function IsSecretValue(v)",
+        "SafeStr = function(v, secretFallback)",
+        "C_ChatInfo.InChatMessagingLockdown",
+        "CaptureAutoPauseReason",
+        "MaybeTriggerScreenshot",
+    ):
+        if marker not in transport:
+            fail(f"Bridge secret/lockdown/capture safety marker missing from Transport.lua: {marker}")
+
+    capture_policy = read_text(f"{BRIDGE_ROOT}/Core/CapturePolicy.lua")
+    for marker in (
+        'return "dungeon-active"',
+        'return "party-full"',
+        "return sessionActive and hasRoster",
+    ):
+        if marker not in capture_policy:
+            fail(f"Bridge recruitment auto-pause contract drifted: {marker}")
+
+    screenshot = read_text(f"{BRIDGE_ROOT}/Core/ScreenshotController.lua")
+    for marker in (
+        "PHASE_WAITING",
+        "SCREENSHOT_SUCCEEDED",
+        "SCREENSHOT_FAILED",
+        "EnsureScreenshotCVars",
+        "RestoreScreenshotCVars",
+        'SetCVar("screenshotFormat", "png")',
+    ):
+        if marker not in screenshot:
+            fail(f"Bridge serialized screenshot/CVar lease contract drifted: {marker}")
+
+
 def main() -> int:
     files = git_files()
     file_set = set(files)
@@ -85,7 +182,7 @@ def main() -> int:
 
     missing = sorted(REQUIRED_FILES - file_set)
     if missing:
-        fail("required repository metadata is missing: " + ", ".join(missing))
+        fail("required repository metadata/audit surface is missing: " + ", ".join(missing))
 
     forbidden_generated = sorted(GENERATED_REPOSITORY_PATHS & file_set)
     if forbidden_generated:
@@ -115,9 +212,11 @@ def main() -> int:
             if pattern.search(text):
                 fail(f"possible {label} committed in {rel}")
 
+    validate_bridge_runtime(file_set)
+
     version = canonical_version()
     require_exact_line("companion/source/app/keystonelens_companion/__init__.py", f'__version__ = "{version}"')
-    require_exact_line("addon/KeystoneLensBridge/KeystoneLensBridge.toc", f"## Version: {version}")
+    require_exact_line(BRIDGE_TOC, f"## Version: {version}")
     require_exact_line("companion/source/data-addon/KeystoneLensCompanionData/KeystoneLensCompanionData.toc", f"## Version: {version}")
 
     sign_source = read_text("companion/source/installer/windows/sign-release.ps1")
@@ -131,6 +230,11 @@ def main() -> int:
         text = read_text(rel)
         if "permissions:" not in text:
             fail(f"workflow must declare permissions explicitly: {rel}")
+        for trigger in HIGH_RISK_WORKFLOW_TRIGGERS:
+            if trigger in text:
+                fail(f"high-risk workflow trigger {trigger[:-1]} is not approved: {rel}")
+        if re.search(r"\$\{\{\s*github\.event\.pull_request\.", text):
+            fail(f"untrusted pull-request metadata interpolation detected in workflow: {rel}")
         for uses in re.findall(r"^\s*-?\s*uses:\s*([^\s#]+)", text, re.M):
             if uses.startswith(("./", "docker://")):
                 continue
@@ -147,7 +251,10 @@ def main() -> int:
     if "KEYSTONELENS_PFX_BASE64" not in release_workflow or "KEYSTONELENS_PFX_PASSWORD" not in release_workflow:
         fail("tag release must fail closed behind the configured signing secrets")
 
-    print(f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version})")
+    print(
+        f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; "
+        "Bridge inventory/Midnight scope/workflow security enforced)"
+    )
     return 0
 
 
