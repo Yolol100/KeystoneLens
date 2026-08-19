@@ -62,11 +62,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not embed Setup resources.' }
 Invoke-Sign $Setup
 
 foreach ($file in @($Launcher, $Uninstaller, $WoWWatcher, $Setup)) {
-    & signtool.exe verify /pa /all /v $file
-    if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $file" }
+    & signtool.exe verify /pa /tw /all /v $file
+    if ($LASTEXITCODE -ne 0) { throw "Signature/timestamp verification failed: $file" }
     $signature = Get-AuthenticodeSignature -LiteralPath $file
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
         throw "Authenticode status is not Valid for ${file}: $($signature.Status)"
+    }
+    if ($null -eq $signature.SignerCertificate) {
+        throw "Signer certificate unavailable for ${file}."
     }
 }
 
