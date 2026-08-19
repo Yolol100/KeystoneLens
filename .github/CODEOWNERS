@@ -1,5 +1,12 @@
 * @Yolol100
 
+/.github/CODEOWNERS @Yolol100
+/.github/dependabot.yml @Yolol100
 /.github/workflows/ @Yolol100
-/companion/source/installer/ @Yolol100
 /addon/KeystoneLensBridge/Core/ @Yolol100
+/companion/source/app/keystonelens_companion/ @Yolol100
+/companion/source/installer/ @Yolol100
+/companion/source/scripts/ @Yolol100
+/companion/source/docs/SBOM.cdx.json @Yolol100
+/companion/source/VERSION @Yolol100
+/SECURITY.md @Yolol100
