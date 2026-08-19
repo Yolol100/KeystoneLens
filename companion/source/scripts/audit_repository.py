@@ -250,6 +250,13 @@ def main() -> int:
                 continue
             if "@" not in uses or not re.fullmatch(r"[0-9a-f]{40}", uses.rsplit("@", 1)[1]):
                 fail(f"workflow action must be pinned to a full commit SHA: {rel}: {uses}")
+        checkout_count = len(re.findall(r"uses:\s*actions/checkout@[0-9a-f]{40}\b", text))
+        non_persisting_count = len(re.findall(r"persist-credentials:\s*false\b", text))
+        if non_persisting_count != checkout_count:
+            fail(
+                f"every checkout must set persist-credentials: false: {rel} "
+                f"({non_persisting_count}/{checkout_count})"
+            )
         if re.search(r"(?:curl|wget)[^\n|]*\|\s*(?:ba)?sh\b", text):
             fail(f"download-to-shell pattern detected: {rel}")
 
