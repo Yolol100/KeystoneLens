@@ -24,6 +24,7 @@ REQUIRED_FILES = {
     ".github/workflows/codeql.yml",
     ".github/workflows/dependency-audit-pr.yml",
     ".github/workflows/dependency-audit.yml",
+    ".github/workflows/dependency-review.yml",
     ".github/workflows/rebuild-keystonelens.yml",
     ".github/workflows/windows-platform.yml",
     "LICENSE-SCOPE.md",
@@ -69,6 +70,10 @@ FORBIDDEN_BRIDGE_TOKENS = (
     "SecureActionButtonTemplate",
     "SecureHandler",
     "C_UnitAuras.",
+)
+FORBIDDEN_BRIDGE_POLICY = re.compile(
+    r"\b(?:patreon|paypal|donat(?:e|ion|ions)|premium|advertis(?:e|ement|ements|ing)|sponsor(?:ed|ship)?)\b",
+    re.I,
 )
 COMPANION_OBSERVATION_PREFIXES = (
     "companion/source/app/keystonelens_companion/",
@@ -163,6 +168,9 @@ def validate_bridge_runtime(file_set: set[str]) -> None:
         for token in FORBIDDEN_BRIDGE_TOKENS:
             if token in source:
                 fail(f"Bridge must remain recruitment/display-only; forbidden runtime token in {rel}: {token}")
+        policy = FORBIDDEN_BRIDGE_POLICY.search(source)
+        if policy:
+            fail(f"Bridge violates Blizzard in-game advertising/donation/premium policy in {rel}: {policy.group(0)}")
         if rel != transport_path and re.search(r"\bSendAddonMessage\s*\(", source):
             fail(f"addon messaging is approved only for the guarded LibKeystone shim: {rel}")
 
@@ -299,6 +307,17 @@ def main() -> int:
             )
         if re.search(r"(?:curl|wget)[^\n|]*\|\s*(?:ba)?sh\b", text):
             fail(f"download-to-shell pattern detected: {rel}")
+        if re.search(r"runs-on:\s*(?:ubuntu|windows)-latest\b", text):
+            fail(f"workflow runner must use an explicit supported OS image, not -latest: {rel}")
+
+    dependency_review = read_text(".github/workflows/dependency-review.yml")
+    for marker in (
+        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+        "fail-on-severity: moderate",
+        "runs-on: ubuntu-24.04",
+    ):
+        if marker not in dependency_review:
+            fail(f"dependency-review workflow contract drifted: {marker}")
 
     release_workflow = read_text(".github/workflows/rebuild-keystonelens.yml")
     if "git push origin" in release_workflow or "git commit -m" in release_workflow:
@@ -307,10 +326,16 @@ def main() -> int:
         fail("release workflow must have an explicit tag-only public release gate")
     if "KEYSTONELENS_PFX_BASE64" not in release_workflow or "KEYSTONELENS_PFX_PASSWORD" not in release_workflow:
         fail("tag release must fail closed behind the configured signing secrets")
+    for marker in (
+        "sbom-path:",
+        "--predicate-type https://cyclonedx.org/bom",
+    ):
+        if marker not in release_workflow:
+            fail(f"release workflow missing dedicated CycloneDX SBOM attestation/verification: {marker}")
 
     print(
         f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; "
-        "Bridge inventory/Midnight scope/Companion observation boundary/workflow security enforced)"
+        "Bridge/Midnight/Blizzard-policy/Companion-observation/dependency-review/runner/SBOM workflow security enforced)"
     )
     return 0
 
