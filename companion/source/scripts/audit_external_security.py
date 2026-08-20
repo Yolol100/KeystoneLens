@@ -26,7 +26,7 @@ def repo_text(rel: str) -> str:
 def audit_companion_runtime() -> None:
     forbidden = {
         "shell/process execution": re.compile(r"\b(?:subprocess\b|os\.system\s*\(|os\.popen\s*\(|Popen\s*\(|ShellExecute(?:Ex)?[AW]?\b|CreateProcess[AW]?\b)"),
-        "inbound listener/server": re.compile(r"\b(?:HTTPServer|TCPServer|ThreadingTCPServer|socketserver|Flask\s*\(|FastAPI\s*\(|aiohttp\.web\b)|\.listen\s*\(|\.bind\s*\("),
+        "inbound listener/server": re.compile(r"\b(?:HTTPServer|TCPServer|ThreadingTCPServer|socketserver|Flask\s*\(|FastAPI\s*\(|aiohttp\.web\b|socket\.(?:socket|create_server)\s*\()|\.listen\s*\("),
         "TLS verification bypass": re.compile(r"\bverify\s*=\s*False\b|disable_warnings\s*\(|CERT_NONE\b|_create_unverified_context\b"),
         "unsafe archive extraction": re.compile(r"\.extractall\s*\(|\.extract\s*\("),
         "unsafe deserialization/dynamic execution": re.compile(r"\b(?:pickle\.(?:load|loads)|marshal\.loads|yaml\.load\s*\(|eval\s*\(|exec\s*\()"),
