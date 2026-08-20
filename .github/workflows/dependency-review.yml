@@ -25,8 +25,39 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - name: Review introduced dependency vulnerabilities
+        id: dependency-review
+        continue-on-error: true
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
           comment-summary-in-pr: never
+
+      - name: Enforce review failure when Dependency Graph is enabled
+        if: steps.dependency-review.outcome == 'failure'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/github-dependency-sbom.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/dependency-graph/sbom")"
+          case "$status" in
+            200)
+              echo 'Dependency Graph is available, so Dependency Review failure is blocking.' >&2
+              cat /tmp/github-dependency-sbom.json >&2 || true
+              exit 1
+              ;;
+            404)
+              echo '::warning::GitHub Dependency Graph is disabled/unavailable for this repository. Enable it in Settings > Security & analysis so Dependency Review can become a blocking vulnerability-diff gate. Existing pip-audit gates remain blocking.'
+              ;;
+            *)
+              echo "Unexpected GitHub Dependency Graph API status: $status" >&2
+              cat /tmp/github-dependency-sbom.json >&2 || true
+              exit 1
+              ;;
+          esac
