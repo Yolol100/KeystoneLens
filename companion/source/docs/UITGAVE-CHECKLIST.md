@@ -12,7 +12,7 @@
 - [x] Delist/re-queue wist de oude queue-generatie en negeert vertraagde oude frames/results.
 - [x] `/kl stop|off`, `/kl on`, `/kl status`, `/kl sync`, `/kl help` functioneren volgens de source-contracttests.
 - [x] Stop verstuurt terminal clear en leegt queued enrichment.
-- [x] Tooltip cache is schema v2 en gebonden aan exacte activity, target key en applicant spec.
+- [x] Tooltip cache is schema v2 en gebonden aan exacte activity, target key level en applicant specialization.
 - [x] Schema v2 wist de legacy name-only global en gebruikt een aparte v2 global zodat rollback fail-closed is.
 - [x] Malformed/short APS1 transport wordt gecontroleerd geweigerd.
 - [x] Non-finite score/WCL-cachebewijs kan een score niet verhogen.
@@ -32,7 +32,7 @@
 - [x] Alle GitHub-hosted runnerlabels zijn expliciet (`ubuntu-24.04` / `windows-2025`) zodat een toekomstige `-latest` migratie niet ongemerkt de releaseomgeving wijzigt.
 - [x] Dependabot onderhoudt GitHub Actions-dependencies.
 - [x] Dependabot monitort daarnaast de production Python requirements onder `companion/source/app`.
-- [x] PR Dependency Review blokkeert nieuw geïntroduceerde dependencies met bekende kwetsbaarheden vanaf severity `moderate`; dit is aanvullend op `pip-audit` van de uiteindelijke requirements/Windows lock.
+- [x] Een PR Dependency Review-workflow is aanwezig, gebruikt de full-SHA gepinde GitHub action en is blocking zodra GitHub Dependency Graph beschikbaar is; bij een uitgeschakelde graph rapporteert hij de adminblokkade expliciet terwijl de bestaande `pip-audit` gates blocking blijven.
 - [x] `LICENSE-SCOPE.md` maakt duidelijk welke component expliciet gelicenseerd is zonder automatisch een repository-wide licentie te verlenen.
 - [x] Python compile, volledige regressietests en native Windows-tests zijn releasegates.
 - [x] Exacte production runtime dependency-versies worden in CI gebruikt en wekelijks met `pip-audit` gecontroleerd.
@@ -86,6 +86,7 @@
 
 ## Repository-admin gate
 
+- [ ] GitHub Dependency Graph is ingeschakeld; de nieuwe Dependency Review-run bewees op 2026-08-20 expliciet dat deze repositoryfeature op dat moment uit stond.
 - [ ] `main` is beschermd met PR-only merge, required checks voor Build/Stage, Windows Platform, CodeQL, dependency audit/review waar van toepassing, conversation resolution en zonder routine bypass.
 - [ ] GitHub secret scanning/push protection en Dependabot/security alerts zijn waar beschikbaar bewust geactiveerd en gecontroleerd.
 
