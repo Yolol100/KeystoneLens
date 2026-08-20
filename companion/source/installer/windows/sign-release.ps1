@@ -29,8 +29,6 @@ if (-not (Test-Path -LiteralPath $Launcher -PathType Leaf) -or -not (Test-Path -
 }
 
 function Invoke-Sign([string]$Path) {
-    # Keep the digest/timestamp pairs compact because release-contract tests
-    # verify these exact security-critical arguments in addition to PS parsing.
     $args = @('sign','/fd','SHA256','/tr',$TimestampUrl,'/td','SHA256')
     if ($CertThumbprint) {
         $args += @('/sha1', $CertThumbprint)
@@ -43,7 +41,6 @@ function Invoke-Sign([string]$Path) {
     if ($LASTEXITCODE -ne 0) { throw "Signing failed: $Path" }
 }
 
-# Sign the binaries inside the embedded payload first, then rebuild and sign Setup.
 Invoke-Sign $Launcher
 Invoke-Sign $Uninstaller
 Invoke-Sign $WoWWatcher
@@ -62,8 +59,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not embed Setup resources.' }
 Invoke-Sign $Setup
 
 foreach ($file in @($Launcher, $Uninstaller, $WoWWatcher, $Setup)) {
-    & signtool.exe verify /pa /all /v $file
-    if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $file" }
+    & signtool.exe verify /pa /tw /all /v $file
+    if ($LASTEXITCODE -ne 0) { throw "Signature/timestamp verification failed: $file" }
     $signature = Get-AuthenticodeSignature -LiteralPath $file
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
         throw "Authenticode status is not Valid for ${file}: $($signature.Status)"

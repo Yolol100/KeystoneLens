@@ -15,6 +15,7 @@
 - The tracked Bridge runtime must match the TOC inventory exactly; unlisted runtime Lua or missing TOC files fail the release audit.
 - Existing secret-value guards, dungeon/party-full auto-pause boundaries and the serialized screenshot/CVar lease are now permanent audited contracts rather than convention-only behavior.
 - Blizzard's Patch 12.1 Group Finder fixes do not weaken those fail-closed guards; transient/secret/partial LFG reads remain treated as untrusted even if the upstream UI refresh bug is fixed.
+- The 2026-08-20 rule expansion explicitly keeps Raider.IO request pacing below the public unauthenticated API limit, respects HTTP `Retry-After`, and keeps Warcraft Logs OAuth expiry, GraphQL `rateLimitData` and retry behavior inside bounded failure paths; these behaviors already existed and were reclassified as release controls rather than changed at runtime.
 
 ## Release/product hardening
 
@@ -24,18 +25,28 @@
 - Repository hygiene now has explicit `.gitignore`, `.gitattributes`, `.editorconfig`, release-output/secret checks and GitHub Actions dependency maintenance.
 - A repository audit rejects generated binaries, local build/cache output, common secret/key patterns, version drift, mutable/unpinned Actions and workflows that try to commit release artifacts back to `main`.
 - The audit also protects its own critical verification surface, rejects high-risk Actions triggers and direct untrusted pull-request metadata interpolation, and requires every checkout to set `persist-credentials: false`.
+- GitHub-hosted CI runner images are explicit (`ubuntu-24.04` and `windows-2025`) rather than `-latest`, reducing unreviewed environment drift during future runner migrations.
+- Dependabot now covers GitHub Actions and both production Python dependency roots on a weekly cadence. A separate PR Dependency Review workflow is full-SHA pinned and becomes a blocking `moderate`-severity vulnerability-diff gate when GitHub Dependency Graph is enabled; until that repository feature is enabled, the workflow reports the missing admin prerequisite while the existing `pip-audit` jobs remain blocking for the resulting requirement sets and exact Windows runtime lock.
+- The production Companion has a package-portable external-security gate that rejects shell/process spawning, inbound listeners/servers, TLS-verification bypasses, unsafe archive extraction, unsafe deserialization/dynamic execution and plaintext HTTP endpoints.
+- Warcraft Logs enrichment is machine-bound to the HTTPS OAuth token endpoint plus the public `/api/v2/client` client-credentials API; the private `/api/v2/user` surface is rejected until a deliberate user-authorization feature exists.
+- Raider.IO enrichment is machine-bound to the documented HTTPS profile API, conservative unauthenticated request pacing, explicit 429/`Retry-After` behavior and visible attribution/client identity.
+- The checked-in CycloneDX SBOM must remain parseable, match canonical `VERSION` and contain every direct exact-pinned Python runtime dependency at the same version.
 - CI release validation uses the same exact production dependency versions as the Windows runtime lock, compiles Lua, runs the full Python suite and proves deterministic packaging with two builds.
-- CodeQL, native Windows validation and both dependency-audit workflows run independently of the primary release build where their path filters apply.
+- CodeQL, native Windows validation, dependency review and both dependency-audit workflows run independently of the primary release build where their path filters apply.
+- The WoW Bridge is also checked against Blizzard's published UI Add-On policy boundary for in-game advertising, premium, sponsorship and donation-solicitation behavior.
 - Public tag releases require `v<VERSION>` parity and fail closed unless the real publisher signing secrets are configured.
-- Windows public-release builds sign and RFC 3161 timestamp the three payload executables first, rebuild Setup with that signed payload, sign Setup and verify every signature.
-- Final tagged assets receive SHA-256 checksums and GitHub artifact attestations; the workflow creates a draft GitHub Release rather than publishing before live acceptance.
+- Windows public-release builds sign and RFC 3161 timestamp the three payload executables first, rebuild Setup with that signed payload, sign Setup and require `signtool verify /pa /tw /all /v` plus valid PowerShell Authenticode status for the final binaries.
+- Final tagged assets receive SHA-256 checksums and GitHub artifact attestations. In addition, the existing CycloneDX 1.5 SBOM is bound to the final source ZIP and signed Windows installer with a dedicated `https://cyclonedx.org/bom` SBOM attestation, and both SLSA provenance and CycloneDX predicate are verified before a draft release can be created.
 - `LICENSE-SCOPE.md` documents the existing Bridge/third-party license boundary without inventing a repository-wide Companion/installer license.
 
 ## Release gates still external
 
-- Native clean-Windows install/repair/uninstall and SmartScreen/AV behavior remain runtime acceptance gates.
+- Native clean-Windows install/repair/uninstall and SmartScreen/AV behavior remain runtime acceptance gates. The acceptance scope also includes Unicode/long paths, permission failures, locked files, low disk space and reparse-point/symlink edge cases.
 - A real publisher signing identity must be securely configured before the tag workflow can produce a public Windows release.
-- Live World of Warcraft Midnight Season 2 Group Finder/screenshot/tooltip validation remains a live-client acceptance gate. The expanded matrix now covers secret LFG fields, active-dungeon and party-full pause behavior, screenshot success/failure and CVar restoration, representative resolutions/UI scales, Raider.IO/no-data behavior, Companion Data co-load, Season transitions and a repeated-capture soak.
+- Live World of Warcraft Midnight Season 2 Group Finder/screenshot/tooltip validation remains a live-client acceptance gate. The expanded matrix covers secret LFG fields, active-dungeon and party-full pause behavior, screenshot success/failure and CVar restoration, representative resolutions/UI scales, Raider.IO/no-data behavior, Companion Data co-load, Season transitions and a repeated-capture soak.
 - Warcraft Logs Season 2 must be rechecked against first-live production parses/zone state before current-season WCL evidence is treated as the normal source.
-- The draft GitHub Release and CurseForge file should be published as Release only after those live gates pass; until then use preview/Beta distribution where appropriate.
+- CurseForge project metadata is an explicit owner/distribution gate: Retail game-version/flavor, Beta versus Release channel, dependency relations, distribution toggle and project license scope must match the tested artifact and evidence state.
+- GitHub Dependency Graph was found disabled during the new Dependency Review run on 2026-08-20; enabling it is an explicit repository-admin prerequisite for the vulnerability-diff action to become blocking.
+- The draft GitHub Release and CurseForge file should be published as Release only after the live gates pass; until then use preview/Beta distribution where appropriate.
 - Repository branch protection/rulesets and GitHub-native secret scanning/push protection remain owner/admin settings and are tracked separately; source CI cannot prove those settings are enabled.
+- The external Windows Companion remains subject to an explicit Blizzard EULA/policy review. Observation-only source evidence reduces technical automation risk but does not substitute for Blizzard authorization.
