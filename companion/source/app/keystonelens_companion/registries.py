@@ -65,6 +65,13 @@ WCL_ZONE_BY_SEASON = {
     MIDNIGHT_SEASON_2.key: 56,
 }
 
+# Public Warcraft Logs character/ranking surfaces were rechecked on 2026-08-20
+# and expose live Midnight Mythic+ Season 2 scores. Keep this source-verification
+# date separate from Blizzard's regional season window: Raider.IO can still show
+# previous-season context during week one, while WCL should stop forcing Season 1
+# as soon as current Season 2 evidence is independently visible in production.
+MIDNIGHT_SEASON_2_WCL_PRODUCTION_VERIFIED_ON = date(2026, 8, 20)
+
 # Blizzard publishes Season 2 by regional weekly window. Keep EU aliases for
 # backwards-compatible tests/imports, but make runtime decisions from the actual
 # WoW region carried by the Bridge. This intentionally models the published day,
@@ -122,6 +129,11 @@ def use_season1_carryover(on_date: date | None = None, *, region: str = "EU") ->
     return season2_transition_phase(on_date, region=region) == "week1"
 
 
+def wcl_season2_production_verified(on_date: date | None = None) -> bool:
+    current = on_date or date.today()
+    return current >= MIDNIGHT_SEASON_2_WCL_PRODUCTION_VERIFIED_ON
+
+
 # Names can differ slightly between Blizzard's LFG short names and external
 # services. Canonicalize the known Season 2 variants before enrichment so WCL,
 # Raider.IO and local listing context always refer to the same dungeon.
@@ -161,6 +173,7 @@ def use_previous_wcl_for_dungeon(name: str, on_date: date | None = None, *, regi
         season
         and season.key == MIDNIGHT_SEASON_2.key
         and use_season1_carryover(on_date, region=region)
+        and not wcl_season2_production_verified(on_date)
     )
 
 

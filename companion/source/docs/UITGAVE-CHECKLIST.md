@@ -20,6 +20,7 @@
 - [x] Companion/installer source blijft observation-only: repository-audit blokkeert input-injectie, process-memory read/write, remote-process injection, global input hooks en bekende Python input-automationdependencies.
 - [x] Raider.IO-client houdt een conservatieve request-pacing onder de publieke unauthenticated API-limiet, respecteert `Retry-After` bij 429 en bevat user-agent/attribution metadata.
 - [x] Warcraft Logs OAuth-tokenexpiry, 429/`Retry-After`, GraphQL `rateLimitData` en bounded caches zijn fail-closed getest.
+- [x] Publieke Warcraft Logs Season-2-score/rankings zijn op 2026-08-20 als productiebron bevestigd; WCL schakelt vanaf die datum current Season 2 in terwijl Raider.IO week-1 vorige-scorecontext behouden blijft.
 
 ## Source/repository
 
@@ -68,7 +69,7 @@
 - [x] `sign-release.ps1` leest de canonical `VERSION`; geen hard-coded releaseversie.
 - [x] Signing gebruikt SHA-256 Authenticode en RFC 3161/SHA-256 timestamping.
 - [x] Payload binaries worden eerst getekend, daarna wordt Setup met de signed payload opnieuw gebouwd en zelf getekend.
-- [x] `signtool verify` én `Get-AuthenticodeSignature` moeten alle vier publieke binaries als geldig bevestigen.
+- [x] `signtool verify` én `Get-AuthenticodeSignature` moeten alle vier publieke binaries als geldig bevestigen; een publiek artifact moet bovendien een echte `TimeStamperCertificate` hebben.
 - [ ] Repository secrets `KEYSTONELENS_PFX_BASE64` en `KEYSTONELENS_PFX_PASSWORD` (of een later beheerde signing service) zijn veilig geconfigureerd voor de tag-release.
 - [ ] Alle publieke Windows executables zijn met de echte publisher identity getekend en getimestamped.
 - [ ] Clean-Windows install/repair/uninstall, taskbar/DPI en SmartScreen/AV acceptance zijn handmatig geslaagd.
@@ -78,7 +79,7 @@
 
 - [ ] Live WoW tooltip-context/rollbackmatrix slaagt op de beoogde Retail client.
 - [ ] Screenshot transport en Bridge + Companion Data co-load zijn live geslaagd.
-- [ ] Eerste live Season 2 Warcraft Logs parse-matrix is gecontroleerd.
+- [ ] Authenticated eerste-live Warcraft Logs `/api/v2/client` parse-matrix met de echte releasecredentials is gecontroleerd; publieke Season-2-bronbeschikbaarheid is al bevestigd.
 - [ ] CurseForge game-versionselectie is beperkt tot daadwerkelijk live gevalideerde Retail-versies.
 - [ ] Owner/legal review heeft de observation-only externe Companion expliciet beoordeeld tegen Blizzard's actuele EULA/policygrens; source-audit alleen is geen Blizzard-autorisatie.
 - [ ] Blizzard performance-policy is live gecontroleerd: geen excessive chat, onnodige disk-I/O of addon-caused FPS/frame-time degradatie tijdens listing-/screenshotbursts en herhaalde queuecycli.

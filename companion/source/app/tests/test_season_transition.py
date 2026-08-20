@@ -11,10 +11,13 @@ from keystonelens_companion import engine, rio, ui
 from keystonelens_companion.models import Applicant, ApplicantView, Listing, WCLBracket, WCLResult
 from keystonelens_companion.registries import (
     MIDNIGHT_SEASON_1,
+    MIDNIGHT_SEASON_2_WCL_PRODUCTION_VERIFIED_ON,
     is_season1_carryover_source,
     season2_transition_phase,
     season2_transition_phase_at,
+    use_previous_wcl_for_dungeon,
     use_season1_carryover,
+    wcl_season2_production_verified,
     wcl_source_season_for_dungeon,
 )
 from keystonelens_companion.wcl import WCLCache, WCLClient
@@ -34,14 +37,23 @@ def _applicant() -> Applicant:
     )
 
 
-def test_transition_is_week1_from_august_19_through_25_and_current_on_26():
+def test_transition_keeps_week1_context_but_wcl_uses_verified_live_s2_from_august_20():
     assert season2_transition_phase(date(2026, 8, 18)) == "preseason"
     assert season2_transition_phase(date(2026, 8, 19)) == "week1"
     assert season2_transition_phase(date(2026, 8, 25)) == "week1"
     assert season2_transition_phase(date(2026, 8, 26)) == "current"
     assert use_season1_carryover(date(2026, 8, 25)) is True
     assert use_season1_carryover(date(2026, 8, 26)) is False
-    assert wcl_source_season_for_dungeon("Altar of Fangs", date(2026, 8, 25)) == "midnight-s1"
+
+    assert MIDNIGHT_SEASON_2_WCL_PRODUCTION_VERIFIED_ON == date(2026, 8, 20)
+    assert wcl_season2_production_verified(date(2026, 8, 19)) is False
+    assert wcl_season2_production_verified(date(2026, 8, 20)) is True
+    assert use_previous_wcl_for_dungeon("Altar of Fangs", date(2026, 8, 19)) is True
+    assert use_previous_wcl_for_dungeon("Altar of Fangs", date(2026, 8, 20)) is False
+    assert use_previous_wcl_for_dungeon("Altar of Fangs", date(2026, 8, 25)) is False
+    assert wcl_source_season_for_dungeon("Altar of Fangs", date(2026, 8, 19)) == "midnight-s1"
+    assert wcl_source_season_for_dungeon("Altar of Fangs", date(2026, 8, 20)) == "midnight-s2"
+    assert wcl_source_season_for_dungeon("Altar of Fangs", date(2026, 8, 25)) == "midnight-s2"
     assert wcl_source_season_for_dungeon("Altar of Fangs", date(2026, 8, 26)) == "midnight-s2"
 
 
@@ -179,7 +191,7 @@ def test_week1_wcl_aggregates_previous_season_without_persisting_in_s2_cache(tmp
         client.close()
 
 
-def test_engine_routes_week1_to_previous_wcl_and_week2_to_current():
+def test_engine_routes_previous_wcl_only_until_current_source_is_verified():
     previous = WCLResult(
         "Applicant", "Realm", "Altar of Fangs", 71,
         WCLBracket(0, 80, 80, 1, 80), 1.0, target_key=10,
@@ -214,7 +226,7 @@ def test_engine_routes_week1_to_previous_wcl_and_week2_to_current():
     assert client.current_calls == 1
 
 
-def test_wcl_source_mismatch_is_invalidated_at_week2_cutover():
+def test_wcl_source_mismatch_is_invalidated_at_source_cutover():
     listing = Listing(key_level=10, dungeon_name="Altar of Fangs")
     carryover = WCLResult(
         "Applicant", "Realm", "Altar of Fangs", 71,
@@ -242,7 +254,6 @@ def test_transition_uses_published_region_windows(region, pre, start, last_week1
     assert season2_transition_phase(start, region=region) == "week1"
     assert season2_transition_phase(last_week1, region=region) == "week1"
     assert season2_transition_phase(week2, region=region) == "current"
-
 
 
 def test_eu_transition_uses_exact_weekly_reset_instant_not_midnight():
@@ -322,7 +333,6 @@ def test_wcl_explicit_source_is_never_relabelled_after_request_boundary():
     assert engine._with_wcl_source(previous, "midnight-s2").source_season == "midnight-s1"
 
 
-
 def test_wcl_success_from_prior_phase_is_rejected_when_it_arrives_after_cutover():
     listing = Listing(key_level=10, dungeon_name="Altar of Fangs")
     stale = WCLResult(
@@ -383,7 +393,6 @@ def test_same_calendar_date_can_be_different_transition_phase_by_region():
     assert season2_transition_phase(day, region="KR") == "preseason"
     assert season2_transition_phase(day, region="TW") == "preseason"
     assert season2_transition_phase(day, region="CN") == "preseason"
-
 
 
 def test_long_running_engine_invalidates_online_evidence_on_phase_change_without_snapshot():
@@ -448,8 +457,6 @@ def test_long_running_engine_phase_check_is_noop_when_phase_is_unchanged():
 
 
 def test_real_season1_listing_is_not_mistaken_for_s2_carryover():
-    from keystonelens_companion.registries import use_previous_wcl_for_dungeon
-
     assert use_previous_wcl_for_dungeon("Magisters' Terrace", date(2026, 8, 25)) is False
     assert wcl_source_season_for_dungeon("Magisters' Terrace", date(2026, 8, 25)) == "midnight-s1"
     assert is_season1_carryover_source("Magisters' Terrace", "midnight-s1") is False
