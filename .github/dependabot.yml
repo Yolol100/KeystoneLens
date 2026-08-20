@@ -8,3 +8,13 @@ updates:
       github-actions:
         patterns:
           - '*'
+
+  - package-ecosystem: pip
+    directory: /companion/source/app
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      companion-runtime:
+        patterns:
+          - '*'
