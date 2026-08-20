@@ -3,7 +3,9 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
     groups:
       github-actions:
         patterns:
@@ -12,9 +14,21 @@ updates:
   - package-ecosystem: pip
     directory: /companion/source/app
     schedule:
-      interval: monthly
+      interval: weekly
+      day: monday
     open-pull-requests-limit: 5
     groups:
-      companion-runtime:
+      companion-python:
+        patterns:
+          - '*'
+
+  - package-ecosystem: pip
+    directory: /companion/source/installer/windows
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      windows-runtime-python:
         patterns:
           - '*'
