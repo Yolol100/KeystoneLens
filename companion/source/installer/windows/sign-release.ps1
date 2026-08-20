@@ -60,12 +60,18 @@ Invoke-Sign $Setup
 
 foreach ($file in @($Launcher, $Uninstaller, $WoWWatcher, $Setup)) {
     & signtool.exe verify /pa /tw /all /v $file
-    if ($LASTEXITCODE -ne 0) { throw "Signature/timestamp verification failed: $file" }
+    if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $file" }
     $signature = Get-AuthenticodeSignature -LiteralPath $file
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
         throw "Authenticode status is not Valid for ${file}: $($signature.Status)"
     }
+    if ($null -eq $signature.SignerCertificate) {
+        throw "Signer certificate unavailable: $file"
+    }
+    if ($null -eq $signature.TimeStamperCertificate) {
+        throw "RFC3161 timestamp certificate is missing: $file"
+    }
 }
 
-Write-Host "All KeystoneLens $Version Windows binaries are SHA-256 Authenticode-signed, timestamped and verified."
+Write-Host "All KeystoneLens $Version Windows binaries are SHA-256 Authenticode-signed, RFC3161-timestamped and verified."
 Write-Host 'Package them without rebuilding unsigned Windows binaries: KEYSTONELENS_SKIP_WINDOWS_BUILD=1 ./scripts/BUILD-RELEASE.sh'
