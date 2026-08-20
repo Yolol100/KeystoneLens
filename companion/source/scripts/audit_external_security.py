@@ -134,11 +134,12 @@ def audit_sbom() -> None:
 def audit_signing_contract() -> None:
     sign = source_text("installer/windows/sign-release.ps1")
     verify = source_text("installer/windows/verify-signatures.ps1")
-    for marker in ("'/fd','SHA256'", "'/tr',$TimestampUrl", "'/td','SHA256'", "verify /pa /tw /all /v"):
+    for marker in ("'/fd','SHA256'", "'/tr',$TimestampUrl", "'/td','SHA256'", "verify /pa /tw /all /v", "TimeStamperCertificate"):
         if marker not in sign:
             fail(f"signing contract missing: {marker}")
-    if "verify /pa /tw /all /v" not in verify:
-        fail("standalone signature verification must require an RFC3161 timestamp")
+    for marker in ("verify /pa /tw /all /v", "SignerCertificate", "TimeStamperCertificate"):
+        if marker not in verify:
+            fail(f"standalone signature verification contract missing: {marker}")
 
 
 def audit_libkeystone_wire_contract() -> None:
