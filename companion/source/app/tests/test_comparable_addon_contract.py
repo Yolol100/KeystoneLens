@@ -66,6 +66,6 @@ def test_bridge_metadata_and_tooltip_surface_expose_evidence_age():
     assert '"KL evidence"' in tooltip
     assert 'ageText = string.format("%dm old"' in tooltip
     assert "oldest contributing" in audit
-    assert "Raider.IO" in audit
+    assert "context-specific Mythic+ evidence" in audit
     assert "Premade Applicants Filter" in audit
     assert "Pinta Group Finder" in audit
