@@ -6,7 +6,9 @@ from pathlib import Path
 from keystonelens_companion.addon_sync import render_data_addon_toc, render_tooltip_cache
 
 
-ROOT = Path(__file__).resolve().parents[4]
+# Use the canonical companion/source root so this regression works both in the
+# repository checkout and when BUILD-RELEASE.sh re-tests the extracted source ZIP.
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _view(confidence: str = "high"):
@@ -49,7 +51,7 @@ def test_generated_addon_uses_native_group_and_localized_category():
 def test_bridge_metadata_and_tooltip_surface_expose_evidence_age():
     bridge_toc = (ROOT / "addon/KeystoneLensBridge/KeystoneLensBridge.toc").read_text(encoding="utf-8")
     tooltip = (ROOT / "addon/KeystoneLensBridge/Core/Tooltip.lua").read_text(encoding="utf-8")
-    audit = (ROOT / "companion/source/docs/COMPARABLE-ADDON-AUDIT-2026-08-21.md").read_text(encoding="utf-8")
+    audit = (ROOT / "docs/COMPARABLE-ADDON-AUDIT-2026-08-21.md").read_text(encoding="utf-8")
 
     assert "## Category: Dungeons & Raids" in bridge_toc
     assert 'local function FormatEvidence(entry)' in tooltip
