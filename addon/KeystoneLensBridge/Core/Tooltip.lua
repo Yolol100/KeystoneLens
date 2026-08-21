@@ -97,6 +97,26 @@ local function ScoreColor(score)
     return 0.93, 0.34, 0.34
 end
 
+local function FormatEvidence(entry)
+    local confidence = tostring(entry.confidence or "low"):lower()
+    if confidence ~= "high" and confidence ~= "medium" and confidence ~= "low" then confidence = "low" end
+
+    local ageText = "fresh"
+    local now = time and time() or 0
+    local fetched = tonumber(entry.fetchedAt) or 0
+    if now > 0 and fetched > 0 then
+        local age = math.max(0, now - fetched)
+        if age < 60 then
+            ageText = "<1m old"
+        elseif age < 3600 then
+            ageText = string.format("%dm old", math.floor(age / 60))
+        else
+            ageText = string.format("%.1fh old", age / 3600)
+        end
+    end
+    return string.upper(confidence), ageText
+end
+
 local function AppendCachedLines(fullName, specID)
     local entry, key = GetFreshEntry(fullName, specID)
     if not entry or tooltipKey == key then return end
@@ -111,6 +131,14 @@ local function AppendCachedLines(fullName, specID)
         string.format("%d/100 %s", score, tostring(entry.label or "")),
         0.36, 0.66, 1.00,
         r, g, b
+    )
+
+    local confidence, ageText = FormatEvidence(entry)
+    GameTooltip:AddDoubleLine(
+        "KL evidence",
+        confidence .. "  |  " .. ageText,
+        0.72, 0.72, 0.76,
+        0.82, 0.82, 0.86
     )
 
     local rioComponent = tonumber(entry.rioComponent)
