@@ -40,6 +40,14 @@ def test_tooltip_cache_exports_explainable_confidence():
     assert 'confidence="low"' in malformed
 
 
+def test_tooltip_freshness_uses_oldest_contributing_online_evidence():
+    view = _view()
+    view.rio = SimpleNamespace(fetched_at=1_700_000_000)
+    view.wcl = SimpleNamespace(fetched_at=1_699_990_000, metric_brackets={})
+    rendered = render_tooltip_cache([view], now=1_700_000_100)
+    assert "fetchedAt=1699990000" in rendered
+
+
 def test_generated_addon_uses_native_group_and_localized_category():
     toc = render_data_addon_toc()
     assert "## Group: KeystoneLensBridge" in toc
@@ -57,6 +65,7 @@ def test_bridge_metadata_and_tooltip_surface_expose_evidence_age():
     assert 'local function FormatEvidence(entry)' in tooltip
     assert '"KL evidence"' in tooltip
     assert 'ageText = string.format("%dm old"' in tooltip
+    assert "oldest contributing" in audit
     assert "Raider.IO" in audit
     assert "Premade Applicants Filter" in audit
     assert "Pinta Group Finder" in audit
