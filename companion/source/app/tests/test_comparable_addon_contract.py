@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 from keystonelens_companion.addon_sync import render_data_addon_toc, render_tooltip_cache
 
@@ -9,6 +9,7 @@ from keystonelens_companion.addon_sync import render_data_addon_toc, render_tool
 # Use the canonical companion/source root so this regression works both in the
 # repository checkout and when BUILD-RELEASE.sh re-tests the extracted source ZIP.
 ROOT = Path(__file__).resolve().parents[2]
+LOCALES = ("deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW")
 
 
 def _view(confidence: str = "high"):
@@ -32,6 +33,13 @@ def _view(confidence: str = "high"):
     )
 
 
+def _assert_grouped_dungeon_metadata(toc: str) -> None:
+    assert toc.count("## Group: KeystoneLensBridge") == 1
+    assert toc.count("## Category: Dungeons & Raids") == 1
+    for locale in LOCALES:
+        assert toc.count(f"## Category-{locale}:") == 1
+
+
 def test_tooltip_cache_exports_explainable_confidence():
     rendered = render_tooltip_cache([_view("high")], now=1_700_000_000)
     assert 'confidence="high"' in rendered
@@ -48,20 +56,22 @@ def test_tooltip_freshness_uses_oldest_contributing_online_evidence():
     assert "fetchedAt=1699990000" in rendered
 
 
-def test_generated_addon_uses_native_group_and_localized_category():
-    toc = render_data_addon_toc()
-    assert "## Group: KeystoneLensBridge" in toc
-    assert "## Category: Dungeons & Raids" in toc
-    for locale in ("deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW"):
-        assert f"## Category-{locale}:" in toc
+def test_generated_addon_uses_shared_group_and_localized_category():
+    _assert_grouped_dungeon_metadata(render_data_addon_toc())
 
 
-def test_bridge_metadata_and_tooltip_surface_expose_evidence_age():
+def test_bridge_and_checked_in_data_addon_share_group_and_category():
     bridge_toc = (ROOT / "addon/KeystoneLensBridge/KeystoneLensBridge.toc").read_text(encoding="utf-8")
+    data_toc = (ROOT / "data-addon/KeystoneLensCompanionData/KeystoneLensCompanionData.toc").read_text(encoding="utf-8")
+
+    _assert_grouped_dungeon_metadata(bridge_toc)
+    _assert_grouped_dungeon_metadata(data_toc)
+
+
+def test_bridge_tooltip_surface_exposes_evidence_age():
     tooltip = (ROOT / "addon/KeystoneLensBridge/Core/Tooltip.lua").read_text(encoding="utf-8")
     audit = (ROOT / "docs/COMPARABLE-ADDON-AUDIT-2026-08-21.md").read_text(encoding="utf-8")
 
-    assert "## Category: Dungeons & Raids" in bridge_toc
     assert 'local function FormatEvidence(entry)' in tooltip
     assert '"KL evidence"' in tooltip
     assert 'ageText = string.format("%dm old"' in tooltip
