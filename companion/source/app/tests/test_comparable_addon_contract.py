@@ -6,7 +6,7 @@ from pathlib import Path
 from keystonelens_companion.addon_sync import render_data_addon_toc, render_tooltip_cache
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 def _view(confidence: str = "high"):
