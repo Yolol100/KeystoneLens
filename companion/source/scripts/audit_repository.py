@@ -319,6 +319,15 @@ def main() -> int:
         if marker not in dependency_review:
             fail(f"dependency-review workflow contract drifted: {marker}")
 
+    codeql_workflow = read_text(".github/workflows/codeql.yml")
+    for marker in (
+        "concurrency:",
+        "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        "queries: security-extended",
+    ):
+        if marker not in codeql_workflow:
+            fail(f"CodeQL workflow hardening contract drifted: {marker}")
+
     release_workflow = read_text(".github/workflows/rebuild-keystonelens.yml")
     if "git push origin" in release_workflow or "git commit -m" in release_workflow:
         fail("release workflow must publish release assets instead of committing generated binaries to main")
@@ -327,15 +336,42 @@ def main() -> int:
     if "KEYSTONELENS_PFX_BASE64" not in release_workflow or "KEYSTONELENS_PFX_PASSWORD" not in release_workflow:
         fail("tag release must fail closed behind the configured signing secrets")
     for marker in (
+        "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
         "sbom-path:",
         "--predicate-type https://cyclonedx.org/bom",
     ):
         if marker not in release_workflow:
-            fail(f"release workflow missing dedicated CycloneDX SBOM attestation/verification: {marker}")
+            fail(f"release workflow missing concurrency/SBOM hardening gate: {marker}")
+
+    validate_match = re.search(r"(?ms)^  validate:\n(.*?)(?=^  attest-core:\n)", release_workflow)
+    if not validate_match:
+        fail("release workflow must separate unprivileged validation from tag-only core attestation")
+    validate_block = validate_match.group(1)
+    for forbidden in ("id-token: write", "attestations: write", "artifact-metadata: write", "contents: write"):
+        if forbidden in validate_block:
+            fail(f"ordinary validation job must remain read-only: {forbidden}")
+
+    attest_match = re.search(r"(?ms)^  attest-core:\n(.*?)(?=^  sign-windows:\n)", release_workflow)
+    if not attest_match:
+        fail("release workflow missing isolated tag-only core attestation job")
+    attest_block = attest_match.group(1)
+    for marker in (
+        "if: startsWith(github.ref, 'refs/tags/v')",
+        "needs: validate",
+        "id-token: write",
+        "attestations: write",
+        "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+    ):
+        if marker not in attest_block:
+            fail(f"tag-only core attestation contract drifted: {marker}")
+
+    draft_match = re.search(r"(?ms)^  draft-release:\n(.*)$", release_workflow)
+    if not draft_match or "- attest-core" not in draft_match.group(1):
+        fail("draft release must depend on successful isolated core attestation")
 
     print(
         f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; "
-        "Bridge/Midnight/Blizzard-policy/Companion-observation/dependency-review/runner/SBOM workflow security enforced)"
+        "Bridge/Midnight/Blizzard-policy/Companion-observation/dependency-review/runner/least-privilege/SBOM workflow security enforced)"
     )
     return 0
 
