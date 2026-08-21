@@ -111,7 +111,11 @@ def render_tooltip_cache(rows: list[ApplicantView], now: float | None = None) ->
             view.wcl.fetched_at if view.wcl and view.wcl.fetched_at > 0 else 0,
             view.rio.fetched_at if view.rio and view.rio.fetched_at > 0 else 0,
         ]
-        fetched_at = int(max(fetched_candidates) or generated)
+        # The combined score is only as fresh as its oldest contributing online
+        # evidence. A newly refreshed RIO response must not hide an older WCL
+        # response (or vice versa) from the in-game age label/stale gate.
+        positive_fetched = [value for value in fetched_candidates if value > 0]
+        fetched_at = int(min(positive_fetched) if positive_fetched else generated)
         fields = [
             f"activityID={activity_id}",
             f"keyLevel={key_level}",
