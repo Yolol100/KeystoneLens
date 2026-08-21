@@ -44,6 +44,18 @@ def render_data_addon_toc() -> str:
         "## Author: KeystoneLens\n"
         f"## Version: {__version__}\n"
         "## DefaultState: enabled\n"
+        "## Group: KeystoneLensBridge\n"
+        "## Category: Dungeons & Raids\n"
+        "## Category-deDE: Dungeons & Schlachtzüge\n"
+        "## Category-esES: Mazmorras y bandas\n"
+        "## Category-esMX: Calabozos y bandas\n"
+        "## Category-frFR: Donjons et raids\n"
+        "## Category-itIT: Spedizioni e incursioni\n"
+        "## Category-koKR: 던전 및 공격대\n"
+        "## Category-ptBR: Masmorras e Raides\n"
+        "## Category-ruRU: Подземелья и рейды\n"
+        "## Category-zhCN: 地下城和团队副本\n"
+        "## Category-zhTW: 地城與團隊\n"
         "## X-Category: Data Export\n"
         "## X-KeystoneLens-Generated: true\n\n"
         "Data.lua\n"
@@ -60,6 +72,11 @@ def _safe_number(value: float | int | None, fallback: float = 0.0) -> float:
     except (TypeError, ValueError):
         return fallback
     return v if math.isfinite(v) else fallback
+
+
+def _safe_confidence(value: object) -> str:
+    confidence = str(value or "").strip().lower()
+    return confidence if confidence in {"high", "medium", "low"} else "low"
 
 
 def render_tooltip_cache(rows: list[ApplicantView], now: float | None = None) -> str:
@@ -101,6 +118,7 @@ def render_tooltip_cache(rows: list[ApplicantView], now: float | None = None) ->
             f"specID={spec_id}",
             f"score={int(score.score)}",
             f"label={_lua_string(score.label)}",
+            f"confidence={_lua_string(_safe_confidence(getattr(score, 'confidence', 'low')))}",
             f"fetchedAt={fetched_at}",
             f"rioComponent={_safe_number(score.rio_score):.2f}",
             f"rioWeight={_safe_number(score.rio_weight):.4f}",
