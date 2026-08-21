@@ -18,6 +18,7 @@ This checklist compares KeystoneLens with established Group Finder / player-info
 - [x] Keep score/class/role filters separate from the score calculation.
 - [x] Keep stale tooltip data fail-closed: generated cache entries remain bound to exact listing, key and specialization and expire after the configured maximum age.
 - [x] Expose the existing score confidence (`high` / `medium` / `low`) and data age in the in-game tooltip cache so a leader can see evidence strength rather than interpreting one number without context.
+- [x] Make freshness conservative: when both Raider.IO and Warcraft Logs contribute online evidence, the tooltip age/stale gate uses the **oldest contributing** source timestamp rather than letting one fresh source mask older evidence.
 - [x] Add native localized **Dungeons & Raids** metadata to the Bridge and group the generated Companion Data addon under the Bridge in the modern WoW AddOns list.
 - [x] Preserve the observation-only Bridge boundary: no automated applicant acceptance/decline, input injection, process memory access or hidden LFG actions.
 - [ ] Do **not** add region/datacenter filtering until the source can distinguish actual datacenter/language information from a broad Raider.IO region.
@@ -26,4 +27,4 @@ This checklist compares KeystoneLens with established Group Finder / player-info
 
 ## Result
 
-The comparison supports better evidence transparency rather than a more complicated score. Confidence and freshness become visible to the user while the existing deterministic scoring, stale-data rejection and observation-only boundaries remain unchanged.
+The comparison supports better evidence transparency rather than a more complicated score. Confidence and conservative freshness become visible to the user while the existing deterministic scoring, stale-data rejection and observation-only boundaries remain unchanged.
