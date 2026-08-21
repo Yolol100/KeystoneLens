@@ -1,6 +1,6 @@
 # KeystoneLens 0.12.8
 
-0.12.8 is a correctness, Season 2 readiness and production-release hardening update. It does not add user-facing settings or scoring features.
+0.12.8 is a correctness, Season 2 readiness and production-release hardening update. It does not add user-facing settings or change the fixed scoring formula; it does add evidence transparency to the existing in-game tooltip.
 
 ## Runtime fixes
 
@@ -16,6 +16,15 @@
 - Existing secret-value guards, dungeon/party-full auto-pause boundaries and the serialized screenshot/CVar lease are now permanent audited contracts rather than convention-only behavior.
 - Blizzard's Patch 12.1 Group Finder fixes do not weaken those fail-closed guards; transient/secret/partial LFG reads remain treated as untrusted even if the upstream UI refresh bug is fixed.
 - The 2026-08-20 rule expansion explicitly keeps Raider.IO request pacing below the public unauthenticated API limit, respects HTTP `Retry-After`, and keeps Warcraft Logs OAuth expiry, GraphQL `rateLimitData` and retry behavior inside bounded failure paths; these behaviors already existed and were reclassified as release controls rather than changed at runtime.
+
+## Evidence transparency and WoW AddOns metadata
+
+- The displayed KL Score remains exactly 50% Raider.IO and 50% Warcraft Logs. No third scoring pillar or hidden weighting was added.
+- The generated tooltip cache exports the existing `high` / `medium` / `low` score confidence and the Bridge displays that confidence plus a human-readable evidence age below the KL Score.
+- When both Raider.IO and Warcraft Logs contribute online evidence, `fetchedAt` uses the oldest positive contributing source timestamp. The existing maximum-age gate therefore cannot be made to look fresher by only one source being refreshed.
+- `KeystoneLensBridge` and `KeystoneLensCompanionData` share `## Group: KeystoneLensBridge`, matching WoW's group contract for related addons.
+- The published Bridge TOC, the dynamically generated Companion Data TOC and the checked-in Companion Data source TOC carry the same localized `Dungeons & Raids` category metadata.
+- The Bridge remains observation-only: these changes do not add automated applicant acceptance/decline, hidden Group Finder actions, input injection or process-memory access.
 
 ## Release/product hardening
 
@@ -44,7 +53,7 @@
 - Native clean-Windows install/repair/uninstall and SmartScreen/AV behavior remain runtime acceptance gates. The acceptance scope also includes Unicode/long paths, permission failures, locked files, low disk space and reparse-point/symlink edge cases.
 - A real publisher signing identity must be securely configured before the tag workflow can produce a public Windows release.
 - Live World of Warcraft Midnight Season 2 Group Finder/screenshot/tooltip validation remains a live-client acceptance gate. The expanded matrix covers secret LFG fields, active-dungeon and party-full pause behavior, screenshot success/failure and CVar restoration, representative resolutions/UI scales, Raider.IO/no-data behavior, Companion Data co-load, Season transitions and a repeated-capture soak.
-- Public Warcraft Logs Season-2 availability is now source-verified and used by the runtime from 2026-08-20, but an authenticated first-live `/api/v2/client` parse matrix with the real release credentials remains a separate target-runtime acceptance gate.
+- Public Warcraft Logs Season-2 availability is source-verified and used by the runtime from 2026-08-20, but an authenticated first-live `/api/v2/client` parse matrix with the real release credentials remains a separate target-runtime acceptance gate.
 - CurseForge project metadata is an explicit owner/distribution gate: Retail game-version/flavor, Beta versus Release channel, dependency relations, distribution toggle and project license scope must match the tested artifact and evidence state.
 - GitHub Dependency Graph was found disabled during the new Dependency Review run on 2026-08-20; enabling it is an explicit repository-admin prerequisite for the vulnerability-diff action to become blocking.
 - The draft GitHub Release and CurseForge file should be published as Release only after the live gates pass; until then use preview/Beta distribution where appropriate.
