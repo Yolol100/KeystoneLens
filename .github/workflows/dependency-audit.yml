@@ -15,10 +15,14 @@ on:
       - 'companion/source/installer/windows/requirements-runtime.txt'
       - 'companion/source/installer/windows/requirements-runtime.lock'
   schedule:
-    - cron: '17 5 * * 1'
+    - cron: '17 5 * * *'
 
 permissions:
   contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   python-dependencies:
