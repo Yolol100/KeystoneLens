@@ -8,6 +8,7 @@ from pathlib import Path
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SOURCE_ROOT.parents[1]
 APP_ROOT = SOURCE_ROOT / "app/keystonelens_companion"
+PORTABLE_LAUNCHER = SOURCE_ROOT / "portable/portable_launcher.py"
 VERSION = (SOURCE_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
@@ -31,7 +32,10 @@ def audit_companion_runtime() -> None:
         "unsafe archive extraction": re.compile(r"\.extractall\s*\(|\.extract\s*\("),
         "unsafe deserialization/dynamic execution": re.compile(r"\b(?:pickle\.(?:load|loads)|marshal\.loads|yaml\.load\s*\(|eval\s*\(|exec\s*\()"),
     }
-    for path in sorted(APP_ROOT.rglob("*.py")):
+    runtime_sources = sorted(APP_ROOT.rglob("*.py"))
+    if PORTABLE_LAUNCHER.is_file():
+        runtime_sources.append(PORTABLE_LAUNCHER)
+    for path in runtime_sources:
         source = path.read_text(encoding="utf-8")
         rel = path.relative_to(SOURCE_ROOT).as_posix()
         for label, pattern in forbidden.items():
@@ -64,6 +68,7 @@ def audit_dependency_governance() -> None:
         "/.github/workflows/ @Yolol100",
         "/companion/source/app/keystonelens_companion/ @Yolol100",
         "/companion/source/installer/ @Yolol100",
+        "/companion/source/portable/ @Yolol100",
         "/companion/source/scripts/ @Yolol100",
         "/companion/source/docs/SBOM.cdx.json @Yolol100",
     ):

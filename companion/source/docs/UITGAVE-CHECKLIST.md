@@ -5,6 +5,7 @@
 - [x] Exact één Companion-spelerslijst met instelbare KL-score-range (0–100).
 - [x] Score, Class en Role filters combineren deterministisch.
 - [x] Kolommen KL, Role, Player, Class, Spec, Raider.IO en WCL.
+- [x] Klik op een applicant-rij opent via dezelfde selectieflow het bestaande detailpaneel; nested widgets en role-iconen blijven aan die rijselectie gekoppeld.
 - [x] Exacte 50/50-formule zonder meta/group/setup-score.
 - [x] Raider.IO-component is current-dungeon-only.
 - [x] WCL-average is role-aware en current-dungeon-only.
@@ -17,7 +18,7 @@
 - [x] Malformed/short APS1 transport wordt gecontroleerd geweigerd.
 - [x] Non-finite score/WCL-cachebewijs kan een score niet verhogen.
 - [x] Raider.IO/WCL-caches begrenzen TTL/future-skew/omvang of bewijs.
-- [x] Companion/installer source blijft observation-only: repository-audit blokkeert input-injectie, process-memory read/write, remote-process injection, global input hooks en bekende Python input-automationdependencies.
+- [x] Companion/installer/portable source blijft observation-only: repository-audit blokkeert input-injectie, process-memory read/write, remote-process injection, global input hooks en bekende Python input-automationdependencies.
 - [x] Raider.IO-client houdt een conservatieve request-pacing onder de publieke unauthenticated API-limiet, respecteert `Retry-After` bij 429 en bevat user-agent/attribution metadata.
 - [x] Warcraft Logs OAuth-tokenexpiry, 429/`Retry-After`, GraphQL `rateLimitData` en bounded caches zijn fail-closed getest.
 - [x] Publieke Warcraft Logs Season-2-score/rankings zijn op 2026-08-20 als productiebron bevestigd; WCL schakelt vanaf die datum current Season 2 in terwijl Raider.IO week-1 vorige-scorecontext behouden blijft.
@@ -37,9 +38,10 @@
 - [x] `LICENSE-SCOPE.md` maakt duidelijk welke component expliciet gelicenseerd is zonder automatisch een repository-wide licentie te verlenen.
 - [x] Python compile, volledige regressietests en native Windows-tests zijn releasegates.
 - [x] Exacte production runtime dependency-versies worden in CI gebruikt en wekelijks met `pip-audit` gecontroleerd.
-- [x] Kritieke adversarial suites voor lifecycle, secretmigratie, filesystem, netwerk, QR, release, Season-2-transitie en observation-only policy zijn verplichte repositorybestanden; verwijderen verlaagt de suite niet stil maar breekt de audit.
+- [x] Kritieke adversarial suites voor lifecycle, secretmigratie, filesystem, netwerk, QR, release, overlay-click, portable release, Season-2-transitie en observation-only policy zijn verplichte repositorybestanden; verwijderen verlaagt de suite niet stil maar breekt de audit.
 - [x] Dezelfde observation-only regressie werkt in de volledige checkout én in de opnieuw uitgepakte source release-ZIP.
 - [x] Bridge-runtime wordt apart op Blizzard UI Add-On-policyhygiene gecontroleerd: geen in-game advertentie-, premium-, sponsorship- of donatiesolicitatiecode.
+- [x] `companion/source/portable/` heeft dezelfde expliciete CODEOWNER als de andere kritieke Companion/releasepaden.
 
 ## Packaging/supply chain
 
@@ -47,12 +49,16 @@
 - [x] CurseForge ZIP heeft exact één top-level `KeystoneLensBridge/` map met `KeystoneLensBridge/KeystoneLensBridge.toc`.
 - [x] CurseForge ZIP bevat geen EXE en behoudt license/third-party notices.
 - [x] Bron-ZIP bevat geen secrets, config, cache, screenshots, `.venv`, `__pycache__`, build-output of Windows binaries.
+- [x] Bron-ZIP bevat de actuele portable build/launcherbron zodat de release-engineering compleet reproduceerbaar blijft.
+- [x] Portable ZIP gebruikt de canonieke SHA-256-geverifieerde Python-runtime plus dezelfde hash-locked production dependencies als de installerroute.
+- [x] Portable ZIP wordt staged én na opnieuw uitpakken gestart in verify-modus, bevat third-party notices en bevat geen KeystoneLens Setup/geïnstalleerde launcher/uninstaller/watcher binaries.
+- [x] Portable Windows-validatie zit in dezelfde primaire releaseworkflow; de losse duplicate portable-workflow is verwijderd.
 - [x] ZIP-integriteit wordt met `unzip -t` gecontroleerd.
 - [x] Releasebuild draait tweemaal en vereist byte-identieke deterministische outputs.
 - [x] Release-assets krijgen een `SHA256SUMS.txt` manifest.
 - [x] Getagde release-assets krijgen GitHub artifact attestations/provenance.
-- [x] De bestaande CycloneDX 1.5 SBOM wordt bij de uiteindelijke source-ZIP en getekende Windows-installer als aparte SBOM-predicate geattesteerd.
-- [x] De releaseworkflow verifieert voor beide runtime-artifacts zowel de standaard SLSA-provenance als predicate-type `https://cyclonedx.org/bom` vóór de draft release wordt aangemaakt.
+- [x] De bestaande CycloneDX 1.5 SBOM wordt bij de uiteindelijke source-ZIP, portable Windows-ZIP en getekende Windows-installer als aparte SBOM-predicate geattesteerd.
+- [x] De releaseworkflow verifieert voor alle drie deze artifacts zowel de standaard SLSA-provenance als predicate-type `https://cyclonedx.org/bom` vóór de draft release wordt aangemaakt.
 - [x] Een tag moet exact `v<VERSION>` zijn; anders stopt de workflow.
 - [x] De releaseworkflow muteert geen bestaande GitHub Release en commit geen generated binaries terug naar `main`.
 
@@ -69,11 +75,12 @@
 - [x] `sign-release.ps1` leest de canonical `VERSION`; geen hard-coded releaseversie.
 - [x] Signing gebruikt SHA-256 Authenticode en RFC 3161/SHA-256 timestamping.
 - [x] Payload binaries worden eerst getekend, daarna wordt Setup met de signed payload opnieuw gebouwd en zelf getekend.
-- [x] `signtool verify` én `Get-AuthenticodeSignature` moeten alle vier publieke binaries als geldig bevestigen; een publiek artifact moet bovendien een echte `TimeStamperCertificate` hebben.
+- [x] `signtool verify` én `Get-AuthenticodeSignature` moeten de vier KeystoneLens-produced binaries als geldig bevestigen; een publiek KeystoneLens EXE-artifact moet bovendien een echte `TimeStamperCertificate` hebben.
 - [ ] Repository secrets `KEYSTONELENS_PFX_BASE64` en `KEYSTONELENS_PFX_PASSWORD` (of een later beheerde signing service) zijn veilig geconfigureerd voor de tag-release.
-- [ ] Alle publieke Windows executables zijn met de echte publisher identity getekend en getimestamped.
+- [ ] Alle vier KeystoneLens-produced Windows executables zijn met de echte publisher identity getekend en getimestamped.
 - [ ] Clean-Windows install/repair/uninstall, taskbar/DPI en SmartScreen/AV acceptance zijn handmatig geslaagd.
-- [ ] Unicode gebruikersnaam/pad, lang pad, read-only/locked bestand, reparse-point/symlink en onvoldoende schijfruimte zijn op een schone Windows-machine gecontroleerd zonder silent partial install.
+- [ ] Portable ZIP is op een echte schone Windows-machine volledig uitgepakt, gestart, gesloten en opnieuw gestart; Defender/SmartScreen en normale gebruikersrechten zijn gecontroleerd.
+- [ ] Unicode gebruikersnaam/pad, lang pad, read-only/locked bestand, reparse-point/symlink en onvoldoende schijfruimte zijn op een schone Windows-machine gecontroleerd zonder silent partial install of portable partial-start.
 
 ## WoW / Season 2 public-release gate
 

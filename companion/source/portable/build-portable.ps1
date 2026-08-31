@@ -91,6 +91,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'START-COMPANION.cmd') -Destination (Join-Path $Stage 'START-COMPANION.cmd') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'portable_launcher.py') -Destination (Join-Path $Stage 'portable_launcher.py') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LEESMIJ.txt') -Destination (Join-Path $Stage 'LEESMIJ.txt') -Force
+    Copy-Item -LiteralPath (Join-Path $SourceRoot 'docs\THIRD-PARTY-NOTICES.md') -Destination (Join-Path $Stage 'THIRD-PARTY-NOTICES.md') -Force
     Copy-Item -LiteralPath (Join-Path $SourceRoot 'VERSION') -Destination (Join-Path $Stage 'VERSION') -Force
 
     Get-ChildItem -LiteralPath $Stage -Directory -Recurse -Filter '__pycache__' -ErrorAction SilentlyContinue |
@@ -113,6 +114,9 @@ try {
     $ExtractedPython = Join-Path $Extracted 'runtime\python.exe'
     & $ExtractedPython -I (Join-Path $Extracted 'portable_launcher.py') --verify
     if ($LASTEXITCODE -ne 0) { throw 'Extracted portable ZIP verification failed.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $Extracted 'THIRD-PARTY-NOTICES.md'))) {
+        throw 'Portable package is missing third-party notices.'
+    }
 
     if (Test-Path -LiteralPath (Join-Path $Extracted 'KeystoneLens-Setup.exe')) {
         throw 'Portable package must not contain KeystoneLens-Setup.exe.'

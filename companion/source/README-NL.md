@@ -13,7 +13,7 @@ De overlay toont applicants pas zodra hun KL-score definitief is. Boven de tabel
 
 Settings bepaalt welke optionele kolommen zichtbaar zijn: Role, Class, Spec, Raider.IO en WCL. Wanneer Class of Role wordt verborgen, verdwijnt ook de gekoppelde filter. Raider.IO/WCL verbergen wijzigt alleen de presentatie; de KL-score blijft dezelfde 50/50-berekening gebruiken. De instellingen en actieve filters worden lokaal onthouden.
 
-De tabel past zich automatisch aan verborgen kolommen aan en toont een zichtbaar/totaal-aantal plus actieve-filterstatus.
+De tabel past zich automatisch aan verborgen kolommen aan en toont een zichtbaar/totaal-aantal plus actieve-filterstatus. Klik op een applicant-rij om het bestaande detailpaneel voor die speler te openen; ook een klik op het role-icoon wordt naar dezelfde rijselectie doorgestuurd.
 
 ## Score
 
@@ -51,7 +51,7 @@ Na `/kl stop` wordt de huidige Companion-lijst leeggemaakt. KeystoneLens schakel
 
 Iedere nieuw aangemaakte LFG-listing krijgt bovendien een nieuwe queue-generatie. Daardoor wordt bij delist/re-queue de oude applicantlijst direct vervangen en mogen vertraagde screenshots of online resultaten van de vorige queue niet terugkomen.
 
-Tijdens recruitment stopt de Bridge nu automatisch met nieuwe QR-screenshots zodra een normale party 5 spelers telt of zodra je een party-dungeon/actieve Mythic+ ingaat. Alleen een al lopende fysieke screenshot kan dan nog afronden; er wordt geen nieuwe capture meer gepland. Als de actieve LFG-listing eindigt, houdt alleen een resterende party-roster het transport niet meer kunstmatig actief.
+Tijdens recruitment stopt de Bridge automatisch met nieuwe QR-screenshots zodra een normale party 5 spelers telt of zodra je een party-dungeon/actieve Mythic+ ingaat. Alleen een al lopende fysieke screenshot kan dan nog afronden; er wordt geen nieuwe capture meer gepland. Als de actieve LFG-listing eindigt, houdt alleen een resterende party-roster het transport niet meer kunstmatig actief.
 
 De Companion toont standaard maximaal zes rijen tegelijk. Bij meer spelers verschijnt de verticale scrollbar. Rechtsonder zit daarnaast een kleine verticale resize-grip: sleep die omlaag om meer applicants tegelijk te tonen. De gekozen hoogte wordt lokaal onthouden.
 
@@ -59,14 +59,23 @@ Het kruisje in de Windows Companion stopt de lokale screenshotwatcher, Raider.IO
 
 ## Installatie
 
-### Companion
+### Companion — installer
 
-1. Start `KeystoneLens-Setup.exe`.
+1. Start `KeystoneLens-Setup-v0.12.8-Windows-x64.exe`.
 2. Kies vóór installatie hoe de Companion moet starten: handmatig, met Windows, of wanneer een echte WoW Retail `...\_retail_\Wow.exe` start. Een desktopsnelkoppeling is optioneel en staat standaard uit.
 3. Volg de KeystoneLens-installatievoortgang. De installer toont de actieve stap, echte downloadvoortgang voor de Python-runtime en een inklapbaar Details-overzicht. De runtime wordt per gebruiker in een eigen KeystoneLens-runtimepad geplaatst; packages worden met vastgezette SHA-256-hashes gecontroleerd.
 4. Na een geslaagde installatie kan KeystoneLens direct worden geopend. De Startmenu-snelkoppeling en Windows repair/uninstall-registratie worden automatisch ingericht.
 5. Open Settings en kies `_retail_\Screenshots`.
 6. Vul voor de volledige score optioneel je Warcraft Logs Client ID/Secret in.
+
+### Companion — portable
+
+1. Pak `KeystoneLens-Portable-0.12.8-Windows-x64.zip` volledig uit naar een normale map, bijvoorbeeld `C:\KeystoneLens`.
+2. Start `START-COMPANION.cmd`; voer geen Setup uit en installeer geen aparte Python.
+3. Open Settings en kies `_retail_\Screenshots`.
+4. Vul voor de volledige score optioneel je Warcraft Logs Client ID/Secret in.
+
+De portable route gebruikt dezelfde Companion-code, dezelfde canonieke Python-runtime en dezelfde hash-locked runtimepackages als de installerroute. De ZIP bevat ook `THIRD-PARTY-NOTICES.md`.
 
 ### WoW addon
 

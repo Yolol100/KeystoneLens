@@ -73,7 +73,7 @@ out = Path(sys.argv[2])
 version = sys.argv[3]
 fixed = (1980, 1, 1, 0, 0, 0)
 selected = [root / 'VERSION', root / 'README-NL.md', root / 'pytest.ini', root / 'conftest.py']
-for base in [root / 'app', root / 'addon', root / 'data-addon', root / 'docs', root / 'installer' / 'windows', root / 'scripts']:
+for base in [root / 'app', root / 'addon', root / 'data-addon', root / 'docs', root / 'installer' / 'windows', root / 'portable', root / 'scripts']:
     for path in base.rglob('*'):
         if not path.is_file():
             continue
