@@ -27,7 +27,7 @@ def test_portable_runtime_contract_is_canonical_and_hash_pinned():
     }
 
 
-def test_portable_builder_has_no_legacy_installer_dependency_and_removes_build_only_pip():
+def test_portable_builder_has_no_legacy_installer_dependency_and_strips_generated_build_artifacts():
     source = (ROOT / "portable/build-portable.ps1").read_text(encoding="utf-8")
     assert "runtime\\windows-x64.json" in source
     assert "runtime\\requirements-runtime.lock" in source
@@ -35,6 +35,14 @@ def test_portable_builder_has_no_legacy_installer_dependency_and_removes_build_o
     assert "installer\\windows" not in source
     assert "Remove-Item -LiteralPath (Join-Path $Runtime 'Scripts')" in source
     assert "Lib\\site-packages\\pip" in source
+    assert "Remove-Item -LiteralPath (Join-Path $Packages 'bin')" in source
+    assert "-Filter 'RECORD'" in source
+    assert "Remove-GeneratedPythonArtifacts -Root $Stage" in source
+    assert "& $Python -B -I" in source
+    assert "& $Python -B (Join-Path $SourceRoot 'scripts\\make_deterministic_zip.py')" in source
+    assert "generated __pycache__ directories" in source
+    assert "unused pip-generated console scripts" in source
+    assert "pip-generated RECORD metadata" in source
     for name in ("KeystoneLens-Setup.exe", "KeystoneLens.exe", "KeystoneLens-Uninstall.exe", "KeystoneLens-WoW-Watcher.exe"):
         assert name in source
 
