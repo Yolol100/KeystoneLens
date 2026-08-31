@@ -218,10 +218,10 @@ def validate_workflows(files: list[str]) -> None:
         fail("CodeQL must not retain obsolete installer-only Go analysis")
 
     release = read_text(".github/workflows/rebuild-keystonelens.yml")
-    for forbidden in ("KeystoneLens-Setup", "KEYSTONELENS_PFX", "sign-windows:", "setup-go"):
+    for forbidden in ("KEYSTONELENS_PFX", "sign-windows:", "setup-go", "companion/source/installer/"):
         if forbidden in release:
             fail(f"portable-only release workflow retained legacy installer surface: {forbidden}")
-    for marker in ("refs/tags/v", "portable-windows:", "Build portable package twice", "KeystoneLens-Portable-$version-Windows-x64.zip", "sbom-path:", "--predicate-type https://cyclonedx.org/bom", "--draft"):
+    for marker in ("refs/tags/v", "portable-windows:", "Build portable package twice", "KeystoneLens-Portable-$version-Windows-x64.zip", "KeystoneLens-Setup.exe", "sbom-path:", "--predicate-type https://cyclonedx.org/bom", "--draft"):
         if marker not in release:
             fail(f"portable-only release workflow missing: {marker}")
     validate_match = re.search(r"(?ms)^  validate:\n(.*?)(?=^  portable-windows:\n)", release)
