@@ -25,11 +25,12 @@
 - [x] Geen Windows register-, Start-menu- of administratorinstallatie.
 - [x] De officiële CPython 3.13.15 buildinput is vastgezet in `runtime/windows-x64.json` met SHA-256.
 - [x] Exacte runtime packages zijn hash-locked met `--require-hashes --no-deps`.
-- [x] Build-only pip command shims/package worden vóór packaging verwijderd.
+- [x] Build-only pip/runtime package-management shims, `packages/bin`, generated `RECORD`, `__pycache__` en `.pyc/.pyo` worden vóór packaging verwijderd.
+- [x] Verificatie/packaging gebruikt `-B`, zodat controles geen nieuwe bytecode in de stage kunnen terugschrijven.
 - [x] `python.exe`/`pythonw.exe` blijven als noodzakelijke upstream interpreterruntime in de portable map.
 - [x] Single-instance gedrag blijft behouden via `KeystoneLens.Companion.Singleton`.
-- [x] CI bouwt de portable ZIP tweemaal en vereist byte-identieke SHA-256.
-- [x] CI pakt dezelfde ZIP opnieuw uit en verifieert de runtime/imports uit de uitgepakte artifacttree.
+- [x] Twee onafhankelijke schone Windows runners bouwen elk één portable ZIP; alleen byte-identieke SHA-256 output gaat door.
+- [x] CI pakt daarna de canonieke ZIP opnieuw uit en verifieert runtime/imports én de afwezigheid van legacy/custom executables en generated build artifacts.
 - [x] Tagrelease bevat Bridge-, source- en portable-ZIP plus SHA-256 checksums en attestations; release wordt draft aangemaakt.
 
 ## CurseForge public-release gate
