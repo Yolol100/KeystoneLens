@@ -15,8 +15,8 @@ $OutputDir = (Resolve-Path $OutputDir).Path
 
 $InstallerSourcePath = Join-Path $SourceRoot 'installer\windows\bootstrap\installer.ps1'
 $InstallerSource = Get-Content -LiteralPath $InstallerSourcePath -Raw
-$PythonUrlMatch = [regex]::Match($InstallerSource, "(?m)^\$PythonUrl = '([^']+)'$")
-$PythonShaMatch = [regex]::Match($InstallerSource, "(?m)^\$PythonSha = '([0-9a-fA-F]{64})'$")
+$PythonUrlMatch = [regex]::Match($InstallerSource, '(?m)^\$PythonUrl = ''([^'']+)''$')
+$PythonShaMatch = [regex]::Match($InstallerSource, '(?m)^\$PythonSha = ''([0-9a-fA-F]{64})''$')
 if (-not $PythonUrlMatch.Success -or -not $PythonShaMatch.Success) {
     throw 'Could not read the canonical Python runtime URL/SHA from installer.ps1.'
 }
