@@ -18,7 +18,6 @@ on:
       - 'addon/KeystoneLensBridge/**'
       - 'companion/source/**'
       - 'companion/README.md'
-      - 'executable/README.md'
   pull_request:
     paths:
       - '.github/workflows/rebuild-keystonelens.yml'
@@ -31,7 +30,6 @@ on:
       - 'addon/KeystoneLensBridge/**'
       - 'companion/source/**'
       - 'companion/README.md'
-      - 'executable/README.md'
 
 permissions:
   contents: read
@@ -53,16 +51,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.5'
-          cache: false
+      - name: Read canonical runtime version
+        id: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 -c 'import json; print(json.load(open("companion/source/runtime/windows/python-runtime.json", encoding="utf-8"))["version"])')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13.15'
+          python-version: ${{ steps.runtime.outputs.version }}
 
       - name: Install Lua 5.1
         run: sudo apt-get update && sudo apt-get install -y lua5.1
@@ -71,8 +71,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile companion/source/scripts/audit_repository.py
+          python3 -m py_compile companion/source/scripts/audit_repository.py companion/source/scripts/audit_external_security.py
           python3 companion/source/scripts/audit_repository.py
+          python3 companion/source/scripts/audit_external_security.py
           git diff --check
 
       - name: Verify canonical release identity and tag parity
@@ -122,7 +123,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          source = Path('companion/source/installer/windows/requirements-runtime.lock')
+          source = Path('companion/source/runtime/windows/requirements-runtime.lock')
           output = Path('/tmp/keystonelens-runtime-test.txt')
           packages = []
           for raw in source.read_text(encoding='utf-8').splitlines():
@@ -144,7 +145,7 @@ jobs:
           set -euo pipefail
           cd companion/source
           python -m pytest -q
-          python -m compileall -q app/keystonelens_companion
+          python -m compileall -q app/keystonelens_companion portable/portable_launcher.py portable/make_portable_zip.py
 
       - name: Build release twice and prove determinism
         shell: bash
@@ -170,16 +171,6 @@ jobs:
           cp "companion/source/docs/RELEASE-NOTES-${VERSION}.md" "$OUT/RELEASE-NOTES-${VERSION}.md"
           cp companion/source/docs/SBOM.cdx.json "$OUT/SBOM.cdx.json"
 
-      - name: Stage exact validated Windows signing input
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -d companion/source/installer/windows/build/payload
-          rm -rf /tmp/keystonelens-signing-input
-          mkdir -p /tmp/keystonelens-signing-input
-          cp -a companion/source/installer/windows/build/payload /tmp/keystonelens-signing-input/payload
-
       - name: Upload verified core payload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -187,15 +178,6 @@ jobs:
           path: /tmp/keystonelens-release-core
           if-no-files-found: error
           retention-days: 14
-
-      - name: Upload exact Windows signing input
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: keystonelens-windows-signing-input-${{ github.sha }}
-          path: /tmp/keystonelens-signing-input
-          if-no-files-found: error
-          retention-days: 3
 
   attest-core:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -219,16 +201,13 @@ jobs:
         with:
           subject-path: dist/*
 
-  sign-windows:
+  build-portable:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: validate
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     steps:
       - name: Checkout exact tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -237,81 +216,22 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.5'
-          cache: false
-
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.13.15'
-
-      - name: Download exact validated Windows signing input
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: keystonelens-windows-signing-input-${{ github.sha }}
-          path: companion/source/installer/windows/build
-
-      - name: Fail closed when publisher signing secrets are unavailable
-        shell: pwsh
-        env:
-          PFX_BASE64: ${{ secrets.KEYSTONELENS_PFX_BASE64 }}
-          PFX_PASSWORD: ${{ secrets.KEYSTONELENS_PFX_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:PFX_BASE64)) { throw 'KEYSTONELENS_PFX_BASE64 is required for a public tag release.' }
-          if ([string]::IsNullOrWhiteSpace($env:PFX_PASSWORD)) { throw 'KEYSTONELENS_PFX_PASSWORD is required for a public tag release.' }
-          $pfx = Join-Path $env:RUNNER_TEMP 'keystonelens-publisher.pfx'
-          try {
-            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_BASE64))
-          } catch {
-            throw 'KEYSTONELENS_PFX_BASE64 is not valid base64.'
-          }
-          if ((Get-Item -LiteralPath $pfx).Length -le 0) { throw 'Decoded publisher PFX is empty.' }
-          "KEYSTONELENS_PFX_PATH=$pfx" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Locate Windows SDK SignTool
+      - name: Build exact portable Windows package
         shell: pwsh
         run: |
-          $root = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
-          $tool = Get-ChildItem -LiteralPath $root -Recurse -Filter signtool.exe -File |
-            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-          if (-not $tool) { throw 'signtool.exe x64 was not found in the Windows SDK.' }
-          $tool.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Authenticode-sign validated Windows payload and rebuild Setup
-        shell: pwsh
-        env:
-          KEYSTONELENS_PFX_PASSWORD: ${{ secrets.KEYSTONELENS_PFX_PASSWORD }}
-        run: |
-          & './companion/source/installer/windows/sign-release.ps1' -PfxPath $env:KEYSTONELENS_PFX_PATH
-          if ($LASTEXITCODE -ne 0) { throw 'Authenticode signing failed.' }
+          $out = Join-Path $env:RUNNER_TEMP 'portable-out'
+          ./companion/source/portable/build-portable.ps1 -OutputDir $out
           $version = (Get-Content -LiteralPath companion/source/VERSION -Raw).Trim()
           if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Tag $env:GITHUB_REF_NAME does not match VERSION $version" }
-          $source = Resolve-Path companion/source/installer/windows/build/KeystoneLens-Setup.exe
-          New-Item -ItemType Directory -Path signed-release -Force | Out-Null
-          $out = Join-Path (Resolve-Path signed-release) "KeystoneLens-Setup-v$version-Windows-x64.exe"
-          Copy-Item -LiteralPath $source -Destination $out -Force
-          & signtool.exe verify /pa /all /v $out
-          if ($LASTEXITCODE -ne 0) { throw 'Final Setup signature verification failed.' }
-          $signature = Get-AuthenticodeSignature -LiteralPath $out
-          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-            throw "Final Setup Authenticode status is $($signature.Status), expected Valid."
-          }
+          $zip = Join-Path $out "KeystoneLens-Portable-$version-Windows-x64.zip"
+          if (-not (Test-Path -LiteralPath $zip)) { throw 'Portable ZIP was not produced.' }
+          "PORTABLE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Attest signed Windows installer
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: signed-release/*
-
-      - name: Upload signed Windows installer
+      - name: Upload verified portable Windows package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: keystonelens-signed-windows-${{ github.sha }}
-          path: signed-release
+          name: keystonelens-portable-${{ github.sha }}
+          path: ${{ env.PORTABLE_ZIP }}
           if-no-files-found: error
           retention-days: 14
 
@@ -320,7 +240,7 @@ jobs:
     needs:
       - validate
       - attest-core
-      - sign-windows
+      - build-portable
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -342,10 +262,10 @@ jobs:
           name: keystonelens-release-core-${{ github.sha }}
           path: dist
 
-      - name: Download signed Windows installer
+      - name: Download verified portable Windows package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: keystonelens-signed-windows-${{ github.sha }}
+          name: keystonelens-portable-${{ github.sha }}
           path: dist
 
       - name: Verify final release payload and checksums
@@ -356,7 +276,7 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$VERSION"
           test -f "dist/KeystoneLensBridge-${VERSION}-CurseForge.zip"
           test -f "dist/KeystoneLens-Source-${VERSION}.zip"
-          test -f "dist/KeystoneLens-Setup-v${VERSION}-Windows-x64.exe"
+          test -f "dist/KeystoneLens-Portable-${VERSION}-Windows-x64.zip"
           test -f "dist/KeystoneLens-Audit-${VERSION}.md"
           test -f "dist/RELEASE-NOTES-${VERSION}.md"
           test -f dist/SBOM.cdx.json
@@ -364,6 +284,11 @@ jobs:
           (cd dist && sha256sum -c SHA256SUMS.txt)
           unzip -t "dist/KeystoneLensBridge-${VERSION}-CurseForge.zip" >/dev/null
           unzip -t "dist/KeystoneLens-Source-${VERSION}.zip" >/dev/null
+          unzip -t "dist/KeystoneLens-Portable-${VERSION}-Windows-x64.zip" >/dev/null
+          if unzip -Z1 "dist/KeystoneLens-Portable-${VERSION}-Windows-x64.zip" | grep -Ei '(^|/)(KeystoneLens-Setup|KeystoneLens|KeystoneLens-Uninstall|KeystoneLens-WoW-Watcher)\.exe$'; then
+            echo 'Portable ZIP contains a legacy KeystoneLens executable.' >&2
+            exit 1
+          fi
 
       - name: Attest final draft-release payload provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -375,7 +300,7 @@ jobs:
         with:
           subject-path: |
             dist/KeystoneLens-Source-*.zip
-            dist/KeystoneLens-Setup-v*-Windows-x64.exe
+            dist/KeystoneLens-Portable-*-Windows-x64.zip
           sbom-path: dist/SBOM.cdx.json
 
       - name: Verify final SLSA and CycloneDX attestations
@@ -384,7 +309,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for artifact in dist/KeystoneLens-Source-*.zip dist/KeystoneLens-Setup-v*-Windows-x64.exe; do
+          for artifact in dist/KeystoneLens-Source-*.zip dist/KeystoneLens-Portable-*-Windows-x64.zip; do
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY"
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
           done
@@ -405,4 +330,4 @@ jobs:
             --title "KeystoneLens ${VERSION}" \
             --notes-file "companion/source/docs/RELEASE-NOTES-${VERSION}.md" \
             --draft
-          echo 'Draft release created. Publish it only after the documented live WoW and clean-Windows acceptance gates pass.'
+          echo 'Draft release created. Publish it only after the documented live WoW and clean-Windows portable acceptance gates pass.'
