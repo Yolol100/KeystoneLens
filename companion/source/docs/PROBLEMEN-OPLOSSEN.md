@@ -1,5 +1,14 @@
 # Problemen oplossen — 0.12.8
 
+## Companion start niet
+
+- Pak de **hele** portable ZIP uit; start niet rechtstreeks vanuit de ZIP.
+- Laat `START-COMPANION.cmd`, `portable_launcher.py`, `runtime`, `app` en `packages` in dezelfde uitgepakte map staan.
+- Start alleen `START-COMPANION.cmd`; een KeystoneLens Setup of installed launcher is niet nodig.
+- Als de runtimecontrole mislukt, blijft het CMD-venster open en staat de technische fout in `%TEMP%\keystonelens-portable-check.txt`.
+- Als de grafische Companion daarna met een niet-nul fout stopt, verschijnt een foutmelding en wordt `portable-startup.log` naast de launcher geschreven; als die map niet schrijfbaar is wordt een tijdelijk log gebruikt.
+- Een tweede startpoging opent bewust geen tweede Companion. Sluit eerst de bestaande Companion als je opnieuw wilt starten.
+
 ## Geen spelers
 
 - Controleer of Bridge en Companion allebei 0.12.8 zijn.
@@ -11,7 +20,7 @@
 
 ## KL blijft op `…`
 
-RIO en/of WCL is nog aan het laden. 0.12.8 toont bewust geen tijdelijke halve eindscore.
+Raider.IO en/of Warcraft Logs is nog aan het laden. 0.12.8 toont bewust geen tijdelijke halve eindscore.
 
 ## Oude KL-regels verdwijnen na listing/spec-wijziging
 
@@ -28,17 +37,9 @@ Voor dit character/spec is geen bruikbare openbare ranking-evidence gevonden in 
 - controleer character-realm bij `realm fout`;
 - een individuele characterfout mag succesvolle resultaten uit dezelfde batch niet ongeldig maken.
 
-## WCL blijft lang op `loading...`
-
-0.12.8 gebruikt geen seriële recente-reportscan voor de KL-score. Applicants uit dezelfde regio/dungeon worden in batches van maximaal 10 bevraagd. Bij een koude cache kan de openbare API nog steeds tijd kosten, maar één trage applicant hoort de overige succesvolle batchresultaten niet te blokkeren.
-
 ## Niet alle applicants zichtbaar
 
 - Open de huidige applicantviewer en gebruik `/kl sync` voor een verse complete snapshot.
-- Normale queues met meer dan zes spelers horen volledig in de Companion te staan; zes is alleen de zichtbare viewportgrootte, niet de datalimiet.
-- Bij delist/re-queue wordt de oude queue-generatie gewist en start de nieuwe listing leeg. Vertraagde screenshots/resultaten van de vorige generatie worden genegeerd.
-- Zeer grote payloads gebruiken automatisch fragmenttransport; verwijder KeystoneLens-screenshots niet handmatig terwijl zo'n transport bezig is.
-
-## `/kl stop` staat nog uit
-
-Open de applicantviewer opnieuw of maak een nieuwe LFG-listing; auto-resume hoort dan in te schakelen. Anders `/kl on`.
+- Zes spelers is alleen de zichtbare viewportgrootte, niet de datalimiet.
+- Bij delist/re-queue wordt de oude queue-generatie gewist. Vertraagde screenshots/resultaten van de vorige generatie worden genegeerd.
+- Zeer grote payloads gebruiken fragmenttransport; verwijder KeystoneLens-screenshots niet handmatig terwijl zo'n transport bezig is.
