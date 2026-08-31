@@ -21,14 +21,3 @@ updates:
       companion-python:
         patterns:
           - '*'
-
-  - package-ecosystem: pip
-    directory: /companion/source/installer/windows
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    groups:
-      windows-runtime-python:
-        patterns:
-          - '*'
