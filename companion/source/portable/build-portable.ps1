@@ -120,6 +120,12 @@ try {
         Remove-Item -LiteralPath (Join-Path $Runtime $relative) -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    # The bundled runtime and certifi wheel can still contain upstream test-only
+    # data even when Python is installed with Include_test=0. KeystoneLens does
+    # not execute these suites at runtime, so keep them out of the user package.
+    Remove-Item -LiteralPath (Join-Path $Runtime 'Lib\idlelib\idle_test') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $Packages 'certifi\tests') -Recurse -Force -ErrorAction SilentlyContinue
+
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'START-COMPANION.cmd') -Destination (Join-Path $Stage 'START-COMPANION.cmd') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'portable_launcher.py') -Destination (Join-Path $Stage 'portable_launcher.py') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LEESMIJ.txt') -Destination (Join-Path $Stage 'LEESMIJ.txt') -Force
@@ -165,6 +171,11 @@ try {
         throw 'Portable runtime must contain exactly python.exe and pythonw.exe as executable files.'
     }
 
+    foreach ($relative in @('runtime\Lib\idlelib\idle_test', 'packages\certifi\tests')) {
+        if (Test-Path -LiteralPath (Join-Path $Extracted $relative)) {
+            throw "Portable package contains upstream test-only data: $relative"
+        }
+    }
     if (Get-ChildItem -LiteralPath $Extracted -Directory -Recurse -Filter '__pycache__' -ErrorAction SilentlyContinue | Select-Object -First 1) {
         throw 'Portable package contains generated __pycache__ directories.'
     }
