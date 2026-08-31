@@ -1,11 +1,13 @@
 # Snelstart 0.12.8
 
 1. Zorg dat Raider.IO actief en actueel is.
-2. Start de actuele KeystoneLens Companion-installer en kies `_retail_\Screenshots`.
-3. Stel Warcraft Logs Client ID + Secret in.
+2. Pak `KeystoneLens-Portable-0.12.8-Windows-x64.zip` volledig uit en dubbelklik `START-COMPANION.cmd`.
+3. Kies in de Companion `_retail_\Screenshots` en stel desgewenst Warcraft Logs Client ID + Secret in.
 4. Installeer `KeystoneLensBridge-0.12.8-CurseForge.zip` en doe `/reload`.
 5. Open je eigen Mythic+ Group Finder-listing.
 6. Gebruik de filters boven de lijst: stel een KL-scorebereik in en filter desgewenst op Class en Role. Alleen definitieve scores worden getoond.
+
+Er is geen KeystoneLens Setup, Windows-installatie, administratorrecht of aparte Python-installatie nodig. Start voor normaal gebruik alleen `START-COMPANION.cmd`.
 
 Commands:
 
