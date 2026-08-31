@@ -1,8 +1,10 @@
 Portable CI contract:
 - build on windows-2025;
-- stage the canonical Python 3.13.15 runtime locally;
-- install the hash-locked runtime packages into the portable folder;
-- verify the staged runtime;
-- create and re-extract the ZIP;
+- read one canonical Python runtime manifest from runtime/windows/python-runtime.json;
+- verify the downloaded runtime SHA-256 before staging;
+- install only the hash-locked runtime packages into the portable folder;
+- verify the staged runtime and the full Companion import;
+- create and re-extract the deterministic ZIP;
 - verify the extracted runtime again;
-- fail if the package contains KeystoneLens Setup/installed launcher executables.
+- require the portable single-instance guard and visible nonzero-startup failure path;
+- fail if the package contains KeystoneLens Setup/installed launcher/uninstaller/watcher executables.
