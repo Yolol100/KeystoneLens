@@ -43,6 +43,8 @@ def test_portable_builder_has_no_legacy_installer_dependency_and_strips_generate
     assert "generated __pycache__ directories" in source
     assert "unused pip-generated console scripts" in source
     assert "pip-generated RECORD metadata" in source
+    assert "'Lib\\ensurepip', 'Lib\\venv', 'tcl\\nmake'" in source
+    assert "Portable runtime must contain exactly python.exe and pythonw.exe as executable files." in source
     for name in ("KeystoneLens-Setup.exe", "KeystoneLens.exe", "KeystoneLens-Uninstall.exe", "KeystoneLens-WoW-Watcher.exe"):
         assert name in source
 

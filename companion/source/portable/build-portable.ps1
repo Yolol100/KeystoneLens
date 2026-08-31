@@ -113,6 +113,13 @@ try {
     Get-ChildItem -LiteralPath $Packages -File -Recurse -Filter 'RECORD' -ErrorAction SilentlyContinue |
         Remove-Item -Force -ErrorAction SilentlyContinue
 
+    # The Companion never creates virtual environments, bootstraps pip or
+    # builds Tcl/Tk. These upstream helper trees are not runtime dependencies
+    # and are the only extra .exe surfaces in the otherwise private interpreter.
+    foreach ($relative in @('Lib\ensurepip', 'Lib\venv', 'tcl\nmake')) {
+        Remove-Item -LiteralPath (Join-Path $Runtime $relative) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'START-COMPANION.cmd') -Destination (Join-Path $Stage 'START-COMPANION.cmd') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'portable_launcher.py') -Destination (Join-Path $Stage 'portable_launcher.py') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LEESMIJ.txt') -Destination (Join-Path $Stage 'LEESMIJ.txt') -Force
@@ -147,6 +154,15 @@ try {
     $Unexpected = Get-ChildItem -LiteralPath $Extracted -File -Recurse | Where-Object { $_.Name -in $Forbidden }
     if ($Unexpected) {
         throw ('Portable package contains obsolete KeystoneLens executable(s): ' + (($Unexpected | ForEach-Object Name) -join ', '))
+    }
+
+    $RuntimeExecutables = Get-ChildItem -LiteralPath (Join-Path $Extracted 'runtime') -File -Recurse -Filter '*.exe'
+    $UnexpectedRuntimeExecutables = $RuntimeExecutables | Where-Object { $_.Name -notin @('python.exe', 'pythonw.exe') }
+    if ($UnexpectedRuntimeExecutables) {
+        throw ('Portable runtime contains unnecessary executable(s): ' + (($UnexpectedRuntimeExecutables | ForEach-Object FullName) -join ', '))
+    }
+    if (($RuntimeExecutables | Measure-Object).Count -ne 2) {
+        throw 'Portable runtime must contain exactly python.exe and pythonw.exe as executable files.'
     }
 
     if (Get-ChildItem -LiteralPath $Extracted -Directory -Recurse -Filter '__pycache__' -ErrorAction SilentlyContinue | Select-Object -First 1) {
