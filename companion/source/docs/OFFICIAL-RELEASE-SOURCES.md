@@ -5,9 +5,8 @@ This file records the external platform and distribution contracts used by the r
 ## Blizzard / WoW
 
 - WoW UI Add-On Development Policy: https://eu.forums.blizzard.com/en/wow/t/wow-user-interface-add-on-development-policy/1642
-  - Addons must be free, visible/unobfuscated, must not advertise or solicit donations in-game, and must avoid negative game/realm/player impact.
 - Current Blizzard content-update notes: https://worldofwarcraft.blizzard.com/en-us/content-update-notes
-- The packaged Retail TOC keeps `120007, 120100` as transition compatibility. Final publication still verifies the actual installed client and the intended Retail build.
+- The packaged Retail TOC keeps `120007, 120100` as transition compatibility. Final publication still verifies the actual installed client and intended Retail build.
 
 ## CurseForge
 
@@ -15,9 +14,8 @@ This file records the external platform and distribution contracts used by the r
 - File release types / additional fields: https://support.curseforge.com/support/solutions/articles/9000197242
 - Project submission/file requirements: https://support.curseforge.com/support/solutions/articles/9000197241-creating-and-submitting-a-project
 - Multi-TOC guidance: https://support.curseforge.com/support/solutions/articles/9000209856-multi-toc-for-world-of-warcraft-addons
-- PackageMeta format: https://support.curseforge.com/support/solutions/articles/9000197952-preparing-the-packagemeta-file
 
-KeystoneLens uses a custom deterministic packager rather than relying on automatic CurseForge packaging. The generated Bridge archive is nevertheless checked against the same distribution contract: one `KeystoneLensBridge/` root, matching `KeystoneLensBridge.toc`, no executable payload and retained license notices.
+The generated Bridge archive is checked for one `KeystoneLensBridge/` root, matching TOC, no executable payload and retained license notices.
 
 ## GitHub / supply chain
 
@@ -25,23 +23,20 @@ KeystoneLens uses a custom deterministic packager rather than relying on automat
 - Artifact attestations: https://docs.github.com/en/actions/concepts/security/artifact-attestations
 - Supply-chain build hardening: https://docs.github.com/en/code-security/tutorials/implement-supply-chain-best-practices/securing-builds
 
-Actions used by the repository are pinned to immutable full commit SHAs. Public release assets are produced from an exact `v<VERSION>` tag, checksummed, attested and published as GitHub Release assets rather than committed back to `main`.
+Actions are pinned to immutable full commit SHAs. Public release assets are produced from an exact `v<VERSION>` tag, checksummed, attested and published as GitHub Release assets rather than committed to `main`.
 
-## Windows / Microsoft
+## Windows portable distribution
 
 - Windows application best practices: https://learn.microsoft.com/en-us/windows/apps/get-started/best-practices
-- Code signing options: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options
-- Authenticode RFC 3161/SHA-256 timestamping: https://learn.microsoft.com/en-us/windows/win32/seccrypto/time-stamping-authenticode-signatures
-- Setup UX guidance: https://learn.microsoft.com/en-us/windows/win32/uxguide/exper-setup
 
-Public Windows release requires a real publisher identity. The current release scripts use SHA-256 Authenticode, RFC 3161/SHA-256 timestamping and post-sign verification. Signing secrets must stay outside source control.
+KeystoneLens does not require a KeystoneLens Setup executable. The supported Companion package is a portable ZIP: extract the complete archive and start `START-COMPANION.cmd`. The repository keeps a native Windows CI gate for DPAPI/runtime behavior and a separate package gate that re-extracts the produced ZIP and executes its bundled runtime.
 
 ## Python runtime
 
 - Python 3.13 Windows guidance: https://docs.python.org/3.13/using/windows.html
 - Python 3.13.15 release: https://www.python.org/downloads/release/python-31315/
 
-KeystoneLens uses a dedicated per-user CPython runtime because the Companion UI requires Tcl/Tk and Setup requires pip; the embeddable distribution is deliberately not claimed or used.
+`runtime/windows/python-runtime.json` is the single source for the Windows runtime version, HTTPS URL and SHA-256. CI uses the official python.org installer only to stage files into the portable package; end users do not run that installer and Python is not registered system-wide.
 
 ## Python package provenance
 
@@ -53,4 +48,4 @@ KeystoneLens uses a dedicated per-user CPython runtime because the Companion UI 
 - urllib3 2.7.0: https://pypi.org/project/urllib3/2.7.0/
 - certifi 2026.7.22: https://pypi.org/project/certifi/2026.7.22/
 
-The exact Windows runtime lock remains the production dependency source; the weekly dependency-audit workflow scans both the declared application requirements and exact runtime package set.
+The exact Windows runtime lock remains the production dependency source; weekly dependency auditing scans both the declared application requirements and exact portable runtime package set.
