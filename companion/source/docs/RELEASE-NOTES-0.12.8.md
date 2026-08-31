@@ -22,6 +22,7 @@
 - The displayed KL Score remains exactly 50% Raider.IO and 50% Warcraft Logs. No third scoring pillar or hidden weighting was added.
 - The generated tooltip cache exports the existing `high` / `medium` / `low` score confidence and the Bridge displays that confidence plus a human-readable evidence age below the KL Score.
 - When both Raider.IO and Warcraft Logs contribute online evidence, `fetchedAt` uses the oldest positive contributing source timestamp. The existing maximum-age gate therefore cannot be made to look fresher by only one source being refreshed.
+- Applicant rows in the Companion overlay remain click-through to the existing detail panel; nested row widgets and role icons resolve to the same selection path, and a source regression contract now protects that wiring.
 - `KeystoneLensBridge` and `KeystoneLensCompanionData` share `## Group: KeystoneLensBridge`, matching WoW's group contract for related addons.
 - The published Bridge TOC, the dynamically generated Companion Data TOC and the checked-in Companion Data source TOC carry the same localized `Dungeons & Raids` category metadata.
 - The Bridge remains observation-only: these changes do not add automated applicant acceptance/decline, hidden Group Finder actions, input injection or process-memory access.
@@ -31,6 +32,9 @@
 - `companion/source/VERSION` is the canonical Companion, Bridge, data-addon, Windows metadata and artifact version source.
 - `sign-release.ps1` now reads that canonical version instead of carrying a stale hard-coded release number.
 - Generated ZIPs, checksums and Windows executables are no longer stored on `main`; tagged builds publish them as release assets.
+- The install-free portable Windows Companion uses the same canonical Python 3.13.15 distribution and hash-locked dependency set as the installed Companion, verifies the staged runtime and re-extracted ZIP, includes third-party notices and rejects installed KeystoneLens launcher/setup binaries from the portable package.
+- Portable build tooling is included in the reproducible source ZIP, and portable Windows validation is consolidated into the primary release workflow instead of a second duplicate workflow. Tagged draft releases therefore carry the verified portable ZIP alongside the Bridge, source and signed installer artifacts.
+- The repository audit treats `companion/source/portable/` as part of the Companion observation-only boundary and keeps the overlay/portable regression tests in its required verification surface.
 - Repository hygiene now has explicit `.gitignore`, `.gitattributes`, `.editorconfig`, release-output/secret checks and GitHub Actions dependency maintenance.
 - A repository audit rejects generated binaries, local build/cache output, common secret/key patterns, version drift, mutable/unpinned Actions and workflows that try to commit release artifacts back to `main`.
 - The audit also protects its own critical verification surface, rejects high-risk Actions triggers and direct untrusted pull-request metadata interpolation, and requires every checkout to set `persist-credentials: false`.
@@ -44,13 +48,14 @@
 - CodeQL, native Windows validation, dependency review and both dependency-audit workflows run independently of the primary release build where their path filters apply.
 - The WoW Bridge is also checked against Blizzard's published UI Add-On policy boundary for in-game advertising, premium, sponsorship and donation-solicitation behavior.
 - Public tag releases require `v<VERSION>` parity and fail closed unless the real publisher signing secrets are configured.
-- Windows public-release builds sign and RFC 3161 timestamp the three payload executables first, rebuild Setup with that signed payload, sign Setup and require `signtool verify /pa /tw /all /v` plus valid PowerShell Authenticode status and an actual timestamp certificate for the final binaries.
-- Final tagged assets receive SHA-256 checksums and GitHub artifact attestations. In addition, the existing CycloneDX 1.5 SBOM is bound to the final source ZIP and signed Windows installer with a dedicated `https://cyclonedx.org/bom` SBOM attestation, and both SLSA provenance and CycloneDX predicate are verified before a draft release can be created.
+- Windows public-release builds sign and RFC 3161 timestamp the three KeystoneLens payload executables first, rebuild Setup with that signed payload, sign Setup and require `signtool verify /pa /tw /all /v` plus valid PowerShell Authenticode status and an actual timestamp certificate for the final KeystoneLens-produced binaries.
+- Final tagged assets receive SHA-256 checksums and GitHub artifact attestations. The existing CycloneDX 1.5 SBOM is bound to the final source ZIP, portable Windows ZIP and signed Windows installer with a dedicated `https://cyclonedx.org/bom` SBOM attestation, and both SLSA provenance and CycloneDX predicate are verified before a draft release can be created.
 - `LICENSE-SCOPE.md` documents the existing Bridge/third-party license boundary without inventing a repository-wide Companion/installer license.
 
 ## Release gates still external
 
 - Native clean-Windows install/repair/uninstall and SmartScreen/AV behavior remain runtime acceptance gates. The acceptance scope also includes Unicode/long paths, permission failures, locked files, low disk space and reparse-point/symlink edge cases.
+- The portable Windows ZIP additionally requires a real clean-Windows extract/start/close check, Defender/SmartScreen observation and path/permission edge-case acceptance outside CI before public production acceptance.
 - A real publisher signing identity must be securely configured before the tag workflow can produce a public Windows release.
 - Live World of Warcraft Midnight Season 2 Group Finder/screenshot/tooltip validation remains a live-client acceptance gate. The expanded matrix covers secret LFG fields, active-dungeon and party-full pause behavior, screenshot success/failure and CVar restoration, representative resolutions/UI scales, Raider.IO/no-data behavior, Companion Data co-load, Season transitions and a repeated-capture soak.
 - Public Warcraft Logs Season-2 availability is source-verified and used by the runtime from 2026-08-20, but an authenticated first-live `/api/v2/client` parse matrix with the real release credentials remains a separate target-runtime acceptance gate.
