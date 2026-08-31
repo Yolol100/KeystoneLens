@@ -1,9 +1,9 @@
 # KeystoneLens Companion
 
-De actuele releaseversie staat in `companion/source/VERSION`. Die ene versiebron stuurt Companionmetadata, Bridge-/data-addonmetadata, Windows PE-metadata en versiegebonden artifactnamen.
+De actuele releaseversie staat in `companion/source/VERSION`. Die ene versiebron stuurt Companion-, Bridge-/data-addonmetadata en versiegebonden artifactnamen.
 
-De Companion-installer biedt installatie, repair/uninstall en startmodi voor handmatig starten, Windows-start en World of Warcraft Retail-start.
+De ondersteunde Windows Companion is portable: pak `KeystoneLens-Portable-<VERSION>-Windows-x64.zip` volledig uit en start `START-COMPANION.cmd`. Er is geen KeystoneLens Setup, Windows-installatie, administratorrecht of apart geinstalleerde Python nodig.
 
-De reproduceerbare bronbundel `KeystoneLens-Source-<VERSION>.zip` is een gegenereerd GitHub Release-artifact en wordt niet meer in `main` opgeslagen. De releaseworkflow bouwt de bronbundel tweemaal en accepteert hem alleen als de outputs byte-identiek zijn.
+De Windows runtimebron staat centraal in `companion/source/runtime/windows/python-runtime.json`; het exacte packagegraph staat hash-locked in `companion/source/runtime/windows/requirements-runtime.lock`.
 
-Voor een publieke Windows-release moet de uiteindelijke installer via de tag-releaseflow Authenticode-ondertekend en RFC 3161-getimestamped zijn; een ontbrekende signing identity laat de release bewust falen.
+De reproduceerbare bronbundel `KeystoneLens-Source-<VERSION>.zip` en de portable Windows ZIP zijn gegenereerde GitHub artifacts en worden niet in `main` opgeslagen. De releaseflow controleert deterministische core packaging en verifieert de portable ZIP na opnieuw uitpakken op Windows.
