@@ -8,6 +8,7 @@ from pathlib import Path
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SOURCE_ROOT.parents[1]
 APP_ROOT = SOURCE_ROOT / "app/keystonelens_companion"
+PORTABLE_LAUNCHER = SOURCE_ROOT / "portable/portable_launcher.py"
 VERSION = (SOURCE_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
@@ -31,7 +32,10 @@ def audit_companion_runtime() -> None:
         "unsafe archive extraction": re.compile(r"\.extractall\s*\(|\.extract\s*\("),
         "unsafe deserialization/dynamic execution": re.compile(r"\b(?:pickle\.(?:load|loads)|marshal\.loads|yaml\.load\s*\(|eval\s*\(|exec\s*\()"),
     }
-    for path in sorted(APP_ROOT.rglob("*.py")):
+    runtime_sources = sorted(APP_ROOT.rglob("*.py"))
+    if PORTABLE_LAUNCHER.is_file():
+        runtime_sources.append(PORTABLE_LAUNCHER)
+    for path in runtime_sources:
         source = path.read_text(encoding="utf-8")
         rel = path.relative_to(SOURCE_ROOT).as_posix()
         for label, pattern in forbidden.items():
@@ -117,7 +121,15 @@ def audit_portable_distribution() -> None:
     for marker in ('MUTEX_NAME = "KeystoneLens.Companion.Singleton"', 'CreateMutexW', 'RUNTIME_CONTRACT = ROOT / "RUNTIME.json"'):
         if marker not in launcher:
             fail(f"portable single-instance/runtime marker missing: {marker}")
-    for marker in ("runtime\\windows-x64.json", "runtime\\requirements-runtime.lock", "scripts\\make_deterministic_zip.py", "KeystoneLens-Setup.exe"):
+    for marker in (
+        "runtime\\windows-x64.json",
+        "runtime\\requirements-runtime.lock",
+        "scripts\\make_deterministic_zip.py",
+        "docs\\THIRD-PARTY-NOTICES.md",
+        "Remove-GeneratedPythonArtifacts -Root $Stage",
+        "Remove-Item -LiteralPath (Join-Path $Packages 'bin')",
+        "KeystoneLens-Setup.exe",
+    ):
         if marker not in builder:
             fail(f"portable builder contract missing: {marker}")
     if "installer\\windows" in builder or "KeystoneLens.exe' -Destination" in builder:
