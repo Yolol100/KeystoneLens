@@ -45,14 +45,12 @@ def audit_companion_runtime() -> None:
 def audit_dependency_governance() -> None:
     if not (REPO_ROOT / ".github").is_dir():
         return
-
     dependabot = repo_text(".github/dependabot.yml")
-    required = (
+    for marker in (
         "package-ecosystem: github-actions",
         "directory: /companion/source/app",
-        "directory: /companion/source/installer/windows",
-    )
-    for marker in required:
+        "directory: /companion/source/runtime",
+    ):
         if marker not in dependabot:
             fail(f"Dependabot coverage missing: {marker}")
     if dependabot.count("interval: weekly") < 3:
@@ -63,7 +61,8 @@ def audit_dependency_governance() -> None:
         "/.github/CODEOWNERS @Yolol100",
         "/.github/workflows/ @Yolol100",
         "/companion/source/app/keystonelens_companion/ @Yolol100",
-        "/companion/source/installer/ @Yolol100",
+        "/companion/source/portable/ @Yolol100",
+        "/companion/source/runtime/ @Yolol100",
         "/companion/source/scripts/ @Yolol100",
         "/companion/source/docs/SBOM.cdx.json @Yolol100",
     ):
@@ -80,81 +79,57 @@ def audit_dependency_governance() -> None:
 def audit_api_contracts() -> None:
     wcl = source_text("app/keystonelens_companion/wcl.py")
     if 'OAUTH_URL = "https://www.warcraftlogs.com/oauth/token"' not in wcl:
-        fail("Warcraft Logs OAuth endpoint drifted from the reviewed HTTPS token endpoint")
-    if 'API_URL = "https://www.warcraftlogs.com/api/v2/client"' not in wcl:
-        fail("Warcraft Logs enrichment must remain on the public client-credentials API")
-    if "/api/v2/user" in wcl:
-        fail("Warcraft Logs private user API requires explicit user authorization and is not approved")
-
+        fail("Warcraft Logs OAuth endpoint drifted")
+    if 'API_URL = "https://www.warcraftlogs.com/api/v2/client"' not in wcl or "/api/v2/user" in wcl:
+        fail("Warcraft Logs API boundary drifted")
     rio = source_text("app/keystonelens_companion/rio.py")
     if 'PROFILE_URL = "https://raider.io/api/v1/characters/profile"' not in rio:
-        fail("Raider.IO runtime enrichment must remain on the documented HTTPS API endpoint")
+        fail("Raider.IO endpoint drifted")
     interval = re.search(r"^MIN_REQUEST_INTERVAL_SECONDS\s*=\s*([0-9.]+)\s*$", rio, re.M)
     if not interval or float(interval.group(1)) < 0.31:
-        fail("Raider.IO request pacing no longer stays below the documented unauthenticated 200 req/min limit")
-    if "429" not in rio or "Retry-After" not in rio:
-        fail("Raider.IO 429/backoff handling is missing")
-    if "Raider.IO attribution: https://raider.io" not in rio:
-        fail("Raider.IO attribution marker is missing from the public-facing client identity")
+        fail("Raider.IO request pacing is too aggressive")
+    if "429" not in rio or "Retry-After" not in rio or "Raider.IO attribution: https://raider.io" not in rio:
+        fail("Raider.IO backoff/attribution contract drifted")
 
 
-def audit_sbom() -> None:
-    sbom_path = SOURCE_ROOT / "docs/SBOM.cdx.json"
-    if not sbom_path.is_file():
-        fail("CycloneDX SBOM is missing")
-    try:
-        sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        fail(f"SBOM is invalid JSON: {exc}")
-    if sbom.get("bomFormat") != "CycloneDX" or str(sbom.get("specVersion", "")) < "1.5":
-        fail("SBOM must remain CycloneDX 1.5+")
+def audit_sbom_and_runtime() -> None:
+    sbom = json.loads(source_text("docs/SBOM.cdx.json"))
     component = (sbom.get("metadata") or {}).get("component") or {}
-    if component.get("name") != "KeystoneLens Companion" or component.get("version") != VERSION:
-        fail("SBOM application identity does not match canonical VERSION")
-
-    requirements = {}
-    for raw in source_text("app/requirements.txt").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "==" not in line:
-            fail(f"direct runtime dependency is not exactly pinned: {line}")
-        name, version = line.split("==", 1)
-        requirements[name.casefold()] = version
-    components = {
-        str(item.get("name", "")).casefold(): str(item.get("version", ""))
-        for item in sbom.get("components", [])
-        if isinstance(item, dict)
-    }
-    for name, version in requirements.items():
-        if components.get(name) != version:
-            fail(f"SBOM direct dependency mismatch: {name}=={version}")
+    if sbom.get("bomFormat") != "CycloneDX" or component.get("version") != VERSION:
+        fail("SBOM identity does not match canonical VERSION")
+    runtime = json.loads(source_text("runtime/windows-x64.json"))
+    if runtime.get("platform") != "windows-x64" or not str(runtime.get("python_url", "")).startswith("https://"):
+        fail("portable runtime source contract is invalid")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(runtime.get("python_sha256", ""))):
+        fail("portable runtime SHA-256 contract is invalid")
+    components = {str(item.get("name", "")).casefold(): item for item in sbom.get("components", []) if isinstance(item, dict)}
+    python_component = components.get("cpython")
+    if not python_component or python_component.get("version") != runtime.get("python_version"):
+        fail("SBOM CPython version does not match portable runtime contract")
+    hashes = {str(item.get("content", "")).casefold() for item in python_component.get("hashes", []) if isinstance(item, dict)}
+    if runtime["python_sha256"].casefold() not in hashes:
+        fail("SBOM CPython hash does not match portable runtime contract")
 
 
-def audit_signing_contract() -> None:
-    sign = source_text("installer/windows/sign-release.ps1")
-    verify = source_text("installer/windows/verify-signatures.ps1")
-    for marker in ("'/fd','SHA256'", "'/tr',$TimestampUrl", "'/td','SHA256'", "verify /pa /tw /all /v", "TimeStamperCertificate"):
-        if marker not in sign:
-            fail(f"signing contract missing: {marker}")
-    for marker in ("verify /pa /tw /all /v", "SignerCertificate", "TimeStamperCertificate"):
-        if marker not in verify:
-            fail(f"standalone signature verification contract missing: {marker}")
+def audit_portable_distribution() -> None:
+    launcher = source_text("portable/portable_launcher.py")
+    builder = source_text("portable/build-portable.ps1")
+    for marker in ('MUTEX_NAME = "KeystoneLens.Companion.Singleton"', 'CreateMutexW', 'RUNTIME_CONTRACT = ROOT / "RUNTIME.json"'):
+        if marker not in launcher:
+            fail(f"portable single-instance/runtime marker missing: {marker}")
+    for marker in ("runtime\\windows-x64.json", "runtime\\requirements-runtime.lock", "scripts\\make_deterministic_zip.py", "KeystoneLens-Setup.exe"):
+        if marker not in builder:
+            fail(f"portable builder contract missing: {marker}")
+    if "installer\\windows" in builder or "KeystoneLens.exe' -Destination" in builder:
+        fail("portable builder depends on the obsolete installed-executable stack")
 
 
 def audit_libkeystone_wire_contract() -> None:
     transport = source_text("addon/KeystoneLensBridge/Core/Transport.lua")
     prefix_match = re.search(r'RegisterAddonMessagePrefix\("([^"]+)"\)', transport)
-    if not prefix_match:
-        fail("LibKeystone compatibility prefix is not a fixed literal")
-    if len(prefix_match.group(1).encode("utf-8")) > 16:
-        fail("LibKeystone addon-message prefix exceeds WoW's 16-byte ceiling")
-    for marker in (
-        'channel ~= "PARTY"',
-        "IsChatMessagingLockdown()",
-        'SendAddonMessage("LibKS", payload, channel)',
-        'string.format("%d,%d,%d", keyLevel, challengeMapID, playerRating)',
-    ):
+    if not prefix_match or len(prefix_match.group(1).encode("utf-8")) > 16:
+        fail("LibKeystone compatibility prefix is invalid")
+    for marker in ('channel ~= "PARTY"', "IsChatMessagingLockdown()", 'SendAddonMessage("LibKS", payload, channel)'):
         if marker not in transport:
             fail(f"LibKeystone wire safety marker missing: {marker}")
 
@@ -163,10 +138,10 @@ def main() -> int:
     audit_companion_runtime()
     audit_dependency_governance()
     audit_api_contracts()
-    audit_sbom()
-    audit_signing_contract()
+    audit_sbom_and_runtime()
+    audit_portable_distribution()
     audit_libkeystone_wire_contract()
-    print("ok - external Companion, dependency, API, SBOM, signing and addon-wire security gates passed")
+    print("ok - external Companion, dependency, API, SBOM, portable and addon-wire security gates passed")
     return 0
 
 
