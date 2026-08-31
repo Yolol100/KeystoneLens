@@ -27,11 +27,17 @@ REQUIRED_FILES = {
     ".github/workflows/dependency-review.yml",
     ".github/workflows/rebuild-keystonelens.yml",
     ".github/workflows/windows-platform.yml",
+    ".github/workflows/portable-companion.yml",
     "LICENSE-SCOPE.md",
     "README.md",
     "SECURITY.md",
     BRIDGE_TOC,
     "companion/source/VERSION",
+    "companion/source/runtime/windows/python-runtime.json",
+    "companion/source/runtime/windows/requirements-runtime.lock",
+    "companion/source/portable/START-COMPANION.cmd",
+    "companion/source/portable/build-portable.ps1",
+    "companion/source/portable/portable_launcher.py",
     "companion/source/docs/LIVE-WOW-ACCEPTATIE.md",
     "companion/source/docs/OFFICIAL-RELEASE-SOURCES.md",
     "companion/source/docs/UITGAVE-CHECKLIST.md",
@@ -47,10 +53,7 @@ REQUIRED_FILES = {
     "companion/source/app/tests/test_season2.py",
     "companion/source/app/tests/test_season_transition.py",
 }
-GENERATED_REPOSITORY_PATHS = {
-    "SHA256SUMS.txt",
-    "companion/source/installer/windows/bootstrap/payload.zip",
-}
+GENERATED_REPOSITORY_PATHS = {"SHA256SUMS.txt"}
 SECRET_PATTERNS = {
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
     "GitHub token": re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{40,})\b"),
@@ -65,21 +68,15 @@ FORBIDDEN_BRIDGE_CALLS = re.compile(
     r"UseAction|TargetUnit|FocusUnit|SetRaidTarget|SetBinding|SetOverrideBinding|RegisterStateDriver|"
     r"SendChatMessage|loadstring|RunScript)\s*\("
 )
-FORBIDDEN_BRIDGE_TOKENS = (
-    "COMBAT_LOG_EVENT_UNFILTERED",
-    "SecureActionButtonTemplate",
-    "SecureHandler",
-    "C_UnitAuras.",
-)
+FORBIDDEN_BRIDGE_TOKENS = ("COMBAT_LOG_EVENT_UNFILTERED", "SecureActionButtonTemplate", "SecureHandler", "C_UnitAuras.")
 FORBIDDEN_BRIDGE_POLICY = re.compile(
-    r"\b(?:patreon|paypal|donat(?:e|ion|ions)|premium|advertis(?:e|ement|ements|ing)|sponsor(?:ed|ship)?)\b",
-    re.I,
+    r"\b(?:patreon|paypal|donat(?:e|ion|ions)|premium|advertis(?:e|ement|ements|ing)|sponsor(?:ed|ship)?)\b", re.I
 )
 COMPANION_OBSERVATION_PREFIXES = (
     "companion/source/app/keystonelens_companion/",
-    "companion/source/installer/windows/",
-    "executable/",
+    "companion/source/portable/",
 )
+LEGACY_DISTRIBUTION_PREFIXES = ("companion/source/installer/", "executable/")
 FORBIDDEN_COMPANION_AUTOMATION_PATTERNS: dict[str, re.Pattern[str]] = {
     "input injection": re.compile(r"\b(?:SendInput|keybd_event|mouse_event)\b"),
     "process memory access": re.compile(r"\b(?:ReadProcessMemory|WriteProcessMemory)\b"),
@@ -87,11 +84,7 @@ FORBIDDEN_COMPANION_AUTOMATION_PATTERNS: dict[str, re.Pattern[str]] = {
     "global input hook": re.compile(r"\bSetWindowsHookEx(?:A|W)?\b"),
     "Python input automation dependency": re.compile(r"\b(?:pyautogui|pynput)\b"),
 }
-HIGH_RISK_WORKFLOW_TRIGGERS = (
-    "pull_request_target:",
-    "repository_dispatch:",
-    "workflow_run:",
-)
+HIGH_RISK_WORKFLOW_TRIGGERS = ("pull_request_target:", "repository_dispatch:", "workflow_run:")
 
 
 def fail(message: str) -> None:
@@ -150,11 +143,7 @@ def validate_bridge_runtime(file_set: set[str]) -> None:
     for rel in entries:
         if rel not in file_set:
             fail(f"Bridge TOC runtime file is missing or untracked: {rel}")
-
-    runtime_lua = {
-        rel for rel in file_set
-        if rel.startswith(BRIDGE_ROOT + "/") and rel.endswith(".lua")
-    }
+    runtime_lua = {rel for rel in file_set if rel.startswith(BRIDGE_ROOT + "/") and rel.endswith(".lua")}
     unlisted = sorted(runtime_lua - set(entries))
     if unlisted:
         fail("Bridge runtime Lua exists outside TOC inventory: " + ", ".join(unlisted))
@@ -179,37 +168,21 @@ def validate_bridge_runtime(file_set: set[str]) -> None:
     if len(addon_send_calls) != 1:
         fail(f"guarded LibKeystone addon-message surface drifted: expected 1 send call, got {len(addon_send_calls)}")
     for marker in (
-        "local function IsSecretValue(v)",
-        "SafeStr = function(v, secretFallback)",
-        "C_ChatInfo.InChatMessagingLockdown",
-        "CaptureAutoPauseReason",
-        "MaybeTriggerScreenshot",
-        'channel ~= "PARTY"',
-        'IsChatMessagingLockdown()',
-        'C_ChatInfo.RegisterAddonMessagePrefix',
+        "local function IsSecretValue(v)", "SafeStr = function(v, secretFallback)",
+        "C_ChatInfo.InChatMessagingLockdown", "CaptureAutoPauseReason", "MaybeTriggerScreenshot",
+        'channel ~= "PARTY"', 'IsChatMessagingLockdown()', 'C_ChatInfo.RegisterAddonMessagePrefix',
         'C_ChatInfo.SendAddonMessage("LibKS", payload, channel)',
     ):
         if marker not in transport:
             fail(f"Bridge secret/lockdown/capture/LibKeystone safety marker missing from Transport.lua: {marker}")
 
     capture_policy = read_text(f"{BRIDGE_ROOT}/Core/CapturePolicy.lua")
-    for marker in (
-        'return "dungeon-active"',
-        'return "party-full"',
-        "return sessionActive and hasRoster",
-    ):
+    for marker in ('return "dungeon-active"', 'return "party-full"', "return sessionActive and hasRoster"):
         if marker not in capture_policy:
             fail(f"Bridge recruitment auto-pause contract drifted: {marker}")
 
     screenshot = read_text(f"{BRIDGE_ROOT}/Core/ScreenshotController.lua")
-    for marker in (
-        "PHASE_WAITING",
-        "SCREENSHOT_SUCCEEDED",
-        "SCREENSHOT_FAILED",
-        "EnsureScreenshotCVars",
-        "RestoreScreenshotCVars",
-        'SetCVar("screenshotFormat", "png")',
-    ):
+    for marker in ("PHASE_WAITING", "SCREENSHOT_SUCCEEDED", "SCREENSHOT_FAILED", "EnsureScreenshotCVars", "RestoreScreenshotCVars", 'SetCVar("screenshotFormat", "png")'):
         if marker not in screenshot:
             fail(f"Bridge serialized screenshot/CVar lease contract drifted: {marker}")
 
@@ -225,10 +198,7 @@ def validate_companion_observation_boundary(files: list[str]) -> None:
         for label, pattern in FORBIDDEN_COMPANION_AUTOMATION_PATTERNS.items():
             match = pattern.search(source)
             if match:
-                fail(
-                    f"Companion must remain observation/recruitment-only; forbidden {label} "
-                    f"surface in {rel}: {match.group(0)}"
-                )
+                fail(f"Companion must remain observation/recruitment-only; forbidden {label} surface in {rel}: {match.group(0)}")
 
 
 def main() -> int:
@@ -236,14 +206,15 @@ def main() -> int:
     file_set = set(files)
     if not files:
         fail("repository contains no tracked files")
-
     missing = sorted(REQUIRED_FILES - file_set)
     if missing:
         fail("required repository metadata/audit surface is missing: " + ", ".join(missing))
-
     forbidden_generated = sorted(GENERATED_REPOSITORY_PATHS & file_set)
     if forbidden_generated:
         fail("generated release output must not be tracked: " + ", ".join(forbidden_generated))
+    legacy = sorted(rel for rel in files if rel.startswith(LEGACY_DISTRIBUTION_PREFIXES))
+    if legacy:
+        fail("legacy installer/executable source must not be tracked in the portable-only tree: " + ", ".join(legacy))
 
     seen: dict[str, str] = {}
     for rel in files:
@@ -271,17 +242,10 @@ def main() -> int:
 
     validate_bridge_runtime(file_set)
     validate_companion_observation_boundary(files)
-
     version = canonical_version()
     require_exact_line("companion/source/app/keystonelens_companion/__init__.py", f'__version__ = "{version}"')
     require_exact_line(BRIDGE_TOC, f"## Version: {version}")
     require_exact_line("companion/source/data-addon/KeystoneLensCompanionData/KeystoneLensCompanionData.toc", f"## Version: {version}")
-
-    sign_source = read_text("companion/source/installer/windows/sign-release.ps1")
-    if re.search(r"(?m)^\$Version\s*=\s*'\d+\.\d+\.\d+'\s*$", sign_source):
-        fail("sign-release.ps1 must read the canonical VERSION instead of hard-coding a release")
-    if "Get-Content -LiteralPath $VersionFile" not in sign_source:
-        fail("sign-release.ps1 is not bound to the canonical VERSION file")
 
     workflow_paths = [rel for rel in files if rel.startswith(".github/workflows/") and rel.endswith((".yml", ".yaml"))]
     for rel in workflow_paths:
@@ -301,30 +265,18 @@ def main() -> int:
         checkout_count = len(re.findall(r"uses:\s*actions/checkout@[0-9a-f]{40}\b", text))
         non_persisting_count = len(re.findall(r"persist-credentials:\s*false\b", text))
         if non_persisting_count != checkout_count:
-            fail(
-                f"every checkout must set persist-credentials: false: {rel} "
-                f"({non_persisting_count}/{checkout_count})"
-            )
+            fail(f"every checkout must set persist-credentials: false: {rel} ({non_persisting_count}/{checkout_count})")
         if re.search(r"(?:curl|wget)[^\n|]*\|\s*(?:ba)?sh\b", text):
             fail(f"download-to-shell pattern detected: {rel}")
         if re.search(r"runs-on:\s*(?:ubuntu|windows)-latest\b", text):
             fail(f"workflow runner must use an explicit supported OS image, not -latest: {rel}")
 
     dependency_review = read_text(".github/workflows/dependency-review.yml")
-    for marker in (
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
-        "fail-on-severity: moderate",
-        "runs-on: ubuntu-24.04",
-    ):
+    for marker in ("actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294", "fail-on-severity: moderate", "runs-on: ubuntu-24.04"):
         if marker not in dependency_review:
             fail(f"dependency-review workflow contract drifted: {marker}")
-
     codeql_workflow = read_text(".github/workflows/codeql.yml")
-    for marker in (
-        "concurrency:",
-        "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
-        "queries: security-extended",
-    ):
+    for marker in ("concurrency:", "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "queries: security-extended"):
         if marker not in codeql_workflow:
             fail(f"CodeQL workflow hardening contract drifted: {marker}")
 
@@ -333,46 +285,39 @@ def main() -> int:
         fail("release workflow must publish release assets instead of committing generated binaries to main")
     if "refs/tags/v" not in release_workflow:
         fail("release workflow must have an explicit tag-only public release gate")
-    if "KEYSTONELENS_PFX_BASE64" not in release_workflow or "KEYSTONELENS_PFX_PASSWORD" not in release_workflow:
-        fail("tag release must fail closed behind the configured signing secrets")
-    for marker in (
-        "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
-        "sbom-path:",
-        "--predicate-type https://cyclonedx.org/bom",
-    ):
+    for forbidden in ("KeystoneLens-Setup", "sign-windows:", "KEYSTONELENS_PFX_BASE64", "KEYSTONELENS_PFX_PASSWORD"):
+        if forbidden in release_workflow:
+            fail(f"portable-only release workflow still contains legacy installer/signing surface: {forbidden}")
+    for marker in ("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "build-portable:", "KeystoneLens-Portable-", "sbom-path:", "--predicate-type https://cyclonedx.org/bom"):
         if marker not in release_workflow:
-            fail(f"release workflow missing concurrency/SBOM hardening gate: {marker}")
+            fail(f"release workflow missing portable/concurrency/SBOM gate: {marker}")
 
     validate_match = re.search(r"(?ms)^  validate:\n(.*?)(?=^  attest-core:\n)", release_workflow)
     if not validate_match:
         fail("release workflow must separate unprivileged validation from tag-only core attestation")
-    validate_block = validate_match.group(1)
     for forbidden in ("id-token: write", "attestations: write", "artifact-metadata: write", "contents: write"):
-        if forbidden in validate_block:
+        if forbidden in validate_match.group(1):
             fail(f"ordinary validation job must remain read-only: {forbidden}")
 
-    attest_match = re.search(r"(?ms)^  attest-core:\n(.*?)(?=^  sign-windows:\n)", release_workflow)
+    attest_match = re.search(r"(?ms)^  attest-core:\n(.*?)(?=^  build-portable:\n)", release_workflow)
     if not attest_match:
         fail("release workflow missing isolated tag-only core attestation job")
-    attest_block = attest_match.group(1)
-    for marker in (
-        "if: startsWith(github.ref, 'refs/tags/v')",
-        "needs: validate",
-        "id-token: write",
-        "attestations: write",
-        "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
-    ):
-        if marker not in attest_block:
+    for marker in ("if: startsWith(github.ref, 'refs/tags/v')", "needs: validate", "id-token: write", "attestations: write", "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"):
+        if marker not in attest_match.group(1):
             fail(f"tag-only core attestation contract drifted: {marker}")
 
-    draft_match = re.search(r"(?ms)^  draft-release:\n(.*)$", release_workflow)
-    if not draft_match or "- attest-core" not in draft_match.group(1):
-        fail("draft release must depend on successful isolated core attestation")
+    portable_match = re.search(r"(?ms)^  build-portable:\n(.*?)(?=^  draft-release:\n)", release_workflow)
+    if not portable_match:
+        fail("release workflow missing isolated tag-only portable build job")
+    for marker in ("if: startsWith(github.ref, 'refs/tags/v')", "runs-on: windows-2025", "portable/build-portable.ps1", "keystonelens-portable-${{ github.sha }}"):
+        if marker not in portable_match.group(1):
+            fail(f"tag-only portable build contract drifted: {marker}")
 
-    print(
-        f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; "
-        "Bridge/Midnight/Blizzard-policy/Companion-observation/dependency-review/runner/least-privilege/SBOM workflow security enforced)"
-    )
+    draft_match = re.search(r"(?ms)^  draft-release:\n(.*)$", release_workflow)
+    if not draft_match or "- attest-core" not in draft_match.group(1) or "- build-portable" not in draft_match.group(1):
+        fail("draft release must depend on successful core attestation and portable build")
+
+    print(f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; Bridge/Midnight/Blizzard-policy/Companion-observation/portable-only/dependency-review/runner/least-privilege/SBOM workflow security enforced)")
     return 0
 
 
