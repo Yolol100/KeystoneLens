@@ -74,7 +74,37 @@ unzip -t "$SOURCE_ZIP" >/dev/null
 VERIFY_DIR="$(mktemp -d)"
 trap 'rm -rf "$VERIFY_DIR"' EXIT
 unzip -q "$SOURCE_ZIP" -d "$VERIFY_DIR"
-( cd "$VERIFY_DIR" && pytest -q >/dev/null && python3 -m compileall -q app/keystonelens_companion )
+
+# The repository-only policy/workflow tests already ran above against the exact
+# source tree. For the source artifact itself, prove that every packaged file is
+# byte-identical to the tested source selection and that no extra file appeared.
+python3 - "$ROOT" "$VERIFY_DIR" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1]); extracted = Path(sys.argv[2])
+selected = [root / 'VERSION', root / 'README-NL.md', root / 'pytest.ini', root / 'conftest.py']
+for base in [root / 'app', root / 'addon', root / 'data-addon', root / 'docs', root / 'portable', root / 'runtime', root / 'scripts']:
+    for path in base.rglob('*'):
+        if not path.is_file():
+            continue
+        if '__pycache__' in path.parts or path.suffix.lower() in {'.pyc', '.pyo', '.exe', '.zip', '.log'}:
+            continue
+        selected.append(path)
+expected = {path.relative_to(root).as_posix(): path for path in selected if path.exists()}
+actual = {
+    path.relative_to(extracted).as_posix(): path
+    for path in extracted.rglob('*') if path.is_file()
+}
+if set(expected) != set(actual):
+    missing = sorted(set(expected) - set(actual))
+    extra = sorted(set(actual) - set(expected))
+    raise SystemExit(f'source ZIP inventory mismatch; missing={missing}; extra={extra}')
+for rel, source in expected.items():
+    if source.read_bytes() != actual[rel].read_bytes():
+        raise SystemExit(f'source ZIP byte mismatch: {rel}')
+PY
+
+python3 -m compileall -q "$VERIFY_DIR/app/keystonelens_companion"
 grep -Fx "$VERSION" "$VERIFY_DIR/VERSION" >/dev/null
 grep -Fx "__version__ = \"$VERSION\"" "$VERIFY_DIR/app/keystonelens_companion/__init__.py" >/dev/null
 grep -Fx "## Version: $VERSION" "$VERIFY_DIR/addon/KeystoneLensBridge/KeystoneLensBridge.toc" >/dev/null
