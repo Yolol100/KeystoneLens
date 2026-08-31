@@ -1,37 +1,28 @@
-# KeystoneLens 0.12.8
+# KeystoneLens
 
-KeystoneLens combines a World of Warcraft Retail Bridge addon with a Windows desktop Companion. The repository keeps source and release engineering on `main`; generated ZIPs, checksums and Windows executables are release outputs rather than tracked source files.
+KeystoneLens bestaat uit twee runtime-onderdelen:
 
-## Repository layout
+1. `addon/KeystoneLensBridge/` — de WoW Retail addon die recruitmentdata veilig naar lokale screenshots transporteert en Companion-tooltipdata toont.
+2. `companion/source/app/` — de Windows Companion die screenshots decodeert en Raider.IO/Warcraft Logs-verrijking berekent.
 
-- `addon/KeystoneLensBridge/` - WoW addon source shipped to CurseForge
-- `companion/source/app/` - desktop Companion source and tests
-- `companion/source/data-addon/` - generated-data addon template/source
-- `companion/source/installer/windows/` - installed Windows bootstrap, launcher, uninstall and signing/build tooling
-- `companion/source/portable/` - install-free Windows Companion build and launcher tooling
-- `companion/source/docs/` - release, dependency, privacy, security and acceptance documentation
-- `companion/source/scripts/` - deterministic release and repository validation scripts
-- `companion/source/VERSION` - canonical release identity
+De Windows Companion wordt vanaf 0.12.8 als **portable ZIP** geleverd. Er is geen KeystoneLens Setup-programma, geen eigen KeystoneLens `.exe`, geen registerinstallatie, geen administratorinstallatie en geen apart geïnstalleerde Python nodig. Pak `KeystoneLens-Portable-<versie>-Windows-x64.zip` volledig uit en start `START-COMPANION.cmd`.
 
-See `LICENSE-SCOPE.md` for the licensing boundary. The Bridge has an explicit MIT license; no repository-wide Companion/installer license is implied.
+De portable ZIP bevat bewust een private upstream CPython-runtime (`runtime/python.exe` en `runtime/pythonw.exe`) omdat de Tkinter Companion Python nodig heeft. Dat zijn runtimebestanden, geen KeystoneLens-installer of custom launcher. De build-only pip-command shims worden vóór packaging verwijderd.
 
-## Release model
+## Repository-indeling
 
-Pull requests and `main` pushes run source, dependency, Lua, Python, deterministic packaging, native Windows validation and the portable Windows build. The portable build uses the same canonical Python runtime and hash-locked dependency set as the installed Companion and is verified again after its ZIP is extracted.
+- `addon/KeystoneLensBridge/` — canonieke Bridge-bron.
+- `companion/source/app/` — Companion runtime.
+- `companion/source/portable/` — portable launcher en Windows builder.
+- `companion/source/runtime/` — hash-locked runtime dependencies en het officiële Python runtimecontract.
+- `companion/source/data-addon/` — Companion Data-bron.
+- `companion/source/scripts/` — repository-audit en deterministische packaging.
+- `companion/source/docs/` — actuele release-, security- en testdocumentatie.
 
-Tagged `v<VERSION>` builds additionally require a real Authenticode signing identity for KeystoneLens-produced Windows executables. The draft GitHub Release contains the CurseForge Bridge ZIP, reproducible source ZIP, verified portable Windows ZIP, signed Windows Setup, release evidence, SHA-256 checksums and GitHub artifact attestations. Generated release files are never committed back to `main`.
+`companion/source/VERSION` is de canonieke productversie. Generated ZIPs, EXEs, checksums, caches en lokale runtime-output worden niet op `main` opgeslagen.
 
-Current source version: **0.12.8**.
+## Releasecontract
 
-## Public release gate
+CI valideert de bron, volledige regressies, native Windowsgedrag, dependency locks en deterministische packaging. De portable Windows ZIP wordt op een Windows-runner tweemaal onafhankelijk opgebouwd; beide SHA-256 hashes moeten gelijk zijn. Daarna wordt dezelfde ZIP opnieuw uitgepakt en met de gebundelde runtime geverifieerd.
 
-Source/CI readiness is not the same as public production acceptance. A public tag release requires:
-
-- tag/version parity and deterministic package validation;
-- valid SHA-256/RFC 3161 Authenticode signatures on KeystoneLens-produced public Windows executables;
-- final clean-Windows installer/repair/uninstall acceptance;
-- final clean-Windows portable extract/start and Defender/SmartScreen acceptance;
-- final live WoW Retail/Season 2 Bridge, tooltip and screenshot-transport acceptance;
-- final CurseForge metadata/version/release-type selection.
-
-The detailed release checklist is in `companion/source/docs/UITGAVE-CHECKLIST.md`.
+Een tag `v<VERSION>` kan alleen een draft GitHub Release maken met de gevalideerde Bridge-, source- en portable-ZIP plus checksums/attestations. Live WoW-, schone Windows-, CurseForge- en policyacceptatie blijven aparte publicatiegates.

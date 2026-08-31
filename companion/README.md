@@ -1,18 +1,15 @@
 # KeystoneLens Companion
 
-De actuele releaseversie staat in `companion/source/VERSION`. Die ene versiebron stuurt Companionmetadata, Bridge-/data-addonmetadata, Windows PE-metadata en versiegebonden artifactnamen.
+De actuele Companionbron staat onder `companion/source/`.
 
-## Windows-uitgaven
+Windowsdistributie is portable: pak `KeystoneLens-Portable-<versie>-Windows-x64.zip` volledig uit en dubbelklik `START-COMPANION.cmd`. Er is geen KeystoneLens Setup-executable, geen Windows-installatie en geen apart geïnstalleerde Python nodig.
 
-KeystoneLens heeft twee Windows-routes die dezelfde Companion-code en dezelfde vastgezette runtime-dependencies gebruiken:
+De portable package gebruikt:
 
-- **Installer:** `KeystoneLens-Setup-v<VERSION>-Windows-x64.exe`. Deze route ondersteunt installatie, repair/uninstall en starten handmatig, met Windows of wanneer World of Warcraft Retail start.
-- **Portable:** `KeystoneLens-Portable-<VERSION>-Windows-x64.zip`. Deze route vereist geen KeystoneLens-installatie, administratorrechten of apart geïnstalleerde Python; pak de volledige ZIP uit en start `START-COMPANION.cmd`.
+- `source/app/` voor de Companion;
+- `source/portable/` voor start/buildlogica;
+- `source/runtime/` voor de officiële CPython-bronhash en exact hash-locked Python packages.
 
-De portable build haalt de canonieke Python-runtime-URL en SHA-256 rechtstreeks uit de installerbron, installeert dezelfde hash-locked runtimepackages en verifieert zowel de staged map als de opnieuw uitgepakte ZIP. Third-party notices worden in de portable ZIP opgenomen.
+De private Python-runtime in de ZIP blijft noodzakelijk voor Tkinter en de QR/network dependencies. De oude custom launcher/uninstaller/WoW-watcher/Setup-stack is geen onderdeel meer van de huidige architectuur.
 
-De reproduceerbare bronbundel `KeystoneLens-Source-<VERSION>.zip` is een gegenereerd GitHub Release-artifact en wordt niet in `main` opgeslagen. De bronbundel bevat ook de portable buildtooling, zodat de huidige release-engineering compleet reproduceerbaar blijft.
-
-Voor een publieke Windows-release wordt de installer via de tag-releaseflow Authenticode-ondertekend en RFC 3161-getimestamped; ontbrekende signing identity laat die release bewust falen. De portable ZIP en de overige release-assets worden in dezelfde tagflow geverifieerd, gehasht en van GitHub attestations voorzien.
-
-Gebruik `SHA256SUMS.txt` naast de release-assets voor integriteitscontrole. Een public release vereist daarna nog de gedocumenteerde clean-Windows-acceptatie voor zowel de geïnstalleerde als portable route.
+Zie `source/README-NL.md`, `source/docs/SNELSTART.md` en `source/docs/UITGAVE-CHECKLIST.md` voor gebruik en releasegates.

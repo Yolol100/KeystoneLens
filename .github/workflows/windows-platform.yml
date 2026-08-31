@@ -7,13 +7,15 @@ on:
       - '.github/workflows/windows-platform.yml'
       - 'addon/**'
       - 'companion/source/app/**'
-      - 'companion/source/installer/windows/**'
+      - 'companion/source/portable/**'
+      - 'companion/source/runtime/**'
   pull_request:
     paths:
       - '.github/workflows/windows-platform.yml'
       - 'addon/**'
       - 'companion/source/app/**'
-      - 'companion/source/installer/windows/**'
+      - 'companion/source/portable/**'
+      - 'companion/source/runtime/**'
 
 permissions:
   contents: read
@@ -28,12 +30,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.5'
-          cache: false
-
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -43,7 +39,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check 'pytest==9.0.2'
-          python -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes --no-deps -r companion/source/installer/windows/requirements-runtime.lock
+          python -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes --no-deps -r companion/source/runtime/requirements-runtime.lock
 
       - name: Sync canonical Bridge test source
         shell: pwsh
@@ -52,9 +48,6 @@ jobs:
           if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
           New-Item -ItemType Directory -Path $target | Out-Null
           Copy-Item -LiteralPath 'addon/KeystoneLensBridge' -Destination $target -Recurse
-          if (-not (Test-Path -LiteralPath 'companion/source/addon/KeystoneLensBridge/KeystoneLensBridge.toc' -PathType Leaf)) {
-            throw 'Canonical Bridge test source sync failed.'
-          }
 
       - name: Run full companion suite on native Windows
         shell: pwsh
@@ -63,45 +56,15 @@ jobs:
           python -m pytest -q
           python -m compileall -q app/keystonelens_companion
 
-      - name: Parse PowerShell installer scripts
+      - name: Parse portable PowerShell builder
         shell: pwsh
         run: |
-          $files = @(
-            'companion/source/installer/windows/bootstrap/installer.ps1',
-            'companion/source/installer/windows/sign-release.ps1',
-            'companion/source/installer/windows/verify-signatures.ps1'
-          )
-          foreach ($file in $files) {
-            $tokens = $null
-            $errors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile(
-              (Resolve-Path $file), [ref]$tokens, [ref]$errors
-            ) | Out-Null
-            if ($errors.Count -gt 0) {
-              $errors | ForEach-Object { Write-Error "${file}: $($_.Message)" }
-              throw "PowerShell parser rejected $file"
-            }
-          }
-
-      - name: Vet native Windows Go entry points
-        shell: pwsh
-        env:
-          GO111MODULE: 'off'
-          CGO_ENABLED: '0'
-        run: |
-          go vet companion/source/installer/windows/launcher/main.go
-          go vet companion/source/installer/windows/uninstall/main.go
-          go vet companion/source/installer/windows/wowwatcher/main.go
-
-      - name: Build native Windows executables
-        shell: pwsh
-        env:
-          GO111MODULE: 'off'
-          CGO_ENABLED: '0'
-        run: |
-          go build -trimpath -ldflags '-H=windowsgui -s -w' -o "$env:RUNNER_TEMP\KeystoneLens.exe" companion/source/installer/windows/launcher/main.go
-          go build -trimpath -ldflags '-H=windowsgui -s -w' -o "$env:RUNNER_TEMP\KeystoneLens-Uninstall.exe" companion/source/installer/windows/uninstall/main.go
-          go build -trimpath -ldflags '-H=windowsgui -s -w' -o "$env:RUNNER_TEMP\KeystoneLens-WoW-Watcher.exe" companion/source/installer/windows/wowwatcher/main.go
-          Get-Item "$env:RUNNER_TEMP\KeystoneLens.exe", "$env:RUNNER_TEMP\KeystoneLens-Uninstall.exe", "$env:RUNNER_TEMP\KeystoneLens-WoW-Watcher.exe" | ForEach-Object {
-            if ($_.Length -le 0) { throw "Empty executable: $($_.FullName)" }
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'companion/source/portable/build-portable.ps1'), [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'PowerShell parser rejected the portable builder.'
           }

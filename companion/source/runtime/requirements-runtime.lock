@@ -1,5 +1,5 @@
-# KeystoneLens Windows x64 / CPython 3.13 deterministic runtime lock.
-# Every package is explicit because installer uses --no-deps --require-hashes.
+# KeystoneLens portable Windows x64 / CPython 3.13 deterministic runtime lock.
+# Every package is explicit because the portable builder uses --no-deps --require-hashes.
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
 Pillow==12.3.0 \
