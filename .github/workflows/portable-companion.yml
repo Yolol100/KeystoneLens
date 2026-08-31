@@ -9,18 +9,14 @@ on:
       - '.github/workflows/portable-companion.yml'
       - 'companion/source/app/**'
       - 'companion/source/portable/**'
-      - 'companion/source/installer/windows/requirements-runtime.lock'
-      - 'companion/source/installer/windows/bootstrap/installer.ps1'
-      - 'companion/source/installer/windows/make_payload_zip.py'
+      - 'companion/source/runtime/windows/**'
       - 'companion/source/VERSION'
   pull_request:
     paths:
       - '.github/workflows/portable-companion.yml'
       - 'companion/source/app/**'
       - 'companion/source/portable/**'
-      - 'companion/source/installer/windows/requirements-runtime.lock'
-      - 'companion/source/installer/windows/bootstrap/installer.ps1'
-      - 'companion/source/installer/windows/make_payload_zip.py'
+      - 'companion/source/runtime/windows/**'
       - 'companion/source/VERSION'
 
 permissions:
@@ -50,20 +46,30 @@ jobs:
           $zip = Join-Path $out "KeystoneLens-Portable-$version-Windows-x64.zip"
           if (-not (Test-Path -LiteralPath $zip)) { throw 'Portable ZIP was not produced.' }
           "PORTABLE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PORTABLE_NAME=KeystoneLens-Portable-$version-Windows-x64.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify portable archive contract
         shell: pwsh
         run: |
           $verify = Join-Path $env:RUNNER_TEMP 'portable-contract'
           Expand-Archive -LiteralPath $env:PORTABLE_ZIP -DestinationPath $verify -Force
-          foreach ($required in @('START-COMPANION.cmd','portable_launcher.py','VERSION','runtime\python.exe','runtime\pythonw.exe','app\keystonelens_companion\__main__.py')) {
+          foreach ($required in @(
+            'START-COMPANION.cmd',
+            'portable_launcher.py',
+            'VERSION',
+            'runtime\python.exe',
+            'runtime\pythonw.exe',
+            'runtime\python-version.txt',
+            'app\keystonelens_companion\__main__.py'
+          )) {
             if (-not (Test-Path -LiteralPath (Join-Path $verify $required))) { throw "Portable package missing: $required" }
           }
-          foreach ($forbidden in @('KeystoneLens-Setup.exe','KeystoneLens.exe','KeystoneLens-Uninstall.exe','KeystoneLens-WoW-Watcher.exe')) {
-            if (Test-Path -LiteralPath (Join-Path $verify $forbidden)) { throw "Portable package unexpectedly contains: $forbidden" }
-          }
-          & (Join-Path $verify 'runtime\python.exe') -I (Join-Path $verify 'portable_launcher.py') --verify
+          $forbidden = @('KeystoneLens-Setup.exe','KeystoneLens.exe','KeystoneLens-Uninstall.exe','KeystoneLens-WoW-Watcher.exe')
+          $bad = Get-ChildItem -LiteralPath $verify -Recurse -File | Where-Object { $_.Name -in $forbidden }
+          if ($bad) { throw "Portable package contains legacy executables: $($bad.FullName -join ', ')" }
+          $launcher = Get-Content -LiteralPath (Join-Path $verify 'portable_launcher.py') -Raw
+          if ($launcher -notmatch 'KeystoneLens\.Companion\.Singleton') { throw 'Portable single-instance guard is missing.' }
+          if ($launcher -notmatch 'except SystemExit as exc') { throw 'Portable nonzero startup failure handling is missing.' }
+          & (Join-Path $verify 'runtime\python.exe') -B -I (Join-Path $verify 'portable_launcher.py') --verify
           if ($LASTEXITCODE -ne 0) { throw 'Portable archive runtime contract failed.' }
           Get-FileHash -Algorithm SHA256 -LiteralPath $env:PORTABLE_ZIP
 
