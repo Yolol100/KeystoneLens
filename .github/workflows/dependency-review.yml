@@ -4,8 +4,8 @@ on:
   pull_request:
     paths:
       - 'companion/source/app/requirements.txt'
-      - 'companion/source/installer/windows/requirements-runtime.txt'
-      - 'companion/source/installer/windows/requirements-runtime.lock'
+      - 'companion/source/runtime/windows/python-runtime.json'
+      - 'companion/source/runtime/windows/requirements-runtime.lock'
       - 'companion/source/docs/SBOM.cdx.json'
       - '.github/dependabot.yml'
       - '.github/workflows/dependency-review.yml'
