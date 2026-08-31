@@ -48,10 +48,13 @@ def test_portable_launcher_preserves_single_instance_and_runtime_readback():
     assert "subprocess" not in source
 
 
-def test_portable_workflow_builds_twice_and_forbids_custom_executables():
+def test_portable_workflow_builds_on_independent_runners_and_forbids_custom_executables():
     source = (REPO_ROOT / ".github/workflows/portable-companion.yml").read_text(encoding="utf-8")
-    assert "Build twice and prove portable determinism" in source
-    assert "Portable build is not deterministic" in source
+    assert "portable-build:" in source
+    assert "round: [a, b]" in source
+    assert "Build independently on clean Windows runner" in source
+    assert "Compare independent portable builds" in source
+    assert "Portable builds are not byte-identical" in source
     assert "runtime\\Scripts\\pip.exe" in source
     for name in ("KeystoneLens-Setup.exe", "KeystoneLens.exe", "KeystoneLens-Uninstall.exe", "KeystoneLens-WoW-Watcher.exe"):
         assert name in source
@@ -64,8 +67,10 @@ def test_legacy_installed_executable_stack_is_removed():
 
 def test_release_workflow_publishes_portable_not_setup():
     source = (REPO_ROOT / ".github/workflows/rebuild-keystonelens.yml").read_text(encoding="utf-8")
+    assert "portable-build:" in source
     assert "portable-windows:" in source
-    assert "Build portable package twice" in source
+    assert "round: [a, b]" in source
+    assert "Compare independent tagged portable builds" in source
     assert "KeystoneLens-Portable-$version-Windows-x64.zip" in source
     assert "KeystoneLens-Setup.exe" in source  # rejection marker, not a published asset
     assert "companion/source/installer/" not in source
