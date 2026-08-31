@@ -276,19 +276,22 @@ def main() -> int:
         if marker not in dependency_review:
             fail(f"dependency-review workflow contract drifted: {marker}")
     codeql_workflow = read_text(".github/workflows/codeql.yml")
-    for marker in ("concurrency:", "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "queries: security-extended"):
+    for marker in ("concurrency:", "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "languages: python", "queries: security-extended"):
         if marker not in codeql_workflow:
             fail(f"CodeQL workflow hardening contract drifted: {marker}")
+    for obsolete in ("language: go", "actions/setup-go@", "installer/windows/build.sh"):
+        if obsolete in codeql_workflow:
+            fail(f"CodeQL still targets removed native Go installer source: {obsolete}")
 
     release_workflow = read_text(".github/workflows/rebuild-keystonelens.yml")
     if "git push origin" in release_workflow or "git commit -m" in release_workflow:
         fail("release workflow must publish release assets instead of committing generated binaries to main")
     if "refs/tags/v" not in release_workflow:
         fail("release workflow must have an explicit tag-only public release gate")
-    for forbidden in ("KeystoneLens-Setup", "sign-windows:", "KEYSTONELENS_PFX_BASE64", "KEYSTONELENS_PFX_PASSWORD"):
+    for forbidden in ("sign-windows:", "KEYSTONELENS_PFX_BASE64", "KEYSTONELENS_PFX_PASSWORD"):
         if forbidden in release_workflow:
-            fail(f"portable-only release workflow still contains legacy installer/signing surface: {forbidden}")
-    for marker in ("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "build-portable:", "KeystoneLens-Portable-", "sbom-path:", "--predicate-type https://cyclonedx.org/bom"):
+            fail(f"portable-only release workflow still contains legacy signing surface: {forbidden}")
+    for marker in ("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "build-portable:", "KeystoneLens-Portable-", "Portable ZIP contains a legacy KeystoneLens executable.", "sbom-path:", "--predicate-type https://cyclonedx.org/bom"):
         if marker not in release_workflow:
             fail(f"release workflow missing portable/concurrency/SBOM gate: {marker}")
 
