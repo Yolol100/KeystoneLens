@@ -19,7 +19,7 @@ if not exist "%PYTHONW%" (
   exit /b 1
 )
 
-"%PYTHON%" -I "%ROOT%portable_launcher.py" --verify > "%CHECKLOG%" 2>&1
+"%PYTHON%" -B -I "%ROOT%portable_launcher.py" --verify > "%CHECKLOG%" 2>&1
 if errorlevel 1 (
   echo KeystoneLens Portable kon de lokale runtime niet laden.
   echo.
@@ -31,5 +31,5 @@ if errorlevel 1 (
 )
 
 del /q "%CHECKLOG%" >nul 2>&1
-start "" /D "%ROOT%" "%PYTHONW%" -I "%ROOT%portable_launcher.py"
+start "" /D "%ROOT%" "%PYTHONW%" -B -I "%ROOT%portable_launcher.py"
 exit /b 0
