@@ -5,7 +5,7 @@ on:
     branches:
       - settings-design-polish-20260831
     paths:
-      - .github/settings-design.patch
+      - .github/apply-settings-design.py
       - .github/workflows/apply-settings-design-patch.yml
 
 permissions:
@@ -25,10 +25,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git apply --check .github/settings-design.patch
-          git apply .github/settings-design.patch
+          python .github/apply-settings-design.py
           git diff --check
-          git diff --exit-code -- .github/settings-design.patch .github/workflows/apply-settings-design-patch.yml
           git diff -- companion/source/app/keystonelens_companion/ui.py
 
       - name: Commit patched source
