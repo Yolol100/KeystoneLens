@@ -18,6 +18,7 @@ BINARY_SOURCE_SUFFIXES = {".ico", ".tga", ".png", ".jpg", ".jpeg", ".gif"}
 FORBIDDEN_TRACKED_SUFFIXES = {".zip", ".exe", ".pfx", ".p12", ".pem", ".key", ".pyc", ".pyo", ".log", ".tmp", ".bak", ".orig", ".rej"}
 FORBIDDEN_PATH_PARTS = {"__pycache__", ".pytest_cache", ".venv", "venv", ".idea", ".vscode", "build", "release"}
 FORBIDDEN_LEGACY_PREFIXES = ("companion/source/installer/", "executable/")
+GENERATED_REPOSITORY_PATHS = {"SHA256SUMS.txt"}
 REQUIRED_FILES = {
     ".editorconfig", ".gitattributes", ".gitignore", ".github/CODEOWNERS", ".github/dependabot.yml",
     ".github/workflows/codeql.yml", ".github/workflows/dependency-audit-pr.yml",
@@ -47,6 +48,10 @@ SECRET_PATTERNS = {
 FORBIDDEN_BRIDGE_CALLS = re.compile(r"\b(?:CombatLogGetCurrentEventInfo|UnitAura|UnitHealth|UnitHealthMax|UnitPower|UnitPowerMax|UnitCastingInfo|UnitChannelInfo|UnitPosition|GetPlayerMapPosition|CastSpellByID|CastSpellByName|UseAction|TargetUnit|FocusUnit|SetRaidTarget|SetBinding|SetOverrideBinding|RegisterStateDriver|SendChatMessage|loadstring|RunScript)\s*\(")
 FORBIDDEN_BRIDGE_TOKENS = ("COMBAT_LOG_EVENT_UNFILTERED", "SecureActionButtonTemplate", "SecureHandler", "C_UnitAuras.")
 FORBIDDEN_BRIDGE_POLICY = re.compile(r"\b(?:patreon|paypal|donat(?:e|ion|ions)|premium|advertis(?:e|ement|ements|ing)|sponsor(?:ed|ship)?)\b", re.I)
+COMPANION_OBSERVATION_PREFIXES = (
+    "companion/source/app/keystonelens_companion/",
+    "companion/source/portable/",
+)
 FORBIDDEN_COMPANION_AUTOMATION_PATTERNS = {
     "input injection": re.compile(r"\b(?:SendInput|keybd_event|mouse_event)\b"),
     "process memory access": re.compile(r"\b(?:ReadProcessMemory|WriteProcessMemory)\b"),
@@ -135,6 +140,23 @@ def validate_bridge_runtime(file_set: set[str]) -> None:
     for marker in ("PHASE_WAITING", "SCREENSHOT_SUCCEEDED", "SCREENSHOT_FAILED", "EnsureScreenshotCVars", "RestoreScreenshotCVars", 'SetCVar("screenshotFormat", "png")'):
         if marker not in screenshot:
             fail(f"Bridge screenshot contract drifted: {marker}")
+
+
+def validate_companion_observation_boundary(files: list[str]) -> None:
+    for rel in files:
+        if not rel.startswith(COMPANION_OBSERVATION_PREFIXES):
+            continue
+        path = PurePosixPath(rel)
+        if path.suffix.lower() in BINARY_SOURCE_SUFFIXES:
+            continue
+        source = read_text(rel)
+        for label, pattern in FORBIDDEN_COMPANION_AUTOMATION_PATTERNS.items():
+            match = pattern.search(source)
+            if match:
+                fail(
+                    f"Companion must remain observation/recruitment-only; forbidden {label} "
+                    f"surface in {rel}: {match.group(0)}"
+                )
 
 
 def validate_runtime_contract() -> None:
@@ -234,12 +256,17 @@ def validate_workflows(files: list[str]) -> None:
 
 def main() -> int:
     files = git_files(); file_set = set(files)
+    if not files:
+        fail("repository contains no tracked files")
     missing = sorted(REQUIRED_FILES - file_set)
     if missing:
         fail("required repository surface missing: " + ", ".join(missing))
     legacy = sorted(rel for rel in files if rel.startswith(FORBIDDEN_LEGACY_PREFIXES))
     if legacy:
         fail("obsolete installed-executable source remains tracked: " + ", ".join(legacy))
+    generated = sorted(GENERATED_REPOSITORY_PATHS & file_set)
+    if generated:
+        fail("generated release output must not be tracked: " + ", ".join(generated))
 
     seen = {}
     for rel in files:
@@ -261,12 +288,9 @@ def main() -> int:
             for label, pattern in SECRET_PATTERNS.items():
                 if pattern.search(text):
                     fail(f"possible {label} committed in {rel}")
-            if rel.startswith(("companion/source/app/keystonelens_companion/", "companion/source/portable/")):
-                for label, pattern in FORBIDDEN_COMPANION_AUTOMATION_PATTERNS.items():
-                    if pattern.search(text):
-                        fail(f"Companion forbidden {label} surface in {rel}")
 
     validate_bridge_runtime(file_set)
+    validate_companion_observation_boundary(files)
     validate_runtime_contract()
     validate_portable_contract()
     validate_workflows(files)
@@ -280,7 +304,7 @@ def main() -> int:
         if line not in read_text(rel).splitlines():
             fail(f"release identity mismatch in {rel}: {line}")
 
-    print(f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; portable-only Windows distribution enforced)")
+    print(f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; portable-only Windows distribution and observation-only boundary enforced)")
     return 0
 
 
