@@ -16,6 +16,8 @@ Runtime packages are installed with `--only-binary=:all: --require-hashes --no-d
 | urllib3 | 2.7.0 | Requests dependency | MIT |
 | certifi | 2026.7.22 | CA bundle | MPL-2.0 |
 
-The builder needs pip only while assembling `packages/`. Before the ZIP is created it removes the runtime `Scripts` directory and installed pip package metadata, so package-management command executables are not part of the delivered runtime. `python.exe` and `pythonw.exe` remain because they are the required upstream interpreter/runtime entry points used by `START-COMPANION.cmd`.
+The builder needs pip only while assembling `packages/`. Before the ZIP is created it removes the runtime `Scripts` directory and installed pip package, pip-generated `packages/bin` console shims, generated `RECORD` metadata, all `__pycache__` directories and `.pyc/.pyo` bytecode. These files are not needed by KeystoneLens at runtime and were a source of path/build-specific bytes across clean Windows builders.
+
+All verification/packaging Python invocations use `-B` so validation cannot recreate bytecode in the staged tree. `python.exe` and `pythonw.exe` remain because they are the required upstream interpreter/runtime entry points used by `START-COMPANION.cmd`.
 
 `docs/SBOM.cdx.json` records the same CPython source hash and runtime dependency inventory in CycloneDX form.
