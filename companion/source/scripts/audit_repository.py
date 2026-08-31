@@ -200,7 +200,7 @@ def validate_portable_contract() -> None:
     for marker in ('MUTEX_NAME = "KeystoneLens.Companion.Singleton"', "CreateMutexW", 'RUNTIME_CONTRACT = ROOT / "RUNTIME.json"'):
         if marker not in launcher:
             fail(f"portable launcher contract missing: {marker}")
-    for marker in ("Build twice and prove portable determinism", "Portable build is not deterministic", "KeystoneLens-Setup.exe", "runtime\\Scripts\\pip.exe"):
+    for marker in ("portable-build:", "round: [a, b]", "Build independently on clean Windows runner", "Compare independent portable builds", "Portable builds are not byte-identical", "KeystoneLens-Setup.exe", "runtime\\Scripts\\pip.exe"):
         if marker not in workflow:
             fail(f"portable workflow gate missing: {marker}")
 
@@ -243,10 +243,10 @@ def validate_workflows(files: list[str]) -> None:
     for forbidden in ("KEYSTONELENS_PFX", "sign-windows:", "setup-go", "companion/source/installer/"):
         if forbidden in release:
             fail(f"portable-only release workflow retained legacy installer surface: {forbidden}")
-    for marker in ("refs/tags/v", "portable-windows:", "Build portable package twice", "KeystoneLens-Portable-$version-Windows-x64.zip", "KeystoneLens-Setup.exe", "sbom-path:", "--predicate-type https://cyclonedx.org/bom", "--draft"):
+    for marker in ("refs/tags/v", "portable-build:", "portable-windows:", "round: [a, b]", "Compare independent tagged portable builds", "KeystoneLens-Portable-$version-Windows-x64.zip", "KeystoneLens-Setup.exe", "sbom-path:", "--predicate-type https://cyclonedx.org/bom", "--draft"):
         if marker not in release:
             fail(f"portable-only release workflow missing: {marker}")
-    validate_match = re.search(r"(?ms)^  validate:\n(.*?)(?=^  portable-windows:\n)", release)
+    validate_match = re.search(r"(?ms)^  validate:\n(.*?)(?=^  portable-build:\n)", release)
     if not validate_match:
         fail("release workflow must separate unprivileged validation from portable tag build")
     for forbidden in ("id-token: write", "attestations: write", "artifact-metadata: write", "contents: write"):
