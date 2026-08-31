@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import importlib
 import os
 from pathlib import Path
 import runpy
@@ -20,7 +21,7 @@ def configure_import_path() -> None:
     sys.path[:0] = [str(APP_DIR), str(PACKAGES_DIR)]
 
 
-def verify_runtime() -> None:
+def verify_runtime(*, import_full_app: bool) -> None:
     if os.name != "nt":
         raise RuntimeError("KeystoneLens Portable is a Windows x64 package.")
     if sys.version_info[:3] != (3, 13, 15):
@@ -35,7 +36,8 @@ def verify_runtime() -> None:
     import requests  # noqa: F401
     import PIL  # noqa: F401
     import zxingcpp  # noqa: F401
-    import keystonelens_companion.__main__  # noqa: F401
+    if import_full_app:
+        importlib.import_module("keystonelens_companion.__main__")
 
 
 def show_startup_error(message: str) -> None:
@@ -55,6 +57,14 @@ def show_startup_error(message: str) -> None:
         pass
 
 
+def system_exit_code(exc: SystemExit) -> int:
+    if exc.code is None:
+        return 0
+    if isinstance(exc.code, int):
+        return exc.code
+    return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--verify", action="store_true")
@@ -62,7 +72,7 @@ def main() -> int:
     configure_import_path()
 
     try:
-        verify_runtime()
+        verify_runtime(import_full_app=args.verify)
         if args.verify:
             print("KeystoneLens portable runtime verification passed.")
             return 0
@@ -70,7 +80,9 @@ def main() -> int:
         sys.argv = [str(APP_DIR / "keystonelens_companion" / "__main__.py"), *passthrough]
         runpy.run_module("keystonelens_companion.__main__", run_name="__main__")
         return 0
-    except BaseException:
+    except SystemExit as exc:
+        return system_exit_code(exc)
+    except Exception:
         detail = traceback.format_exc()
         if args.verify:
             print(detail, file=sys.stderr)
