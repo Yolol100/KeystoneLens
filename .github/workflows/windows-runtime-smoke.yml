@@ -44,16 +44,16 @@ jobs:
           $native = Get-ChildItem -LiteralPath (Join-Path $env:STAGE 'packages') -Filter 'zxingcpp*.pyd' -File -Recurse | Select-Object -First 1
           if (-not $native) { throw 'zxingcpp native module not found.' }
           Write-Host "Native module: $($native.FullName)"
-          $dumpbin = Get-ChildItem -LiteralPath ${env:ProgramFiles} -Filter dumpbin.exe -File -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '\\Hostx64\\x64\\dumpbin\.exe$' } |
-            Select-Object -First 1
-          if (-not $dumpbin) {
-            $dumpbin = Get-ChildItem -LiteralPath ${env:ProgramFiles(x86)} -Filter dumpbin.exe -File -Recurse -ErrorAction SilentlyContinue |
-              Where-Object { $_.FullName -match '\\Hostx64\\x64\\dumpbin\.exe$' } |
-              Select-Object -First 1
-          }
-          if (-not $dumpbin) { throw 'dumpbin.exe not found.' }
-          & $dumpbin.FullName /dependents $native.FullName
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw 'vswhere.exe not found.' }
+          $vs = (& $vswhere -latest -products * -property installationPath).Trim()
+          if (-not $vs) { throw 'Visual Studio installation path not found.' }
+          $msvcRoot = Join-Path $vs 'VC\Tools\MSVC'
+          $toolset = Get-ChildItem -LiteralPath $msvcRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $toolset) { throw 'MSVC toolset not found.' }
+          $dumpbin = Join-Path $toolset.FullName 'bin\Hostx64\x64\dumpbin.exe'
+          if (-not (Test-Path $dumpbin)) { throw 'dumpbin.exe not found.' }
+          & $dumpbin /dependents $native.FullName
           if ($LASTEXITCODE -ne 0) { throw 'dumpbin dependency inspection failed.' }
 
       - name: Import runtime modules one by one
