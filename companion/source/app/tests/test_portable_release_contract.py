@@ -35,3 +35,6 @@ def test_portable_build_uses_neutral_runtime_contract_and_verifies_extracted_zip
     assert "KeystoneLens-Setup.exe" in portable
     assert "Remove-GeneratedPythonArtifacts -Root $Stage" in portable
     assert "Remove-Item -LiteralPath (Join-Path $Packages 'bin')" in portable
+    assert "Remove-Item -LiteralPath (Join-Path $Runtime 'Lib\\idlelib\\idle_test')" in portable
+    assert "Remove-Item -LiteralPath (Join-Path $Packages 'certifi\\tests')" in portable
+    assert "Portable package contains upstream test-only data" in portable
