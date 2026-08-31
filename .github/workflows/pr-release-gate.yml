@@ -1,0 +1,104 @@
+name: PR release gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keystonelens-pr-release-gate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  release-gate:
+    name: PR release gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13.15'
+
+      - name: Install Lua 5.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+
+      - name: Audit repository and supply-chain contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile companion/source/scripts/audit_repository.py companion/source/scripts/audit_external_security.py
+          python3 companion/source/scripts/audit_repository.py
+          python3 companion/source/scripts/audit_external_security.py
+          git diff --check
+
+      - name: Verify canonical release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '\r\n' < companion/source/VERSION)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          grep -Fx "__version__ = \"$VERSION\"" companion/source/app/keystonelens_companion/__init__.py
+          grep -Fx "## Version: $VERSION" addon/KeystoneLensBridge/KeystoneLensBridge.toc
+          grep -Fx "## Version: $VERSION" companion/source/data-addon/KeystoneLensCompanionData/KeystoneLensCompanionData.toc
+          test -f "companion/source/docs/RELEASE-NOTES-${VERSION}.md"
+          test -f "companion/source/docs/AUDIT-REPORT-${VERSION}.md"
+
+      - name: Compile WoW addon Lua sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          find addon/KeystoneLensBridge companion/source/data-addon/KeystoneLensCompanionData -type f -name '*.lua' -print0 | while IFS= read -r -d '' file; do
+            LUA_FILE="$file" lua5.1 -e 'local f,e=loadfile(os.getenv("LUA_FILE")); assert(f,e)'
+          done
+
+      - name: Sync canonical Bridge test source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf companion/source/addon
+          mkdir -p companion/source/addon
+          cp -a addon/KeystoneLensBridge companion/source/addon/KeystoneLensBridge
+
+      - name: Install exact runtime test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('companion/source/runtime/requirements-runtime.lock')
+          output = Path('/tmp/keystonelens-runtime-test.txt')
+          packages = []
+          for raw in source.read_text(encoding='utf-8').splitlines():
+              line = raw.strip()
+              if not line or line.startswith('#') or line.startswith('--hash='):
+                  continue
+              if line.endswith('\\'):
+                  line = line[:-1].rstrip()
+              if line and not line.startswith('--hash='):
+                  packages.append(line)
+          output.write_text('\n'.join(packages) + '\n', encoding='utf-8')
+          PY
+          python -m pip install --disable-pip-version-check 'pytest==9.0.2' -r /tmp/keystonelens-runtime-test.txt
+
+      - name: Run full source regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd companion/source
+          python -m pytest -q
+          python -m compileall -q app/keystonelens_companion
