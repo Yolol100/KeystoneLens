@@ -23,6 +23,16 @@ def repo_text(rel: str) -> str:
     return (REPO_ROOT / rel).read_text(encoding="utf-8")
 
 
+def bridge_text(rel: str) -> str:
+    repo_path = REPO_ROOT / rel
+    if repo_path.is_file():
+        return repo_path.read_text(encoding="utf-8")
+    packaged_path = SOURCE_ROOT / rel
+    if packaged_path.is_file():
+        return packaged_path.read_text(encoding="utf-8")
+    fail(f"canonical/packaged Bridge source is missing: {rel}")
+
+
 def audit_companion_runtime() -> None:
     forbidden = {
         "shell/process execution": re.compile(r"\b(?:subprocess\b|os\.system\s*\(|os\.popen\s*\(|Popen\s*\(|ShellExecute(?:Ex)?[AW]?\b|CreateProcess[AW]?\b)"),
@@ -159,7 +169,7 @@ def audit_portable_distribution_contract() -> None:
 
 
 def audit_libkeystone_wire_contract() -> None:
-    transport = repo_text("addon/KeystoneLensBridge/Core/Transport.lua")
+    transport = bridge_text("addon/KeystoneLensBridge/Core/Transport.lua")
     prefix_match = re.search(r'RegisterAddonMessagePrefix\("([^"]+)"\)', transport)
     if not prefix_match:
         fail("LibKeystone compatibility prefix is not a fixed literal")
