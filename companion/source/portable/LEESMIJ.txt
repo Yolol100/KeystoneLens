@@ -1,4 +1,4 @@
-KeystoneLens Portable 0.12.8
+KeystoneLens Portable
 
 Gebruik
 1. Pak de HELE ZIP uit naar een normale map, bijvoorbeeld C:\KeystoneLens.
@@ -12,7 +12,7 @@ Wat je NIET hoeft te doen
 - Geen Python apart installeren.
 - Geen Start-menu- of registerinstallatie.
 
-De map bevat een eigen lokale Python-runtime en alle benodigde Python-packages. Laat daarom de mappen runtime, app en packages bij START-COMPANION.cmd staan.
+De map bevat een eigen lokale Python-runtime en alle benodigde Python-packages. Laat daarom de mappen runtime, app en packages bij START-COMPANION.cmd staan. De exacte KeystoneLens-versie staat in het meegeleverde VERSION-bestand en de gebruikte third-party componenten staan in THIRD-PARTY-NOTICES.md.
 
 Belangrijk
 De portable versie bevat intern python.exe/pythonw.exe als runtime. Dat zijn geen KeystoneLens-installers en ze worden niet in Windows geinstalleerd. Voor normaal gebruik open je alleen START-COMPANION.cmd.
