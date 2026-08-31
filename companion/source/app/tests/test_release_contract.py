@@ -67,7 +67,9 @@ def test_release_workflow_publishes_portable_not_setup():
     assert "portable-windows:" in source
     assert "Build portable package twice" in source
     assert "KeystoneLens-Portable-$version-Windows-x64.zip" in source
-    assert "KeystoneLens-Setup" not in source
+    assert "KeystoneLens-Setup.exe" in source  # rejection marker, not a published asset
+    assert "companion/source/installer/" not in source
+    assert "KeystoneLens-Setup-$version" not in source
     assert "KEYSTONELENS_PFX" not in source
     assert "sign-windows:" not in source
     assert "setup-go" not in source
