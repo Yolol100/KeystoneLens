@@ -45,25 +45,20 @@ def audit_companion_runtime() -> None:
 def audit_dependency_governance() -> None:
     if not (REPO_ROOT / ".github").is_dir():
         return
-
     dependabot = repo_text(".github/dependabot.yml")
-    required = (
-        "package-ecosystem: github-actions",
-        "directory: /companion/source/app",
-        "directory: /companion/source/installer/windows",
-    )
-    for marker in required:
+    for marker in ("package-ecosystem: github-actions", "directory: /companion/source/app"):
         if marker not in dependabot:
             fail(f"Dependabot coverage missing: {marker}")
-    if dependabot.count("interval: weekly") < 3:
-        fail("Actions and both Python dependency roots must be reviewed weekly")
+    if dependabot.count("interval: weekly") < 2:
+        fail("Actions and Companion Python dependencies must be reviewed weekly")
 
     owners = repo_text(".github/CODEOWNERS")
     for marker in (
         "/.github/CODEOWNERS @Yolol100",
         "/.github/workflows/ @Yolol100",
         "/companion/source/app/keystonelens_companion/ @Yolol100",
-        "/companion/source/installer/ @Yolol100",
+        "/companion/source/portable/ @Yolol100",
+        "/companion/source/runtime/ @Yolol100",
         "/companion/source/scripts/ @Yolol100",
         "/companion/source/docs/SBOM.cdx.json @Yolol100",
     ):
@@ -131,15 +126,36 @@ def audit_sbom() -> None:
             fail(f"SBOM direct dependency mismatch: {name}=={version}")
 
 
-def audit_signing_contract() -> None:
-    sign = source_text("installer/windows/sign-release.ps1")
-    verify = source_text("installer/windows/verify-signatures.ps1")
-    for marker in ("'/fd','SHA256'", "'/tr',$TimestampUrl", "'/td','SHA256'", "verify /pa /tw /all /v", "TimeStamperCertificate"):
-        if marker not in sign:
-            fail(f"signing contract missing: {marker}")
-    for marker in ("verify /pa /tw /all /v", "SignerCertificate", "TimeStamperCertificate"):
-        if marker not in verify:
-            fail(f"standalone signature verification contract missing: {marker}")
+def audit_portable_distribution_contract() -> None:
+    manifest_path = SOURCE_ROOT / "runtime/windows/python-runtime.json"
+    lock_path = SOURCE_ROOT / "runtime/windows/requirements-runtime.lock"
+    if not manifest_path.is_file() or not lock_path.is_file():
+        fail("portable runtime manifest/lock is missing")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("platform") != "windows-x64":
+        fail("portable runtime platform must remain windows-x64")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", str(manifest.get("version", ""))):
+        fail("portable runtime version is invalid")
+    if not str(manifest.get("url", "")).startswith("https://www.python.org/"):
+        fail("portable runtime must come from python.org over HTTPS")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(manifest.get("sha256", ""))):
+        fail("portable runtime SHA-256 is invalid")
+
+    lock = lock_path.read_text(encoding="utf-8")
+    if lock.count("--hash=sha256:") < 1:
+        fail("portable runtime dependency lock is not hash pinned")
+
+    builder = source_text("portable/build-portable.ps1")
+    launcher = source_text("portable/portable_launcher.py")
+    for marker in ("--require-hashes", "--no-deps", "--only-binary=:all:"):
+        if marker not in builder:
+            fail(f"portable builder dependency hardening drifted: {marker}")
+    if "KeystoneLens.Companion.Singleton" not in launcher or "CreateMutexW" not in launcher:
+        fail("portable launcher lost the single-instance contract")
+    if "show_startup_error" not in launcher or "except SystemExit as exc" not in launcher:
+        fail("portable launcher lost visible startup failure handling")
+    if (SOURCE_ROOT / "installer").exists():
+        fail("legacy installer source is present in portable-only source")
 
 
 def audit_libkeystone_wire_contract() -> None:
@@ -164,9 +180,9 @@ def main() -> int:
     audit_dependency_governance()
     audit_api_contracts()
     audit_sbom()
-    audit_signing_contract()
+    audit_portable_distribution_contract()
     audit_libkeystone_wire_contract()
-    print("ok - external Companion, dependency, API, SBOM, signing and addon-wire security gates passed")
+    print("ok - external Companion, dependency, API, SBOM, portable-distribution and addon-wire security gates passed")
     return 0
 
 
