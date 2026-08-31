@@ -160,9 +160,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  portable-windows:
+  portable-build:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: validate
+    name: portable-build-${{ matrix.round }}
+    strategy:
+      fail-fast: false
+      matrix:
+        round: [a, b]
     runs-on: windows-2025
     timeout-minutes: 35
     permissions:
@@ -175,19 +180,64 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Build portable package twice
+      - name: Build tagged portable package independently
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'portable-out'
+          ./companion/source/portable/build-portable.ps1 -OutputDir $out
+          $version = (Get-Content -LiteralPath companion/source/VERSION -Raw).Trim()
+          $name = "KeystoneLens-Portable-$version-Windows-x64.zip"
+          $zip = Join-Path $out $name
+          if (-not (Test-Path -LiteralPath $zip)) { throw 'Tagged portable ZIP was not produced.' }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+          Write-Host "Tagged independent portable build ${{ matrix.round }} SHA-256: $hash"
+          "PORTABLE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload tagged independent build round
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: keystonelens-tag-portable-round-${{ matrix.round }}-${{ github.sha }}
+          path: ${{ env.PORTABLE_ZIP }}
+          if-no-files-found: error
+          retention-days: 1
+
+  portable-windows:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: portable-build
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Download tagged build A
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: keystonelens-tag-portable-round-a-${{ github.sha }}
+          path: round-a
+
+      - name: Download tagged build B
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: keystonelens-tag-portable-round-b-${{ github.sha }}
+          path: round-b
+
+      - name: Compare independent tagged portable builds
         shell: pwsh
         run: |
           $version = (Get-Content -LiteralPath companion/source/VERSION -Raw).Trim()
           $name = "KeystoneLens-Portable-$version-Windows-x64.zip"
-          $a = Join-Path $env:RUNNER_TEMP 'portable-a'
-          $b = Join-Path $env:RUNNER_TEMP 'portable-b'
-          ./companion/source/portable/build-portable.ps1 -OutputDir $a
-          ./companion/source/portable/build-portable.ps1 -OutputDir $b
-          $zipA = Join-Path $a $name; $zipB = Join-Path $b $name
+          $zipA = Join-Path 'round-a' $name
+          $zipB = Join-Path 'round-b' $name
           $hashA = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipA).Hash.ToLowerInvariant()
           $hashB = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipB).Hash.ToLowerInvariant()
-          if ($hashA -ne $hashB) { throw 'Tagged portable builds are not byte-identical.' }
+          if ($hashA -ne $hashB) { throw "Tagged portable builds are not byte-identical: $hashA != $hashB" }
           $verify = Join-Path $env:RUNNER_TEMP 'portable-verify'
           Expand-Archive -LiteralPath $zipA -DestinationPath $verify -Force
           & (Join-Path $verify 'runtime\python.exe') -I (Join-Path $verify 'portable_launcher.py') --verify
@@ -195,8 +245,10 @@ jobs:
           foreach ($forbidden in @('KeystoneLens-Setup.exe','KeystoneLens.exe','KeystoneLens-Uninstall.exe','KeystoneLens-WoW-Watcher.exe')) {
             if (Get-ChildItem -LiteralPath $verify -File -Recurse | Where-Object Name -eq $forbidden | Select-Object -First 1) { throw "Obsolete executable in portable ZIP: $forbidden" }
           }
+          if (Test-Path -LiteralPath (Join-Path $verify 'runtime\Scripts\pip.exe')) { throw 'Tagged portable runtime must not retain pip.exe.' }
           New-Item -ItemType Directory -Path portable-release -Force | Out-Null
           Copy-Item -LiteralPath $zipA -Destination (Join-Path portable-release $name)
+          Write-Host "Tagged portable SHA-256: $hashA"
 
       - name: Upload portable Windows release asset
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
