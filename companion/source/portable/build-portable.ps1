@@ -13,15 +13,15 @@ if ([string]::IsNullOrWhiteSpace($OutputDir)) {
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $OutputDir = (Resolve-Path $OutputDir).Path
 
-$InstallerSourcePath = Join-Path $SourceRoot 'installer\windows\bootstrap\installer.ps1'
-$InstallerSource = Get-Content -LiteralPath $InstallerSourcePath -Raw
-$PythonUrlMatch = [regex]::Match($InstallerSource, '(?m)^\$PythonUrl = ''([^'']+)''$')
-$PythonShaMatch = [regex]::Match($InstallerSource, '(?m)^\$PythonSha = ''([0-9a-fA-F]{64})''$')
-if (-not $PythonUrlMatch.Success -or -not $PythonShaMatch.Success) {
-    throw 'Could not read the canonical Python runtime URL/SHA from installer.ps1.'
-}
-$PythonUrl = $PythonUrlMatch.Groups[1].Value
-$PythonSha = $PythonShaMatch.Groups[1].Value.ToLowerInvariant()
+$RuntimeContractPath = Join-Path $SourceRoot 'runtime\windows-x64.json'
+$RuntimeContract = Get-Content -LiteralPath $RuntimeContractPath -Raw | ConvertFrom-Json
+$PythonVersion = [string]$RuntimeContract.python_version
+$PythonUrl = [string]$RuntimeContract.python_url
+$PythonSha = ([string]$RuntimeContract.python_sha256).ToLowerInvariant()
+if ([string]$RuntimeContract.platform -ne 'windows-x64') { throw 'Runtime contract must target windows-x64.' }
+if ($PythonVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'Runtime contract has an invalid Python version.' }
+if ($PythonUrl -notmatch '^https://') { throw 'Runtime contract Python URL must use HTTPS.' }
+if ($PythonSha -notmatch '^[0-9a-f]{64}$') { throw 'Runtime contract has an invalid Python SHA-256.' }
 
 $TempBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $BuildRoot = Join-Path $TempBase ('KeystoneLensPortable-' + [guid]::NewGuid().ToString('N'))
@@ -71,13 +71,14 @@ try {
     if (-not (Test-Path -LiteralPath $Python) -or -not (Test-Path -LiteralPath $PythonW)) {
         throw 'Portable Python runtime is incomplete after staging.'
     }
-    & $Python -I -c 'import sys,tkinter,pip; raise SystemExit(0 if sys.version_info[:3] == (3,13,15) else 4)'
+    $VersionCheck = "import sys,tkinter,pip; expected=tuple(map(int,'$PythonVersion'.split('.'))); raise SystemExit(0 if sys.version_info[:3] == expected else 4)"
+    & $Python -I -c $VersionCheck
     if ($LASTEXITCODE -ne 0) { throw 'Portable Python Tk/pip/version verification failed.' }
 
     Copy-Item -LiteralPath (Join-Path $SourceRoot 'app\KeystoneLens.ico') -Destination (Join-Path $App 'KeystoneLens.ico') -Force
     Copy-Item -LiteralPath (Join-Path $SourceRoot 'app\keystonelens_companion') -Destination (Join-Path $App 'keystonelens_companion') -Recurse -Force
 
-    $LockFile = Join-Path $SourceRoot 'installer\windows\requirements-runtime.lock'
+    $LockFile = Join-Path $SourceRoot 'runtime\requirements-runtime.lock'
     $PipArgs = @(
         '-m','pip','install',
         '--isolated','--no-input','--disable-pip-version-check','--no-warn-script-location',
@@ -88,10 +89,19 @@ try {
     & $Python @PipArgs
     if ($LASTEXITCODE -ne 0) { throw 'Portable dependency installation failed.' }
 
+    # pip is needed only while assembling the portable package. Remove its
+    # command shims and package after dependencies are staged so the delivered
+    # runtime contains no unnecessary package-management executables.
+    Remove-Item -LiteralPath (Join-Path $Runtime 'Scripts') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $Runtime 'Lib\site-packages\pip') -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath (Join-Path $Runtime 'Lib\site-packages') -Directory -Filter 'pip-*.dist-info' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'START-COMPANION.cmd') -Destination (Join-Path $Stage 'START-COMPANION.cmd') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'portable_launcher.py') -Destination (Join-Path $Stage 'portable_launcher.py') -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LEESMIJ.txt') -Destination (Join-Path $Stage 'LEESMIJ.txt') -Force
     Copy-Item -LiteralPath (Join-Path $SourceRoot 'VERSION') -Destination (Join-Path $Stage 'VERSION') -Force
+    Copy-Item -LiteralPath $RuntimeContractPath -Destination (Join-Path $Stage 'RUNTIME.json') -Force
 
     Get-ChildItem -LiteralPath $Stage -Directory -Recurse -Filter '__pycache__' -ErrorAction SilentlyContinue |
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -103,7 +113,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Portable staged runtime verification failed.' }
 
     Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
-    & $Python (Join-Path $SourceRoot 'installer\windows\make_payload_zip.py') --root $Stage --out $ZipPath
+    & $Python (Join-Path $SourceRoot 'scripts\make_deterministic_zip.py') --root $Stage --out $ZipPath
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ZipPath)) {
         throw 'Portable ZIP creation failed.'
     }
@@ -114,11 +124,10 @@ try {
     & $ExtractedPython -I (Join-Path $Extracted 'portable_launcher.py') --verify
     if ($LASTEXITCODE -ne 0) { throw 'Extracted portable ZIP verification failed.' }
 
-    if (Test-Path -LiteralPath (Join-Path $Extracted 'KeystoneLens-Setup.exe')) {
-        throw 'Portable package must not contain KeystoneLens-Setup.exe.'
-    }
-    if (Test-Path -LiteralPath (Join-Path $Extracted 'KeystoneLens.exe')) {
-        throw 'Portable package must not contain the installed Companion launcher executable.'
+    $Forbidden = @('KeystoneLens-Setup.exe','KeystoneLens.exe','KeystoneLens-Uninstall.exe','KeystoneLens-WoW-Watcher.exe')
+    $Unexpected = Get-ChildItem -LiteralPath $Extracted -File -Recurse | Where-Object { $_.Name -in $Forbidden }
+    if ($Unexpected) {
+        throw ('Portable package contains obsolete KeystoneLens executable(s): ' + (($Unexpected | ForEach-Object Name) -join ', '))
     }
 
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ZipPath).Hash.ToLowerInvariant()
