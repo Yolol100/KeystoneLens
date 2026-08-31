@@ -18,7 +18,6 @@ on:
       - 'addon/KeystoneLensBridge/**'
       - 'companion/source/**'
       - 'companion/README.md'
-      - 'executable/README.md'
   pull_request:
     paths:
       - '.github/workflows/rebuild-keystonelens.yml'
@@ -31,7 +30,6 @@ on:
       - 'addon/KeystoneLensBridge/**'
       - 'companion/source/**'
       - 'companion/README.md'
-      - 'executable/README.md'
 
 permissions:
   contents: read
@@ -197,6 +195,52 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  portable-windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build and verify portable Companion
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'portable-out'
+          ./companion/source/portable/build-portable.ps1 -OutputDir $out
+          $version = (Get-Content -LiteralPath companion/source/VERSION -Raw).Trim()
+          $zip = Join-Path $out "KeystoneLens-Portable-$version-Windows-x64.zip"
+          if (-not (Test-Path -LiteralPath $zip)) { throw 'Portable ZIP was not produced.' }
+          "PORTABLE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PORTABLE_NAME=KeystoneLens-Portable-$version-Windows-x64.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify portable archive contract
+        shell: pwsh
+        run: |
+          $verify = Join-Path $env:RUNNER_TEMP 'portable-contract'
+          Expand-Archive -LiteralPath $env:PORTABLE_ZIP -DestinationPath $verify -Force
+          foreach ($required in @('START-COMPANION.cmd','portable_launcher.py','VERSION','THIRD-PARTY-NOTICES.md','runtime\python.exe','runtime\pythonw.exe','app\keystonelens_companion\__main__.py')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $verify $required))) { throw "Portable package missing: $required" }
+          }
+          foreach ($forbidden in @('KeystoneLens-Setup.exe','KeystoneLens.exe','KeystoneLens-Uninstall.exe','KeystoneLens-WoW-Watcher.exe')) {
+            if (Test-Path -LiteralPath (Join-Path $verify $forbidden)) { throw "Portable package unexpectedly contains: $forbidden" }
+          }
+          & (Join-Path $verify 'runtime\python.exe') -I (Join-Path $verify 'portable_launcher.py') --verify
+          if ($LASTEXITCODE -ne 0) { throw 'Portable archive runtime contract failed.' }
+          Get-FileHash -Algorithm SHA256 -LiteralPath $env:PORTABLE_ZIP
+
+      - name: Upload verified portable Companion
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: keystonelens-portable-${{ github.sha }}
+          path: ${{ env.PORTABLE_ZIP }}
+          if-no-files-found: error
+          retention-days: 14
+
   attest-core:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: validate
@@ -319,6 +363,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
       - validate
+      - portable-windows
       - attest-core
       - sign-windows
     runs-on: ubuntu-24.04
@@ -342,6 +387,12 @@ jobs:
           name: keystonelens-release-core-${{ github.sha }}
           path: dist
 
+      - name: Download verified portable Companion
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: keystonelens-portable-${{ github.sha }}
+          path: dist
+
       - name: Download signed Windows installer
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -356,6 +407,7 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$VERSION"
           test -f "dist/KeystoneLensBridge-${VERSION}-CurseForge.zip"
           test -f "dist/KeystoneLens-Source-${VERSION}.zip"
+          test -f "dist/KeystoneLens-Portable-${VERSION}-Windows-x64.zip"
           test -f "dist/KeystoneLens-Setup-v${VERSION}-Windows-x64.exe"
           test -f "dist/KeystoneLens-Audit-${VERSION}.md"
           test -f "dist/RELEASE-NOTES-${VERSION}.md"
@@ -364,6 +416,7 @@ jobs:
           (cd dist && sha256sum -c SHA256SUMS.txt)
           unzip -t "dist/KeystoneLensBridge-${VERSION}-CurseForge.zip" >/dev/null
           unzip -t "dist/KeystoneLens-Source-${VERSION}.zip" >/dev/null
+          unzip -t "dist/KeystoneLens-Portable-${VERSION}-Windows-x64.zip" >/dev/null
 
       - name: Attest final draft-release payload provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -375,6 +428,7 @@ jobs:
         with:
           subject-path: |
             dist/KeystoneLens-Source-*.zip
+            dist/KeystoneLens-Portable-*-Windows-x64.zip
             dist/KeystoneLens-Setup-v*-Windows-x64.exe
           sbom-path: dist/SBOM.cdx.json
 
@@ -384,7 +438,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for artifact in dist/KeystoneLens-Source-*.zip dist/KeystoneLens-Setup-v*-Windows-x64.exe; do
+          for artifact in dist/KeystoneLens-Source-*.zip dist/KeystoneLens-Portable-*-Windows-x64.zip dist/KeystoneLens-Setup-v*-Windows-x64.exe; do
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY"
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
           done
