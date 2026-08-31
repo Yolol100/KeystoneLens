@@ -42,6 +42,8 @@ REQUIRED_FILES = {
     "companion/source/app/tests/test_hardening.py",
     "companion/source/app/tests/test_network_failures.py",
     "companion/source/app/tests/test_observation_only_boundary.py",
+    "companion/source/app/tests/test_overlay_click_contract.py",
+    "companion/source/app/tests/test_portable_release_contract.py",
     "companion/source/app/tests/test_qr_backend.py",
     "companion/source/app/tests/test_release_contract.py",
     "companion/source/app/tests/test_season2.py",
@@ -78,7 +80,7 @@ FORBIDDEN_BRIDGE_POLICY = re.compile(
 COMPANION_OBSERVATION_PREFIXES = (
     "companion/source/app/keystonelens_companion/",
     "companion/source/installer/windows/",
-    "executable/",
+    "companion/source/portable/",
 )
 FORBIDDEN_COMPANION_AUTOMATION_PATTERNS: dict[str, re.Pattern[str]] = {
     "input injection": re.compile(r"\b(?:SendInput|keybd_event|mouse_event)\b"),
@@ -339,17 +341,34 @@ def main() -> int:
         "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
         "sbom-path:",
         "--predicate-type https://cyclonedx.org/bom",
+        "KeystoneLens-Portable-${VERSION}-Windows-x64.zip",
     ):
         if marker not in release_workflow:
-            fail(f"release workflow missing concurrency/SBOM hardening gate: {marker}")
+            fail(f"release workflow missing concurrency/SBOM/portable hardening gate: {marker}")
 
-    validate_match = re.search(r"(?ms)^  validate:\n(.*?)(?=^  attest-core:\n)", release_workflow)
+    validate_match = re.search(r"(?ms)^  validate:\n(.*?)(?=^  portable-windows:\n)", release_workflow)
     if not validate_match:
-        fail("release workflow must separate unprivileged validation from tag-only core attestation")
+        fail("release workflow must separate unprivileged validation from portable/tag release jobs")
     validate_block = validate_match.group(1)
     for forbidden in ("id-token: write", "attestations: write", "artifact-metadata: write", "contents: write"):
         if forbidden in validate_block:
             fail(f"ordinary validation job must remain read-only: {forbidden}")
+
+    portable_match = re.search(r"(?ms)^  portable-windows:\n(.*?)(?=^  attest-core:\n)", release_workflow)
+    if not portable_match:
+        fail("release workflow missing unified portable Windows validation job")
+    portable_block = portable_match.group(1)
+    for marker in (
+        "runs-on: windows-2025",
+        "./companion/source/portable/build-portable.ps1",
+        "THIRD-PARTY-NOTICES.md",
+        "keystonelens-portable-${{ github.sha }}",
+    ):
+        if marker not in portable_block:
+            fail(f"portable Windows release contract drifted: {marker}")
+    for forbidden in ("id-token: write", "attestations: write", "artifact-metadata: write", "contents: write"):
+        if forbidden in portable_block:
+            fail(f"portable validation job must remain read-only: {forbidden}")
 
     attest_match = re.search(r"(?ms)^  attest-core:\n(.*?)(?=^  sign-windows:\n)", release_workflow)
     if not attest_match:
@@ -368,10 +387,12 @@ def main() -> int:
     draft_match = re.search(r"(?ms)^  draft-release:\n(.*)$", release_workflow)
     if not draft_match or "- attest-core" not in draft_match.group(1):
         fail("draft release must depend on successful isolated core attestation")
+    if "- portable-windows" not in draft_match.group(1):
+        fail("draft release must depend on successful portable Windows validation")
 
     print(
         f"ok - KeystoneLens repository audit passed ({len(files)} tracked files; version {version}; "
-        "Bridge/Midnight/Blizzard-policy/Companion-observation/dependency-review/runner/least-privilege/SBOM workflow security enforced)"
+        "Bridge/Midnight/Blizzard-policy/Companion+portable-observation/dependency-review/runner/least-privilege/SBOM workflow security enforced)"
     )
     return 0
 
