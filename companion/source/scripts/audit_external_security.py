@@ -159,7 +159,7 @@ def audit_portable_distribution_contract() -> None:
 
 
 def audit_libkeystone_wire_contract() -> None:
-    transport = source_text("addon/KeystoneLensBridge/Core/Transport.lua")
+    transport = repo_text("addon/KeystoneLensBridge/Core/Transport.lua")
     prefix_match = re.search(r'RegisterAddonMessagePrefix\("([^"]+)"\)', transport)
     if not prefix_match:
         fail("LibKeystone compatibility prefix is not a fixed literal")
