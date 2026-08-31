@@ -4,7 +4,7 @@ Upload the generated Bridge artifact from the tagged release:
 
 `KeystoneLensBridge-0.12.8-CurseForge.zip`
 
-Do **not** upload the Companion source bundle or Windows installer as the WoW addon file.
+Do **not** upload the Companion source bundle or portable Windows ZIP as the WoW addon file.
 
 The release build verifies that the archive contains exactly one addon root, `KeystoneLensBridge/`, with a matching `KeystoneLensBridge/KeystoneLensBridge.toc`, and that no executable is present. Keep the root folder name unversioned; the file name may carry the version.
 
