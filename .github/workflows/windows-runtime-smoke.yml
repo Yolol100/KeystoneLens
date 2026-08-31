@@ -1,0 +1,49 @@
+name: Windows runtime smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-runtime-smoke.yml'
+      - 'companion/source/app/**'
+      - 'companion/source/installer/windows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-smoke:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python 3.13.15
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13.15'
+
+      - name: Install exact runtime packages into staged target
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'keystonelens-stage'
+          $packages = Join-Path $stage 'packages'
+          $app = Join-Path $stage 'app'
+          New-Item -ItemType Directory -Force -Path $packages,$app | Out-Null
+          Copy-Item -Recurse -Force companion/source/app/keystonelens_companion $app
+          python -m pip install --isolated --no-input --disable-pip-version-check --no-warn-script-location --no-cache-dir --timeout 30 --retries 3 --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps --target $packages -r companion/source/installer/windows/requirements-runtime.lock
+          "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Import runtime modules one by one
+        shell: pwsh
+        run: |
+          python -I -c 'import os,sys; root=sys.argv[1]; sys.path[:0]=[os.path.join(root,"app"),os.path.join(root,"packages")]; import tkinter; print("tkinter ok"); import requests; print("requests ok"); import PIL; print("PIL ok"); import zxingcpp; print("zxingcpp ok"); import keystonelens_companion.__main__; print("keystonelens_companion.__main__ ok")' $env:STAGE
+
+      - name: Run exact installer staged verification command
+        shell: pwsh
+        run: |
+          python -I -c 'import os,sys; root=sys.argv[1]; sys.path[:0]=[os.path.join(root,"app"),os.path.join(root,"packages")]; import tkinter, requests, PIL, zxingcpp; import keystonelens_companion.__main__' $env:STAGE
