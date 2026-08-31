@@ -14,6 +14,8 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $OutputDir = (Resolve-Path $OutputDir).Path
 
 $RuntimeContractPath = Join-Path $SourceRoot 'runtime\windows-x64.json'
+$ThirdPartyNoticesPath = Join-Path $SourceRoot 'docs\THIRD-PARTY-NOTICES.md'
+if (-not (Test-Path -LiteralPath $ThirdPartyNoticesPath)) { throw 'Third-party notices are missing from source.' }
 $RuntimeContract = Get-Content -LiteralPath $RuntimeContractPath -Raw | ConvertFrom-Json
 $PythonVersion = [string]$RuntimeContract.python_version
 $PythonUrl = [string]$RuntimeContract.python_url
@@ -116,6 +118,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LEESMIJ.txt') -Destination (Join-Path $Stage 'LEESMIJ.txt') -Force
     Copy-Item -LiteralPath (Join-Path $SourceRoot 'VERSION') -Destination (Join-Path $Stage 'VERSION') -Force
     Copy-Item -LiteralPath $RuntimeContractPath -Destination (Join-Path $Stage 'RUNTIME.json') -Force
+    Copy-Item -LiteralPath $ThirdPartyNoticesPath -Destination (Join-Path $Stage 'THIRD-PARTY-NOTICES.md') -Force
 
     Remove-GeneratedPythonArtifacts -Root $Stage
 
@@ -136,6 +139,9 @@ try {
     $ExtractedPython = Join-Path $Extracted 'runtime\python.exe'
     & $ExtractedPython -B -I (Join-Path $Extracted 'portable_launcher.py') --verify
     if ($LASTEXITCODE -ne 0) { throw 'Extracted portable ZIP verification failed.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $Extracted 'THIRD-PARTY-NOTICES.md'))) {
+        throw 'Portable package is missing third-party notices.'
+    }
 
     $Forbidden = @('KeystoneLens-Setup.exe','KeystoneLens.exe','KeystoneLens-Uninstall.exe','KeystoneLens-WoW-Watcher.exe')
     $Unexpected = Get-ChildItem -LiteralPath $Extracted -File -Recurse | Where-Object { $_.Name -in $Forbidden }
