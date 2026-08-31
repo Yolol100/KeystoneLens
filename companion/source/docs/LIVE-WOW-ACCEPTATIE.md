@@ -1,6 +1,6 @@
 # Live WoW acceptatie — 0.12.8
 
-Handmatig testen op de exacte actuele WoW Retail-build + Windows Companion-build. Broncode/CI mag alleen `PASS-CI` claimen; deze matrix vereist echt clientbewijs voor `PASS-LIVE`.
+Handmatig testen op de exacte actuele WoW Retail-build + portable Windows Companion-build. Broncode/CI mag alleen `PASS-CI` claimen; deze matrix vereist echt clientbewijs voor `PASS-LIVE`.
 
 Noteer per stap: **Geslaagd / Mislukt / Geblokkeerd**, plus datum/regio, WoW build/interface, Bridge SHA/version, Companion version, Raider.IO version, resolutie/UI-scale, dungeon/key/spec en relevante screenshots/logs.
 
@@ -56,4 +56,4 @@ Noteer per stap: **Geslaagd / Mislukt / Geblokkeerd**, plus datum/regio, WoW bui
 36. Laat minimaal twintig applicant-update/capturecycli draaien met invite/withdraw/requeue. Controleer op begrensde memory-, texture-, timer-, cache- en screenshot-state groei.
 37. Controleer dat de Bridge geen combatlog-, aura-, health/power-, cast-, target/focus-, raid-marker-, secure-action- of addon/chat-message-automatisering nodig heeft; recruitment/display + lokale screenshottransport blijft de volledige WoW-runtime-scope.
 
-Pas `0.12.8` pas als publieke **Release** toe nadat alle toepasselijke livepunten slagen. Gebruik Beta zolang een live WoW-, Windows-signing- of Season-2/WCL-gate openstaat.
+Pas `0.12.8` pas als publieke **Release** toe nadat alle toepasselijke livepunten slagen. Gebruik Beta zolang een live WoW-, clean-Windows-portable-, Season-2/WCL- of policygate openstaat.
