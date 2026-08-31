@@ -5,21 +5,13 @@ from pathlib import Path
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
 AUDIT = SOURCE_ROOT / "scripts/audit_repository.py"
 
-# These roots exist both in the repository and in the verified source archive.
+# These are the executable/text runtime surfaces delivered by the portable product.
 PRODUCTION_ROOTS = [
     SOURCE_ROOT / "app/keystonelens_companion",
-    SOURCE_ROOT / "installer/windows",
+    SOURCE_ROOT / "portable",
 ]
 
-# The repository also contains a top-level executable source tree. Include it when
-# this test runs from a full checkout, but do not require it from the intentionally
-# scoped source release archive.
-REPO_ROOT = SOURCE_ROOT.parents[1]
-REPO_EXECUTABLE = REPO_ROOT / "executable"
-if REPO_EXECUTABLE.exists():
-    PRODUCTION_ROOTS.append(REPO_EXECUTABLE)
-
-TEXT_SUFFIXES = {".py", ".go", ".ps1", ".sh", ".lua", ".toml", ".json", ".txt"}
+TEXT_SUFFIXES = {".py", ".ps1", ".cmd", ".sh", ".lua", ".toml", ".json", ".txt"}
 FORBIDDEN_TOKENS = (
     "SendInput",
     "keybd_event",
@@ -60,9 +52,9 @@ def test_production_companion_has_no_input_or_process_memory_automation():
     assert checked > 0, "observation-only scan did not inspect production source"
 
 
-def test_legitimate_windows_observation_and_secret_apis_remain_allowed():
+def test_legitimate_windows_secret_and_single_instance_apis_remain_allowed():
     config = (SOURCE_ROOT / "app/keystonelens_companion/config.py").read_text(encoding="utf-8")
-    watcher = (SOURCE_ROOT / "installer/windows/wowwatcher/main.go").read_text(encoding="utf-8")
+    launcher = (SOURCE_ROOT / "portable/portable_launcher.py").read_text(encoding="utf-8")
     assert "CryptProtectData" in config and "CryptUnprotectData" in config
-    assert "QueryFullProcessImageNameW" in watcher
-    assert "CreateToolhelp32Snapshot" in watcher
+    assert "CreateMutexW" in launcher
+    assert 'MUTEX_NAME = "KeystoneLens.Companion.Singleton"' in launcher
