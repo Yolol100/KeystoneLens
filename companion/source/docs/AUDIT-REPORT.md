@@ -2,6 +2,6 @@
 
 Current release: **0.12.8**.
 
-The authoritative current report is [`AUDIT-REPORT-0.12.8.md`](AUDIT-REPORT-0.12.8.md). It records the schema-v2 tooltip-context/rollback fix, canonical release identity, dependency/runtime parity, deterministic packaging and the remaining external runtime/signing gates.
+The authoritative current report is [`AUDIT-REPORT-0.12.8.md`](AUDIT-REPORT-0.12.8.md). It records the schema-v2/context correctness, current Season 2/runtime controls, the portable-only Windows distribution architecture, deterministic packaging and the remaining external live/repository/policy gates.
 
-The original 0.12.7 audit remains historical release evidence and must not be used to describe 0.12.8 artifacts.
+Older audit/release documents remain historical evidence and must not be used to describe the current 0.12.8 portable artifact.
