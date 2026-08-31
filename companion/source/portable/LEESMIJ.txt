@@ -15,6 +15,8 @@ Wat je NIET hoeft te doen
 De map bevat een eigen lokale Python-runtime en alle benodigde Python-packages. Laat daarom de mappen runtime, app en packages bij START-COMPANION.cmd staan.
 
 Belangrijk
-De portable versie bevat intern python.exe/pythonw.exe als runtime. Dat zijn geen KeystoneLens-installers en ze worden niet in Windows geinstalleerd. Voor normaal gebruik open je alleen START-COMPANION.cmd.
+- De portable versie bevat intern python.exe/pythonw.exe als runtime. Dit zijn geen KeystoneLens-installers en ze worden niet in Windows geinstalleerd.
+- Voor normaal gebruik open je alleen START-COMPANION.cmd.
+- Een tweede startpoging opent geen tweede Companion; de bestaande sessie blijft de enige actieve instantie.
 
-Als de lokale runtime niet kan laden, blijft het startvenster open en toont het de echte fout. Het tijdelijke diagnosebestand staat dan in %TEMP%\keystonelens-portable-check.txt.
+Als de lokale runtime niet kan laden, blijft het startvenster open en toont het de echte fout. Als de grafische Companion daarna niet kan starten, verschijnt een foutmelding en wordt portable-startup.log naast de launcher geschreven; als die map niet schrijfbaar is, wordt een tijdelijk diagnosebestand gebruikt.
