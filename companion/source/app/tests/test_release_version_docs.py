@@ -16,7 +16,6 @@ def test_current_release_documents_follow_canonical_version():
         ROOT / "docs/AUDIT-REPORT.md",
         ROOT / "docs/CURSEFORGE-UPLOAD.md",
         ROOT / "docs/CURSEFORGE-BESCHRIJVING.md",
-        ROOT / "docs/SIGNING-REQUIRED.md",
         ROOT / "docs/DEPENDENCIES.md",
         ROOT / "docs/LIVE-WOW-ACCEPTATIE.md",
         ROOT / "docs/SNELSTART.md",
@@ -28,6 +27,8 @@ def test_current_release_documents_follow_canonical_version():
     for path in current_docs:
         text = path.read_text(encoding="utf-8")
         assert version in text, f"{path} does not describe canonical release {version}"
+
+    assert not (ROOT / "docs/SIGNING-REQUIRED.md").exists()
 
     sbom = json.loads((ROOT / "docs/SBOM.cdx.json").read_text(encoding="utf-8"))
     assert sbom["metadata"]["component"]["version"] == version
