@@ -327,7 +327,7 @@ jobs:
           done
           gh attestation verify dist/KeystoneLens-Portable-*-Windows-x64.zip --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
 
-      - name: Create immutable-intent draft GitHub Release
+      - name: Create or repair draft GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -335,7 +335,34 @@ jobs:
           set -euo pipefail
           VERSION="$(tr -d '\r\n' < companion/source/VERSION)"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists; refusing to mutate it." >&2
-            exit 1
+            if [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft')" != 'true' ]; then
+              echo "Published release $GITHUB_REF_NAME already exists; refusing to modify it." >&2
+              exit 1
+            fi
+            existing_assets="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')"
+            download_dir="$(mktemp -d)"
+            while IFS= read -r -d '' asset; do
+              name="$(basename "$asset")"
+              if grep -Fxq "$name" <<< "$existing_assets"; then
+                gh release download "$GITHUB_REF_NAME" --pattern "$name" --dir "$download_dir"
+                cmp --silent "$asset" "$download_dir/$name" || {
+                  echo "Existing draft asset differs from the validated payload: $name" >&2
+                  exit 1
+                }
+                continue
+              fi
+              if [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft')" != 'true' ]; then
+                echo "Release was published during repair; refusing further uploads." >&2
+                exit 1
+              fi
+              gh release upload "$GITHUB_REF_NAME" "$asset"
+            done < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+            if [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft')" = 'true' ]; then
+              gh release edit "$GITHUB_REF_NAME" \
+                --draft \
+                --title "KeystoneLens ${VERSION}" \
+                --notes-file "companion/source/docs/RELEASE-NOTES-${VERSION}.md"
+            fi
+            exit 0
           fi
           gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "KeystoneLens ${VERSION}" --notes-file "companion/source/docs/RELEASE-NOTES-${VERSION}.md" --draft
