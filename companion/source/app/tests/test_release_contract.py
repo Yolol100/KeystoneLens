@@ -150,3 +150,13 @@ def test_bridge_listing_generation_survives_reload_in_saved_variables():
     assert "KeystoneLensBridgeDB.listingGeneration" in transport
     assert "listingGeneration = savedListingGeneration" in transport
     assert "KeystoneLensBridgeDB.listingGeneration = listingGeneration" in transport
+
+
+def test_merge_blocking_pr_contract_files_cannot_disappear():
+    audit = (ROOT / "scripts/audit_repository.py").read_text(encoding="utf-8")
+    assert '"companion/source/app/tests/test_release_contract.py"' in audit
+    for rel in (
+        ".github/workflows/pr-release-gate.yml",
+        "companion/source/app/tests/test_required_check_contract.py",
+    ):
+        assert (REPO_ROOT / rel).is_file(), rel
