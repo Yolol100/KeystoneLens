@@ -1,7 +1,10 @@
 """Season and UI constants for KeystoneLens Companion 0.12.8"""
 from __future__ import annotations
 
-# Verified legacy WCL encounter IDs. Season 2 is resolved dynamically from live WCL zone 55.
+# Verified WCL encounter IDs. Known production IDs take precedence over the
+# live zone-catalog fallback in WCLClient._resolve_encounter_id. This avoids a
+# total WCL outage when Warcraft Logs temporarily returns an empty/incomplete
+# zone encounter catalog.
 DUNGEONS: dict[str, int] = {
     "Algeth'ar Academy": 112526,
     "Magisters' Terrace": 12811,
@@ -11,6 +14,9 @@ DUNGEONS: dict[str, int] = {
     "Seat of the Triumvirate": 361753,
     "Skyreach": 61209,
     "Windrunner Spire": 12805,
+    # Midnight Season 2 production (WCL zone 55).
+    "Den of Nalorakk": 12825,
+    "Kings' Rest": 61762,
 }
 
 ACTIVITY_TO_DUNGEON: dict[int, str] = {
