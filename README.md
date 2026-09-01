@@ -19,7 +19,7 @@ KeystoneLens combineert een WoW Retail-addon met een portable Windows Companion 
 1. Download een gevalideerde portable ZIP uit een GitHub Release.
 2. Pak de volledige ZIP uit naar één map.
 3. Start `START-COMPANION.cmd`.
-4. Installeer de Bridge-addon uit de meegeleverde addonmap en volg de in-product instructies.
+4. Download daarnaast de afzonderlijke `KeystoneLensBridge-<versie>-CurseForge.zip` release-asset, pak die uit in de WoW Retail addonmap en volg de in-product instructies.
 
 ## Architectuur
 
@@ -62,4 +62,4 @@ KeystoneLens wordt actief ontwikkeld. Volgende mijlpalen horen als issues of rel
 
 ## Licentie
 
-Deze repository bevat momenteel geen open-sourcelicentie. Hergebruik, distributie of afgeleide werken zijn niet toegestaan zonder expliciete toestemming van de rechthebbende.
+Deze repository gebruikt een gemengd licentiemodel. De Bridge-addon onder `addon/KeystoneLensBridge/` valt onder de MIT-licentie; andere onderdelen hebben geen algemene open-sourcelicentie. Zie [LICENSE-SCOPE.md](LICENSE-SCOPE.md) en de licentiebestanden per component voor de bindende scope.
