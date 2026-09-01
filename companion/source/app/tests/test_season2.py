@@ -24,10 +24,10 @@ def test_midnight_season2_registry_is_release_ready_and_complete():
     assert all(wcl_zone_for_dungeon(name) == 55 for name in MIDNIGHT_SEASON_2.dungeons)
 
 
-def test_midnight_season2_wcl_cache_context_is_bound_to_live_production_zone():
-    from keystonelens_companion.wcl import WCL_CONTEXT_VERSION
+def test_midnight_season2_wcl_cache_is_migrated_off_ptr_evidence():
+    from keystonelens_companion.config import cache_path
 
-    assert WCL_CONTEXT_VERSION.endswith(":prod-zone55")
+    assert cache_path().name == "wcl-cache-prod55.json"
 
 
 def test_season2_name_variants_are_canonicalized():
