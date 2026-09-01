@@ -61,7 +61,10 @@ def config_path() -> Path:
 
 
 def cache_path() -> Path:
-    return local_app_dir() / "wcl-cache.json"
+    # Production-zone migration: do not reuse WCL evidence cached while Midnight
+    # Season 2 incorrectly pointed at PTR zone 56. The old file is left untouched
+    # and becomes inert; current runtime writes only the live-production cache.
+    return local_app_dir() / "wcl-cache-prod55.json"
 
 
 def log_path() -> Path:
