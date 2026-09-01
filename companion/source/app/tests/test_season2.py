@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from keystonelens_companion.constants import DUNGEONS
 from keystonelens_companion.registries import (
     MIDNIGHT_SEASON_2,
     canonical_dungeon_name,
@@ -22,6 +23,19 @@ def test_midnight_season2_registry_is_release_ready_and_complete():
         "Temple of Sethraliss",
     )
     assert all(wcl_zone_for_dungeon(name) == 55 for name in MIDNIGHT_SEASON_2.dungeons)
+
+
+def test_verified_season2_encounter_ids_bypass_zone_catalog_outages():
+    from unittest.mock import patch
+    from keystonelens_companion.wcl import WCLClient
+
+    assert DUNGEONS["Den of Nalorakk"] == 12825
+    assert DUNGEONS["Kings' Rest"] == 61762
+
+    client = object.__new__(WCLClient)
+    with patch.object(client, "_fetch_zone_encounters", side_effect=AssertionError("catalog should not be queried")):
+        assert client._resolve_encounter_id("Den of Nalorakk") == 12825
+        assert client._resolve_encounter_id("Kings' Rest") == 61762
 
 
 def test_midnight_season2_wcl_cache_is_migrated_off_ptr_evidence():
