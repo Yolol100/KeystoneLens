@@ -19,17 +19,6 @@ on:
       - 'companion/source/**'
       - 'companion/README.md'
   pull_request:
-    paths:
-      - '.github/workflows/rebuild-keystonelens.yml'
-      - '.github/dependabot.yml'
-      - '.editorconfig'
-      - '.gitattributes'
-      - '.gitignore'
-      - 'LICENSE-SCOPE.md'
-      - 'README.md'
-      - 'addon/KeystoneLensBridge/**'
-      - 'companion/source/**'
-      - 'companion/README.md'
 
 permissions:
   contents: read
