@@ -1,7 +1,7 @@
-"""Season and UI constants for KeystoneLens Companion 0.12.7"""
+"""Season and UI constants for KeystoneLens Companion 0.12.8"""
 from __future__ import annotations
 
-# Verified legacy WCL encounter IDs. Season 2 is resolved dynamically from WCL zone 56.
+# Verified legacy WCL encounter IDs. Season 2 is resolved dynamically from live WCL zone 55.
 DUNGEONS: dict[str, int] = {
     "Algeth'ar Academy": 112526,
     "Magisters' Terrace": 12811,
