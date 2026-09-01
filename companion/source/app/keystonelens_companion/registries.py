@@ -58,11 +58,13 @@ DUNGEON_TO_SEASON = {
     for dungeon in season.dungeons
 }
 
-# Current Warcraft Logs dungeon-zone IDs. Encounter IDs remain hard-coded for
-# known dungeons and this mapping provides a dynamic fallback for unknown/new IDs.
+# Current Warcraft Logs production dungeon-zone IDs. Encounter IDs remain
+# hard-coded for known dungeons and this mapping provides a dynamic fallback for
+# unknown/new IDs. Midnight Season 2 live is zone 55; zone 56 is the PTR and
+# must never be used as production scoring evidence.
 WCL_ZONE_BY_SEASON = {
     MIDNIGHT_SEASON_1.key: 47,
-    MIDNIGHT_SEASON_2.key: 56,
+    MIDNIGHT_SEASON_2.key: 55,
 }
 
 # Public Warcraft Logs character/ranking surfaces were rechecked on 2026-08-20
