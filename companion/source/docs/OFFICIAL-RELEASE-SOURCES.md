@@ -16,7 +16,7 @@ The packaged Retail TOC keeps `120007, 120100` as transition compatibility. Fina
 - Warcraft Logs Midnight Season 2 PTR zone: https://www.warcraftlogs.com/zone/statistics/56/
 - Raider.IO Developer API: https://raider.io/api
 
-Reverified 2026-09-01: Warcraft Logs production Mythic+ Season 2 is zone `55`; zone `56` is explicitly the PTR surface. Season 2 encounter IDs are therefore resolved from zone `55`, and the WCL cache context is versioned so evidence collected against the old PTR mapping is not reused after this correction. Raider.IO remains on the documented public character-profile API, locally paced below the unauthenticated 200 requests/minute limit, with 429 backoff and visible `raider.io` attribution.
+Reverified 2026-09-01: Warcraft Logs production Mythic+ Season 2 is zone `55`; zone `56` is explicitly the PTR surface. Season 2 encounter IDs are therefore resolved from zone `55`, and the default WCL cache path is migrated to `wcl-cache-prod55.json` so evidence collected against the old PTR mapping is not reused after this correction. Raider.IO remains on the documented public character-profile API, locally paced below the unauthenticated 200 requests/minute limit, with 429 backoff and visible `raider.io` attribution.
 
 ## CurseForge
 
