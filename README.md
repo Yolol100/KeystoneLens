@@ -54,7 +54,7 @@ De portable ZIP bevat bewust een private upstream CPython-runtime (`runtime/pyth
 
 CI valideert de bron, volledige regressies, native Windowsgedrag, dependency locks en deterministische packaging. De portable Windows ZIP wordt op een Windows-runner tweemaal onafhankelijk opgebouwd; beide SHA-256 hashes moeten gelijk zijn. Daarna wordt dezelfde ZIP opnieuw uitgepakt en met de gebundelde runtime geverifieerd.
 
-Een tag `v<VERSION>` kan alleen een draft GitHub Release maken met de gevalideerde Bridge-, source- en portable-ZIP plus checksums/attestations. Live WoW-, schone Windows-, CurseForge- en policyacceptatie blijven aparte publicatiegates.
+Een tag `v<VERSION>` kan alleen een draft GitHub Release maken met de gevalideerde Bridge-, source- en portable-ZIP plus checksums/attestations. Een onderbroken assetupload kan veilig opnieuw worden uitgevoerd zolang de release een concept blijft; een reeds gepubliceerde release wordt nooit gewijzigd. Live WoW-, schone Windows-, CurseForge- en policyacceptatie blijven aparte publicatiegates.
 
 ## Projectstatus, roadmap en support
 

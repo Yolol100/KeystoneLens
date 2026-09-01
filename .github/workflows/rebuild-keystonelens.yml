@@ -338,7 +338,7 @@ jobs:
           done
           gh attestation verify dist/KeystoneLens-Portable-*-Windows-x64.zip --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
 
-      - name: Create immutable-intent draft GitHub Release
+      - name: Create or repair draft GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -346,7 +346,15 @@ jobs:
           set -euo pipefail
           VERSION="$(tr -d '\r\n' < companion/source/VERSION)"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists; refusing to mutate it." >&2
-            exit 1
+            if [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft')" != 'true' ]; then
+              echo "Published release $GITHUB_REF_NAME already exists; refusing to modify it." >&2
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            gh release edit "$GITHUB_REF_NAME" \
+              --draft \
+              --title "KeystoneLens ${VERSION}" \
+              --notes-file "companion/source/docs/RELEASE-NOTES-${VERSION}.md"
+            exit 0
           fi
           gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "KeystoneLens ${VERSION}" --notes-file "companion/source/docs/RELEASE-NOTES-${VERSION}.md" --draft
