@@ -7,7 +7,15 @@ from keystonelens_companion.filters import filter_rows, normalize_score_range
 from keystonelens_companion.models import Applicant, ApplicantView, Listing, ScoreBreakdown
 
 
-def make_view(score: int, class_id: int, role_byte: int, *, loading: bool = False) -> ApplicantView:
+def make_view(
+    score: int,
+    class_id: int,
+    role_byte: int,
+    *,
+    loading: bool = False,
+    wcl_error: bool = False,
+    rio_error: bool = False,
+) -> ApplicantView:
     applicant = Applicant(
         applicant_id=score + class_id + role_byte + 1,
         member_idx=1,
@@ -24,8 +32,8 @@ def make_view(score: int, class_id: int, role_byte: int, *, loading: bool = Fals
         applicant=applicant,
         snapshot_listing=listing,
         region="EU",
-        wcl_status="loading" if loading else "ready",
-        rio_status="ready",
+        wcl_status="loading" if loading else ("error" if wcl_error else "ready"),
+        rio_status="error" if rio_error else "ready",
     )
     view.score = ScoreBreakdown(
         score=score,
@@ -50,7 +58,6 @@ class FilterTests(unittest.TestCase):
         self.assertEqual([v.score.score for v in filter_rows(rows, score_min=0, score_max=50)], [25, 50])
         self.assertEqual([v.score.score for v in filter_rows(rows, score_min=50, score_max=100)], [50, 88])
 
-
     def test_default_filter_keeps_original_84_floor(self):
         rows = [make_view(83, 8, 2), make_view(84, 8, 2), make_view(100, 8, 2)]
         self.assertEqual([v.score.score for v in filter_rows(rows)], [84, 100])
@@ -62,6 +69,23 @@ class FilterTests(unittest.TestCase):
 
     def test_loading_score_is_hidden(self):
         self.assertEqual(filter_rows([make_view(99, 8, 2, loading=True)]), [])
+
+    def test_wcl_error_is_not_hidden_by_score_filter(self):
+        rows = [make_view(42, 8, 2, wcl_error=True), make_view(42, 2, 0)]
+        out = filter_rows(rows, score_min=84, score_max=100)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].applicant.class_id, 8)
+        self.assertEqual(out[0].wcl_status, "error")
+
+    def test_rio_error_is_not_hidden_by_score_filter_but_class_role_still_apply(self):
+        rows = [
+            make_view(40, 8, 2, rio_error=True),
+            make_view(40, 2, 0, rio_error=True),
+        ]
+        out = filter_rows(rows, score_min=84, score_max=100, class_id=8, role="DPS")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].applicant.class_id, 8)
+        self.assertEqual(out[0].rio_status, "error")
 
     def test_range_normalizes(self):
         self.assertEqual(normalize_score_range(90, 10), (10, 90))
