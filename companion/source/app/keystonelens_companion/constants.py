@@ -14,9 +14,16 @@ DUNGEONS: dict[str, int] = {
     "Seat of the Triumvirate": 361753,
     "Skyreach": 61209,
     "Windrunner Spire": 12805,
-    # Midnight Season 2 production (WCL zone 55).
-    "Den of Nalorakk": 12825,
+    # Midnight Season 2 production (WCL zone 55). Encounter IDs are canonical
+    # WCL encounter identities; the live zone catalog remains a fallback only.
+    "Altar of Fangs": 62993,
+    "Murder Row": 62813,
+    "Den of Nalorakk": 62825,
+    "The Blinding Vale": 62859,
+    "Voidscar Arena": 62923,
     "Kings' Rest": 61762,
+    "Ruby Life Pools": 162521,
+    "Temple of Sethraliss": 111877,
 }
 
 ACTIVITY_TO_DUNGEON: dict[int, str] = {
