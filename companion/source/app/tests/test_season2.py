@@ -9,6 +9,18 @@ from keystonelens_companion.registries import (
 )
 
 
+SEASON2_WCL_ENCOUNTERS = {
+    "Altar of Fangs": 62993,
+    "Murder Row": 62813,
+    "Den of Nalorakk": 62825,
+    "The Blinding Vale": 62859,
+    "Voidscar Arena": 62923,
+    "Kings' Rest": 61762,
+    "Ruby Life Pools": 162521,
+    "Temple of Sethraliss": 111877,
+}
+
+
 def test_midnight_season2_registry_is_release_ready_and_complete():
     assert MIDNIGHT_SEASON_2.ruleset == "retail-12.1-season2"
     assert MIDNIGHT_SEASON_2.verified_date == "2026-08-19"
@@ -25,17 +37,18 @@ def test_midnight_season2_registry_is_release_ready_and_complete():
     assert all(wcl_zone_for_dungeon(name) == 55 for name in MIDNIGHT_SEASON_2.dungeons)
 
 
-def test_verified_season2_encounter_ids_bypass_zone_catalog_outages():
+def test_all_verified_season2_encounter_ids_bypass_zone_catalog_outages():
     from unittest.mock import patch
     from keystonelens_companion.wcl import WCLClient
 
-    assert DUNGEONS["Den of Nalorakk"] == 12825
-    assert DUNGEONS["Kings' Rest"] == 61762
+    assert {name: DUNGEONS.get(name) for name in MIDNIGHT_SEASON_2.dungeons} == SEASON2_WCL_ENCOUNTERS
+    # Regression guard for the production-breaking typo that used 12825.
+    assert DUNGEONS["Den of Nalorakk"] == 62825
 
     client = object.__new__(WCLClient)
     with patch.object(client, "_fetch_zone_encounters", side_effect=AssertionError("catalog should not be queried")):
-        assert client._resolve_encounter_id("Den of Nalorakk") == 12825
-        assert client._resolve_encounter_id("Kings' Rest") == 61762
+        for dungeon, encounter_id in SEASON2_WCL_ENCOUNTERS.items():
+            assert client._resolve_encounter_id(dungeon) == encounter_id
 
 
 def test_midnight_season2_wcl_cache_is_migrated_off_ptr_evidence():
@@ -69,10 +82,11 @@ def test_raiderio_run_names_use_same_season2_canonicalization():
     assert _run_dungeon_name({"dungeon": {"name": "King’s Rest"}}) == "Kings' Rest"
 
 
-def test_wcl_alias_resolves_against_canonical_zone_catalog():
+def test_wcl_alias_resolves_against_verified_encounter_registry():
     from unittest.mock import patch
     from keystonelens_companion.wcl import WCLClient
 
     client = object.__new__(WCLClient)
-    with patch.object(client, "_fetch_zone_encounters", return_value={"theblindingvale": 424242}):
-        assert client._resolve_encounter_id("Blinding Vale") == 424242
+    with patch.object(client, "_fetch_zone_encounters", side_effect=AssertionError("catalog should not be queried")):
+        assert client._resolve_encounter_id("Blinding Vale") == SEASON2_WCL_ENCOUNTERS["The Blinding Vale"]
+        assert client._resolve_encounter_id("King’s Rest") == SEASON2_WCL_ENCOUNTERS["Kings' Rest"]
