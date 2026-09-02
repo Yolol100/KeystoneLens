@@ -52,6 +52,17 @@ def has_final_score(view: ApplicantView) -> bool:
     )
 
 
+def has_source_error(view: ApplicantView) -> bool:
+    """Return whether a finished row contains an online enrichment failure.
+
+    Error rows must remain visible even when their temporary half-score falls
+    below the user's score filter. Otherwise an API outage looks exactly like
+    "no applicants", hiding the diagnostic the user needs to fix the source.
+    Class and role filters still apply normally.
+    """
+    return view.rio_status == "error" or view.wcl_status == "error"
+
+
 def filter_rows(
     rows: Iterable[ApplicantView],
     *,
@@ -68,7 +79,11 @@ def filter_rows(
     for view in rows:
         if not has_final_score(view) or view.score is None:
             continue
-        if not (low <= int(view.score.score) <= high):
+        # A failed source can make a normally strong applicant look artificially
+        # weak (for example WCL error => its fixed 50% share is temporarily 0).
+        # Keep that row visible so the red source error cannot be hidden by the
+        # score slider. Once enrichment succeeds, the normal score range applies.
+        if not has_source_error(view) and not (low <= int(view.score.score) <= high):
             continue
         if selected_class is not None and view.applicant.class_id != selected_class:
             continue
