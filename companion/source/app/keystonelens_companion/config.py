@@ -9,7 +9,15 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .filters import DEFAULT_SCORE_MAX, DEFAULT_SCORE_MIN
+from .constants import SPEC_NAMES
+from .filters import (
+    DEFAULT_SCORE_MAX,
+    DEFAULT_SCORE_MIN,
+    DEFAULT_SORT_DESC,
+    DEFAULT_SORT_KEY,
+    SORT_KEYS,
+    normalize_search_query,
+)
 
 APP_DIR_NAME = "KeystoneLens"
 _PROTECTED_SECRET_KEY = "client_secret_protected"
@@ -33,6 +41,11 @@ class Config:
     score_max: int = DEFAULT_SCORE_MAX
     class_filter_id: int | None = None
     role_filter: str = ""
+    spec_filter_id: int | None = None
+    search_query: str = ""
+    unique_specs: bool = False
+    sort_key: str = DEFAULT_SORT_KEY
+    sort_desc: bool = DEFAULT_SORT_DESC
     show_role: bool = True
     show_class: bool = True
     show_spec: bool = True
@@ -187,6 +200,16 @@ def _clean_role_filter(value: Any) -> str:
     return role if role in {"TANK", "HEALER", "DPS"} else ""
 
 
+def _clean_spec_filter(value: Any) -> int | None:
+    spec_id = _clean_optional_int(value)
+    return spec_id if spec_id in SPEC_NAMES else None
+
+
+def _clean_sort_key(value: Any) -> str:
+    key = _clean_text(value).strip().casefold()
+    return key if key in SORT_KEYS else DEFAULT_SORT_KEY
+
+
 def _normalize_config(raw: dict[str, Any]) -> Config:
     score_min = _clean_score(raw.get("score_min", DEFAULT_SCORE_MIN), DEFAULT_SCORE_MIN)
     score_max = _clean_score(raw.get("score_max", DEFAULT_SCORE_MAX), DEFAULT_SCORE_MAX)
@@ -204,6 +227,11 @@ def _normalize_config(raw: dict[str, Any]) -> Config:
         score_max=score_max,
         class_filter_id=_clean_class_filter(raw.get("class_filter_id")),
         role_filter=_clean_role_filter(raw.get("role_filter")),
+        spec_filter_id=_clean_spec_filter(raw.get("spec_filter_id")),
+        search_query=normalize_search_query(raw.get("search_query", "")),
+        unique_specs=_clean_bool(raw.get("unique_specs"), False),
+        sort_key=_clean_sort_key(raw.get("sort_key", DEFAULT_SORT_KEY)),
+        sort_desc=_clean_bool(raw.get("sort_desc"), DEFAULT_SORT_DESC),
         show_role=_clean_bool(raw.get("show_role"), True),
         show_class=_clean_bool(raw.get("show_class"), True),
         show_spec=_clean_bool(raw.get("show_spec"), True),
