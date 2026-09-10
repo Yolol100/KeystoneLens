@@ -183,11 +183,12 @@ def sort_rows(
 
 
 def unique_spec_rows(rows: Iterable[ApplicantView], *, enabled: bool = False) -> list[ApplicantView]:
-    """Keep the first sorted applicant per known spec while preserving error diagnostics.
+    """Keep exactly the first sorted applicant per known specialization.
 
-    Source-error rows remain visible even if another applicant of the same spec is
-    already present. This preserves KeystoneLens' fail-visible provider behavior;
-    healthy rows still obey one-row-per-spec exactly.
+    The active sort decides which applicant represents a specialization. Unknown
+    spec IDs stay visible because they cannot be safely grouped. Provider errors
+    remain fail-visible when they are the selected representative, but they no
+    longer create duplicate rows for a known specialization.
     """
     values = list(rows)
     if not enabled:
@@ -197,9 +198,6 @@ def unique_spec_rows(rows: Iterable[ApplicantView], *, enabled: bool = False) ->
     for view in values:
         spec_id = normalize_spec_filter(view.applicant.spec_id)
         if spec_id is None:
-            out.append(view)
-            continue
-        if has_source_error(view):
             out.append(view)
             continue
         if spec_id in seen:
