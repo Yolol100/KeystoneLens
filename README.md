@@ -1,65 +1,38 @@
 # KeystoneLens
 
-> **Portfoliostatus:** Flagship · actieve ontwikkeling · WoW-addon en Windows Companion
+KeystoneLens combines a World of Warcraft Retail bridge add-on with a local Windows Companion for Mythic+ recruitment analysis.
 
-## In één oogopslag
+## Required components
 
-KeystoneLens combineert een WoW Retail-addon met een portable Windows Companion voor veilige, lokale recruitmentanalyse. De repository legt nadruk op reproduceerbare Windows-builds, gecontroleerde dependencies en releasebewijs.
+- `addon/KeystoneLensBridge/` — WoW add-on. It captures/encodes local data and adds Companion information to supported tooltips.
+- `companion/source/` — Windows Companion source and the files required to build the portable Companion package.
 
-| Onderdeel | Bewijs |
-| --- | --- |
-| Doelgroep | WoW-guilds en recruiters die kandidaatdata lokaal willen analyseren |
-| Stack | Python, Tkinter, Lua, Windows portable runtime, GitHub Actions |
-| Kwaliteit | Regressies, Windows-platformchecks, dependency review en CodeQL |
-| Release | Deterministische portable ZIP, checksums en attestations |
-| Privacy | Screenshottransport en lokale verwerking; geen verborgen automatische game-acties |
+Both components are part of the product and are intentionally kept.
 
-## Snel starten
+## Bridge installation
 
-1. Download een gevalideerde portable ZIP uit een GitHub Release.
-2. Pak de volledige ZIP uit naar één map.
-3. Start `START-COMPANION.cmd`.
-4. Download daarnaast de afzonderlijke `KeystoneLensBridge-<versie>-CurseForge.zip` release-asset, pak die uit in de WoW Retail addonmap en volg de in-product instructies.
+Place `addon/KeystoneLensBridge/` in `World of Warcraft/_retail_/Interface/AddOns/` as `KeystoneLensBridge`.
 
-## Architectuur
+Optional integrations include Raider.IO, KeystoneLens Companion Data and LibKeystone.
 
-```text
-WoW addon → lokale screenshotcode → Windows Companion
-                                  ↘ Raider.IO / Warcraft Logs-verrijking
-                                   → lokale analyse en Companion-data
-```
+## Windows Companion
 
-KeystoneLens bestaat uit twee runtime-onderdelen:
+The Companion source is in `companion/source/app/`. The portable package is assembled with `companion/source/portable/build-portable.ps1`, which uses the pinned runtime contract and `scripts/make_deterministic_zip.py`.
 
-1. `addon/KeystoneLensBridge/` — de WoW Retail addon die recruitmentdata veilig naar lokale screenshots transporteert en Companion-tooltipdata toont.
-2. `companion/source/app/` — de Windows Companion die screenshots decodeert en Raider.IO/Warcraft Logs-verrijking berekent.
+The resulting portable package starts with `START-COMPANION.cmd`.
 
-De Windows Companion wordt vanaf 0.12.8 als **portable ZIP** geleverd. Er is geen KeystoneLens Setup-programma, geen eigen KeystoneLens `.exe`, geen registerinstallatie, geen administratorinstallatie en geen apart geïnstalleerde Python nodig. Pak `KeystoneLens-Portable-<versie>-Windows-x64.zip` volledig uit en start `START-COMPANION.cmd`.
+## Repository structure
 
-De portable ZIP bevat bewust een private upstream CPython-runtime (`runtime/python.exe` en `runtime/pythonw.exe`) omdat de Tkinter Companion Python nodig heeft. Dat zijn runtimebestanden, geen KeystoneLens-installer of custom launcher. De build-only pip-command shims worden vóór packaging verwijderd.
+This repository intentionally keeps only product runtime/source files, the small amount of build logic required for the portable Companion, required third-party notices, licensing information and this README.
 
-## Repository-indeling
+- `addon/KeystoneLensBridge/` — Bridge runtime
+- `companion/source/app/` — Companion runtime source
+- `companion/source/data-addon/` — generated Companion Data add-on source
+- `companion/source/portable/` — portable launcher and required builder
+- `companion/source/runtime/` — pinned Windows runtime/dependency contract
+- `companion/source/scripts/make_deterministic_zip.py` — required portable ZIP builder helper
+- `companion/source/docs/THIRD-PARTY-NOTICES.md` — required third-party notices
 
-- `addon/KeystoneLensBridge/` — canonieke Bridge-bron.
-- `companion/source/app/` — Companion runtime.
-- `companion/source/portable/` — portable launcher en Windows builder.
-- `companion/source/runtime/` — hash-locked runtime dependencies en het officiële Python runtimecontract.
-- `companion/source/data-addon/` — Companion Data-bron.
-- `companion/source/scripts/` — repository-audit en deterministische packaging.
-- `companion/source/docs/` — actuele release-, security- en testdocumentatie.
+## License
 
-`companion/source/VERSION` is de canonieke productversie. Generated ZIPs, EXEs, checksums, caches en lokale runtime-output worden niet op `main` opgeslagen.
-
-## Releasecontract
-
-CI valideert de bron, volledige regressies, native Windowsgedrag, dependency locks en deterministische packaging. De portable Windows ZIP wordt op een Windows-runner tweemaal onafhankelijk opgebouwd; beide SHA-256 hashes moeten gelijk zijn. Daarna wordt dezelfde ZIP opnieuw uitgepakt en met de gebundelde runtime geverifieerd.
-
-Een tag `v<VERSION>` kan alleen een draft GitHub Release maken met de gevalideerde Bridge-, source- en portable-ZIP plus checksums/attestations. Een onderbroken assetupload kan veilig opnieuw worden uitgevoerd zolang de release een concept blijft: bestaande assets moeten byte-identiek zijn en alleen ontbrekende assets worden toegevoegd. Repository-level release immutability blokkeert asset- en tagwijzigingen zodra een release is gepubliceerd. Live WoW-, schone Windows-, CurseForge- en policyacceptatie blijven aparte publicatiegates.
-
-## Projectstatus, roadmap en support
-
-KeystoneLens wordt actief ontwikkeld. Volgende mijlpalen horen als issues of release-notes bij een concrete versie; er worden vanuit deze README geen releasedata beloofd. Meld reproduceerbare bugs via [GitHub Issues](https://github.com/Yolol100/KeystoneLens/issues) zonder account-, log- of privégegevens.
-
-## Licentie
-
-Deze repository gebruikt een gemengd licentiemodel. De Bridge-addon onder `addon/KeystoneLensBridge/` valt onder de MIT-licentie; andere onderdelen hebben geen algemene open-sourcelicentie. Zie [LICENSE-SCOPE.md](LICENSE-SCOPE.md) en de licentiebestanden per component voor de bindende scope.
+See `LICENSE-SCOPE.md` and the license/notice files inside the individual components.
