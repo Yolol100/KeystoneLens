@@ -158,4 +158,5 @@ class EngineState:
     lfg_unavailable: bool = False
     applicants_unavailable: bool = False
     roster_unavailable: bool = False
+    listing_generation: int = 0
     live_hover: Optional[LiveHover] = None
