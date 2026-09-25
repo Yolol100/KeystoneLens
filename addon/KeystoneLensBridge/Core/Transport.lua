@@ -1,7 +1,7 @@
 -- KeystoneLens transport (forked from ApplicantScout) — encodes Mythic+ applicant
 -- snapshots as QR frames and triggers Screenshot() for the external companion.
--- Raider.IO data is read locally in WoW; Warcraft Logs enrichment happens only
--- in the companion. The QR is normally transient and can be moved for support.
+-- Warcraft Logs enrichment happens only in the companion. Historical score
+-- slots in APS1 v12/v13 stay zero for backwards-compatible decoding. The QR is normally transient and can be moved for support.
 --
 -- WHY raw frame, not Ace3: Ace3 shares CallbackHandler-1.0 with other addons
 -- (BetterBags, AlterEgo, ...); their taint contaminates our handler stack and
@@ -496,7 +496,6 @@ StartSession = function()
     qrForceVisibleShotGen = (qrForceVisibleShotGen or 0) + 1
     qrForceVisibleForShot = false
     if entryCreationKeyState.qrFrame then entryCreationKeyState.qrFrame:SetFrameStrata("DIALOG") end
-    entryCreationKeyState.rioMPlusSummaryCache = {}
     entryCreationKeyState.lastQuietFullPartySignature = nil
     entryCreationKeyState.lastPayloadQuietFullPartySignature = nil
     entryCreationKeyState.MarkRosterCompositionChanged()
@@ -571,7 +570,6 @@ EndSession = function(emitTerminalClear)
     entryCreationKeyState.lastDeliverySnapshotHash = nil
     entryCreationKeyState.lastDeliverySnapshotSendCount = 0
     entryCreationKeyState.entryCreationKeyLevelCache = nil
-    entryCreationKeyState.rioMPlusSummaryCache = {}
 
     -- Schedule deferred Hide AFTER the final clear-shot has had a chance to
     -- fire. The screenshot path inside MaybeTriggerScreenshot waits the render
@@ -1155,14 +1153,11 @@ end
 --   LeaderKey: has_leader_key byte; if 1: uint8 keyLevel +
 --              uint16 challengeMapID + len-prefixed leaderName
 --   Apps:      uint16 count; per applicant: uint32 id + uint8 member_idx +
---              uint8 classID + uint16 specID + uint16 ilvl + uint16 rioScore +
---              uint16 mainScore + uint8 rioProfile + uint8 rioBestKey +
---              uint8 rioBestDungeonKey + uint8 rioTimedAtTarget +
---              uint8 rioTimedAtMinus1 + uint8 rioTimedAtMinus2 +
---              uint8 rioCompletedAtMinus1 + uint8 rioDungeonCount +
+--              uint8 classID + uint16 specID + uint16 ilvl + uint16 legacyScore +
+--              zeroed legacy M+ compatibility fields +
 --              uint8 role + uint8 nameLen + utf8 name (CLAMPED to 255 bytes)
 --   Roster:    uint16 count; per current party/raid member: uint8 unitIndex +
---              uint8 flags + uint8 subgroup + same class/spec/score/RIO/role
+--              uint8 flags + uint8 subgroup + same class/spec/legacy-score/role
 --              tail as applicant rows, then nameLen + utf8 name.
 --   Trailer:   uint32 CRC32 (IEEE 802.3) over [magic..last roster byte]
 --
@@ -1763,174 +1758,13 @@ local function _GetListingKeystoneLevel(activityID, questID, listingName, listin
     return keyLevel
 end
 
-local function _RaiderIODungeonMatchesActivity(dungeon, listingActivityID)
-    dungeon = SafeTable(dungeon)
-    listingActivityID = math.floor(SafeNumber(listingActivityID, 0))
-    if not dungeon or listingActivityID <= 0 then return false end
-
-    local lfdActivityIDs = SafeTable(dungeon.lfd_activity_ids)
-    if lfdActivityIDs then
-        for _, rawActivityID in ipairs(lfdActivityIDs) do
-            if math.floor(SafeNumber(rawActivityID, 0)) == listingActivityID then
-                return true
-            end
-        end
-    end
-
-    return math.floor(SafeNumber(dungeon.keystone_instance, 0)) == listingActivityID
+local function _LegacyMPlusSummaryForTransport()
+    -- APS1 v12/v13 retain historical score fields for decoder compatibility.
+    -- KeystoneLens no longer reads Raider.IO; these legacy fields stay zero.
+    return entryCreationKeyState.emptyLegacyMPlusSummary
 end
 
-local function _EmptyRaiderIOMPlusSummary(currentScore, mainScore)
-    return {
-        currentScore = _ClampUInt16(currentScore),
-        mainScore = _ClampUInt16(mainScore),
-        hasProfile = false,
-        bestKey = 0,
-        bestDungeonKey = 0,
-        timedAtOrAbove = 0,
-        timedAtOrAboveMinus1 = 0,
-        timedAtOrAboveMinus2 = 0,
-        completedAtOrAboveMinus1 = 0,
-        dungeonCount = 0,
-    }
-end
-
-local function _RaiderIOProfileLookupNameFromCleanName(memberName, playerRealm)
-    if memberName == "" or memberName == "?" or memberName:find("-", 1, true) then
-        return memberName
-    end
-    if playerRealm == nil then
-        local _playerName, resolvedRealm = UnitFullName("player")
-        playerRealm = SafeStr(resolvedRealm, "")
-    end
-    if playerRealm == "" then return memberName end
-    -- WHY: LFG may emit same-realm applicants as bare "Name"; RaiderIO profile
-    -- lookups need the realm-qualified key to expose per-dungeon history.
-    return memberName .. "-" .. playerRealm
-end
-
-local function _GetRaiderIOMPlusSummaryForCleanName(memberName, listingActivityID, targetKey)
-    -- RaiderIO is optional. Callers pass only a SafeStr-cleaned applicant name:
-    -- the raw LFG name can be secret-tagged, and RaiderIO's public API performs
-    -- string parsing internally.
-    if memberName == "" or memberName == "?" then
-        return entryCreationKeyState.emptyRaiderIOMPlusSummary
-    end
-    local rio = SafeTable(_G.RaiderIO)
-    if not rio or type(rio.GetProfile) ~= "function" then
-        return entryCreationKeyState.emptyRaiderIOMPlusSummary
-    end
-
-    listingActivityID = math.floor(SafeNumber(listingActivityID, 0))
-    targetKey = _NormalizeKeystoneLevel(targetKey)
-    local rioSummaryCache = entryCreationKeyState.rioMPlusSummaryCache
-    if not rioSummaryCache then
-        rioSummaryCache = {}
-        entryCreationKeyState.rioMPlusSummaryCache = rioSummaryCache
-    end
-    local cacheKey = memberName .. "\031" .. tostring(listingActivityID)
-        .. "\031" .. tostring(targetKey)
-    local cachedSummary = rioSummaryCache[cacheKey]
-    if cachedSummary then return cachedSummary end
-
-    local profileName, profileRealm = memberName:match("^([^-]+)%-(.+)$")
-    local ok, profile
-    if profileName and profileRealm and profileRealm ~= "" then
-        ok, profile = pcall(rio.GetProfile, profileName, profileRealm)
-    else
-        ok, profile = pcall(rio.GetProfile, memberName)
-    end
-    if not ok or IsSecretValue(profile) then
-        return entryCreationKeyState.emptyRaiderIOMPlusSummary
-    end
-    profile = SafeTable(profile)
-    if not profile then return entryCreationKeyState.emptyRaiderIOMPlusSummary end
-    local function StoreRaiderIOSummary(summary)
-        rioSummaryCache[cacheKey] = summary
-        return summary
-    end
-
-    local keystoneProfile = SafeTable(profile.mythicKeystoneProfile)
-    if not keystoneProfile then
-        return StoreRaiderIOSummary(entryCreationKeyState.emptyRaiderIOMPlusSummary)
-    end
-    -- Raider.IO documents hasRenderableData=false as stale data that must be ignored.
-    if keystoneProfile.hasRenderableData == false then
-        return StoreRaiderIOSummary(entryCreationKeyState.emptyRaiderIOMPlusSummary)
-    end
-    if IsSecretValue(keystoneProfile.blocked) or keystoneProfile.blocked then
-        return StoreRaiderIOSummary(entryCreationKeyState.emptyRaiderIOMPlusSummary)
-    end
-
-    local current = SafeTable(keystoneProfile.mplusCurrent)
-    local currentScore = keystoneProfile.currentScore
-    if current then
-        currentScore = current.score
-    end
-    local mainCurrent = SafeTable(keystoneProfile.mplusMainCurrent)
-    local mainScore = keystoneProfile.mainCurrentScore
-    if mainCurrent then
-        mainScore = mainCurrent.score
-    end
-    local summary = _EmptyRaiderIOMPlusSummary(currentScore, mainScore)
-
-    local sortedDungeons = SafeTable(keystoneProfile.sortedDungeons)
-    if not sortedDungeons then return StoreRaiderIOSummary(summary) end
-
-    local targetMinus1 = targetKey > 0 and math.max(2, targetKey - 1) or 0
-    local targetMinus2 = targetKey > 0 and math.max(2, targetKey - 2) or 0
-    summary.hasProfile = true
-
-    for _, sortedDungeon in ipairs(sortedDungeons) do
-        local entry = SafeTable(sortedDungeon)
-        if entry then
-            local keyLevel = _NormalizeKeystoneLevel(entry.level)
-            if keyLevel > 0 then
-                local chests = math.floor(SafeNumber(entry.chests, 0))
-                local timed = chests > 0
-                local dungeon = SafeTable(entry.dungeon)
-                summary.dungeonCount = summary.dungeonCount + 1
-                if timed and keyLevel > summary.bestKey then
-                    summary.bestKey = keyLevel
-                end
-                if timed
-                   and _RaiderIODungeonMatchesActivity(dungeon, listingActivityID)
-                   and keyLevel > summary.bestDungeonKey then
-                    summary.bestDungeonKey = keyLevel
-                end
-                if targetKey > 0 and timed and keyLevel >= targetKey then
-                    summary.timedAtOrAbove = summary.timedAtOrAbove + 1
-                end
-                if targetMinus1 > 0 then
-                    if timed and keyLevel >= targetMinus1 then
-                        summary.timedAtOrAboveMinus1 =
-                            summary.timedAtOrAboveMinus1 + 1
-                    end
-                    if keyLevel >= targetMinus1 then
-                        summary.completedAtOrAboveMinus1 =
-                            summary.completedAtOrAboveMinus1 + 1
-                    end
-                end
-                if targetMinus2 > 0 and timed and keyLevel >= targetMinus2 then
-                    summary.timedAtOrAboveMinus2 =
-                        summary.timedAtOrAboveMinus2 + 1
-                end
-            end
-        end
-    end
-
-    summary.bestKey = _ClampUInt8(summary.bestKey)
-    summary.bestDungeonKey = _ClampUInt8(summary.bestDungeonKey)
-    summary.timedAtOrAbove = _ClampUInt8(summary.timedAtOrAbove)
-    summary.timedAtOrAboveMinus1 = _ClampUInt8(summary.timedAtOrAboveMinus1)
-    summary.timedAtOrAboveMinus2 = _ClampUInt8(summary.timedAtOrAboveMinus2)
-    summary.completedAtOrAboveMinus1 =
-        _ClampUInt8(summary.completedAtOrAboveMinus1)
-    summary.dungeonCount = _ClampUInt8(summary.dungeonCount)
-    return StoreRaiderIOSummary(summary)
-end
-
-entryCreationKeyState.AppendRaiderIOMPlusSummary = function(out, summary)
+entryCreationKeyState.AppendLegacyMPlusSummary = function(out, summary)
     table.insert(out, _Uint16BE(summary.mainScore))
     table.insert(out, string.char(summary.hasProfile and 1 or 0))
     table.insert(out, string.char(summary.bestKey))
@@ -3263,7 +3097,7 @@ local function _RaidSubgroupForRoster(index)
     return _ClampUInt8(SafeNumber(subgroup, 1))
 end
 
-local function BuildRosterPayloadRows(listingActivityIDForRio, listingKeyLevelForRio, includeSoloPlayer)
+local function BuildRosterPayloadRows(listingActivityIDForContext, listingKeyLevelForContext, includeSoloPlayer)
     local rosterOut = {}
     local emittedCount = 0
     local rows = {}
@@ -3314,12 +3148,8 @@ local function BuildRosterPayloadRows(listingActivityIDForRio, listingKeyLevelFo
     end)
 
     for _, row in ipairs(rows) do
-        local rioSummary = _GetRaiderIOMPlusSummaryForCleanName(
-            _RaiderIOProfileLookupNameFromCleanName(row.name),
-            listingActivityIDForRio,
-            listingKeyLevelForRio
-        )
-        local currentScoreBytes = _Uint16BE(rioSummary.currentScore)
+        local legacySummary = _LegacyMPlusSummaryForTransport()
+        local currentScoreBytes = _Uint16BE(legacySummary.currentScore)
         table.insert(rosterOut, string.char(_ClampUInt8(row.unitIndex)))
         table.insert(rosterOut, string.char(_ClampUInt8(row.flags)))
         table.insert(rosterOut, string.char(_ClampUInt8(row.subgroup)))
@@ -3327,7 +3157,7 @@ local function BuildRosterPayloadRows(listingActivityIDForRio, listingKeyLevelFo
         table.insert(rosterOut, _Uint16BE(row.specID))
         table.insert(rosterOut, _Uint16BE(row.ilvl))
         table.insert(rosterOut, currentScoreBytes)
-        entryCreationKeyState.AppendRaiderIOMPlusSummary(rosterOut, rioSummary)
+        entryCreationKeyState.AppendLegacyMPlusSummary(rosterOut, legacySummary)
         table.insert(rosterOut, string.char(_ClampUInt8(row.role)))
         _PackCleanLenStr(rosterOut, row.name)
         emittedCount = emittedCount + 1
@@ -3418,8 +3248,8 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
         applicantIDs = nil
         leaderKeystone = nil
     end
-    local listingActivityIDForRio = 0
-    local listingKeyLevelForRio = 0
+    local listingActivityIDForContext = 0
+    local listingKeyLevelForContext = 0
     local listingQuietSignature = nil
     if cleanEntry then
         -- Midnight 12.0 returns activityIDs (table) on the primary listing —
@@ -3486,8 +3316,8 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
                 keyLevel = leaderKeystone.level
             end
         end
-        listingActivityIDForRio = activityID
-        listingKeyLevelForRio = keyLevel
+        listingActivityIDForContext = activityID
+        listingKeyLevelForContext = keyLevel
         local listingQuietOut = {}
         table.insert(listingQuietOut, _Uint32BE(activityID))
         table.insert(listingQuietOut, _Uint32BE(questID))
@@ -3537,8 +3367,8 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
         table.insert(leaderQuietOut, string.char(_ClampUInt8(leaderKeystone.level)))
         table.insert(leaderQuietOut, _Uint16BE(leaderKeystone.challengeMapID))
         _PackCleanLenStr(leaderQuietOut, leaderKeystone.playerName)
-        if listingKeyLevelForRio <= 0 then
-            listingKeyLevelForRio = leaderKeystone.level
+        if listingKeyLevelForContext <= 0 then
+            listingKeyLevelForContext = leaderKeystone.level
         end
         table.insert(out, string.char(1))
         table.insert(out, string.char(_ClampUInt8(leaderKeystone.level)))
@@ -3621,21 +3451,16 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
                 table.insert(memberOut, string.char(CLASS_NAME_TO_ID[classToken] or 0))
                 table.insert(memberOut, _Uint16BE(SafeNumber(memberSpecID, 0)))
                 table.insert(memberOut, _Uint16BE(SafeRoundedNumber(memberILvl, 0)))
-                local rioSummary = _GetRaiderIOMPlusSummaryForCleanName(
-                    _RaiderIOProfileLookupNameFromCleanName(memberName, playerRealm),
-                    listingActivityIDForRio,
-                    listingKeyLevelForRio
-                )
-                -- v12 fixes the old semantic mismatch: this wire slot is now the
-                -- actual Raider.IO current-character score. Blizzard's Group
-                -- Finder score is carried separately below as fallback/context.
-                table.insert(memberOut, _Uint16BE(rioSummary.currentScore))
-                entryCreationKeyState.AppendRaiderIOMPlusSummary(memberOut, rioSummary)
+                local legacySummary = _LegacyMPlusSummaryForTransport()
+                -- Historical score slots stay zero. Blizzard's Group Finder score
+                -- remains serialized separately for wire compatibility only.
+                table.insert(memberOut, _Uint16BE(legacySummary.currentScore))
+                entryCreationKeyState.AppendLegacyMPlusSummary(memberOut, legacySummary)
                 table.insert(memberOut, string.char(ROLE_NAME_TO_BYTE[roleToken] or 2))
                 _PackCleanLenStr(memberOut, memberName)
                 local blizzardBestDungeonKey, blizzardBestKey =
                     entryCreationKeyState.GetApplicantDungeonContextForTransport(
-                        apiToken, m, listingActivityIDForRio
+                        apiToken, m, listingActivityIDForContext
                     )
                 table.insert(memberOut, string.char(_ClampUInt8(validAppMemberCounts[appIndex])))
                 table.insert(memberOut, _Uint16BE(_ClampUInt16(SafeRoundedNumber(memberScore, 0))))
@@ -3672,8 +3497,8 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
         rosterPayload, rosterCount, rosterQuietSignature,
         rosterQuietHasUnknownSpec, rosterQuietInRaid, rosterIncomplete =
             BuildRosterPayloadRows(
-                listingActivityIDForRio,
-                listingKeyLevelForRio,
+                listingActivityIDForContext,
+                listingKeyLevelForContext,
                 cleanEntry ~= nil
             )
     end
@@ -3693,8 +3518,8 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
     if applicantsIncomplete then
         headerFlags = headerFlags + 0x08
     end
-    -- v12 carries explicit Raider.IO vs Blizzard score semantics plus atomic
-    -- application metadata. v13 is the same layout with applicant-authority
+    -- v12/v13 retain historical score slots plus atomic application metadata.
+    -- KeystoneLens ignores those legacy score fields; v13 adds applicant-authority
     -- unavailable; paired older companions fail closed instead of clearing rows.
     out[wireVersionChunkIndex] = string.char(applicantsIncomplete and 0x0D or 0x0C)
     out[headerFlagsChunkIndex] = string.char(headerFlags)
