@@ -71,10 +71,9 @@ def verify_runtime(*, import_full_app: bool) -> None:
         importlib.import_module("keystonelens_companion.__main__")
 
 
-def restore_existing_window(title_prefix: str = "KeystoneLens ") -> bool:
-    """Restore and foreground an existing KeystoneLens top-level window."""
+def _find_top_level_window(title_prefix: str) -> int | None:
     if os.name != "nt":
-        return False
+        return None
 
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     enum_proc_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -85,12 +84,6 @@ def restore_existing_window(title_prefix: str = "KeystoneLens ") -> bool:
     user32.GetWindowTextLengthW.restype = ctypes.c_int
     user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.GetWindowTextW.restype = ctypes.c_int
-    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-    user32.ShowWindow.restype = wintypes.BOOL
-    user32.BringWindowToTop.argtypes = [wintypes.HWND]
-    user32.BringWindowToTop.restype = wintypes.BOOL
-    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-    user32.SetForegroundWindow.restype = wintypes.BOOL
 
     found: list[int] = []
 
@@ -109,12 +102,25 @@ def restore_existing_window(title_prefix: str = "KeystoneLens ") -> bool:
     try:
         user32.EnumWindows(callback, 0)
     except OSError:
+        return None
+    return found[0] if found else None
+
+
+def restore_existing_window(title_prefix: str = "KeystoneLens ") -> bool:
+    """Restore and foreground an existing KeystoneLens top-level window."""
+    hwnd_value = _find_top_level_window(title_prefix)
+    if hwnd_value is None:
         return False
 
-    if not found:
-        return False
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.BringWindowToTop.restype = wintypes.BOOL
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
 
-    hwnd = wintypes.HWND(found[0])
+    hwnd = wintypes.HWND(hwnd_value)
     user32.ShowWindow(hwnd, 9)  # SW_RESTORE
     user32.BringWindowToTop(hwnd)
     user32.SetForegroundWindow(hwnd)
@@ -155,15 +161,21 @@ def verify_ui_runtime() -> None:
         # after the native HWND has already left the iconic state. Verify the
         # actual Win32 state with a short bounded retry instead of treating that
         # Tk bookkeeping lag as a portable-runtime failure.
+        hwnd_value = _find_top_level_window("KeystoneLens Verification")
+        if hwnd_value is None:
+            raise RuntimeError("Verification top-level HWND disappeared after restore.")
+
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         user32.IsIconic.argtypes = [wintypes.HWND]
         user32.IsIconic.restype = wintypes.BOOL
-        hwnd = wintypes.HWND(root.winfo_id())
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
+        user32.IsWindowVisible.restype = wintypes.BOOL
+        hwnd = wintypes.HWND(hwnd_value)
         restored = False
         deadline = time.monotonic() + 1.0
         while time.monotonic() < deadline:
             root.update()
-            if not user32.IsIconic(hwnd):
+            if not user32.IsIconic(hwnd) and user32.IsWindowVisible(hwnd):
                 restored = True
                 break
             time.sleep(0.02)
