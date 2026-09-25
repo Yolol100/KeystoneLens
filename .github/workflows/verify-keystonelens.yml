@@ -66,6 +66,9 @@ jobs:
       - name: Verify preload refresh contract
         run: python companion/source/scripts/test_preload_refresh_contract.py
 
+      - name: Verify live applicant board
+        run: python companion/source/scripts/test_live_applicant_board.py
+
       - name: Verify preload performance
         run: python companion/source/scripts/test_preload_performance.py
 
