@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 from pathlib import Path
+import time
 import runpy
 import sys
 import traceback
@@ -149,9 +150,25 @@ def verify_ui_runtime() -> None:
 
         if not restore_existing_window("KeystoneLens Verification"):
             raise RuntimeError("Could not find the verification window through Win32.")
-        root.update()
-        if root.state() == "iconic":
-            raise RuntimeError("Win32 restore did not restore the Tk window.")
+
+        # Tk's cached state can lag ShowWindow(SW_RESTORE) on Windows CI even
+        # after the native HWND has already left the iconic state. Verify the
+        # actual Win32 state with a short bounded retry instead of treating that
+        # Tk bookkeeping lag as a portable-runtime failure.
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.IsIconic.argtypes = [wintypes.HWND]
+        user32.IsIconic.restype = wintypes.BOOL
+        hwnd = wintypes.HWND(root.winfo_id())
+        restored = False
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline:
+            root.update()
+            if not user32.IsIconic(hwnd):
+                restored = True
+                break
+            time.sleep(0.02)
+        if not restored:
+            raise RuntimeError("Win32 restore left the Tk window iconic.")
     finally:
         if overlay is not None:
             overlay.close()
