@@ -22,6 +22,7 @@ local currentMetric = "DPS"
 local currentPercentile = 97.4
 local currentOwner = nil
 local displayedUnit = nil
+local displayedRealm = "Draenor"
 local eventFrame = nil
 local unitPostCall = nil
 
@@ -30,7 +31,7 @@ _G.time = function() return now end
 _G.GetNormalizedRealmName = function() return "Draenor" end
 _G.UnitIsPlayer = function(unit) return unit == "unit-player" end
 _G.UnitFullName = function(unit)
-    if unit == "unit-player" then return "Alice", "Draenor" end
+    if unit == "unit-player" then return "Alice", displayedRealm end
 end
 
 _G.TooltipUtil = {
@@ -243,7 +244,26 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3050")
 assertEq(#GameTooltip.lines, 2, "unit tooltip did not inject WCL under Raider.IO score")
 assertEq(GameTooltip.lines[2].right, "DPS 92%", "unit tooltip percentile formatting changed")
 
--- 9. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
+-- 9. A same-name player on another realm must never inherit the local player's cache.
+clearTooltip()
+currentOwner = {}
+displayedUnit = "unit-player"
+displayedRealm = "Kazzak"
+_G.KeystoneLensTooltipCacheV3.entries = {
+    ["Alice"] = {
+        activityID = 777,
+        specID = 62,
+        metric = "DPS",
+        percentile = 99,
+        fetchedAt = now,
+    },
+}
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3060")
+assertEq(#GameTooltip.lines, 1, "cross-realm player matched a same-realm short cache key")
+displayedRealm = "Draenor"
+setCache(62, "DPS", 91.6, now)
+
+-- 10. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
 clearTooltip()
 currentOwner = member
 displayedUnit = nil
@@ -252,7 +272,7 @@ member.OnEnter(member)
 assertEq(#GameTooltip.lines, 1, "standalone/fallback WCL line missing")
 assertTrue(GameTooltip.lines[1].left:find("Warcraft Logs M+", 1, true) ~= nil, "fallback WCL label missing")
 
--- 10. The unit post-call fallback works independently of the Raider.IO score hook.
+-- 11. The unit post-call fallback works independently of the Raider.IO score hook.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
