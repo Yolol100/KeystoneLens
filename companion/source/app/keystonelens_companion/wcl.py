@@ -388,8 +388,40 @@ class WCLClient:
             self._token_expires = time.time() + max(60, expires_in)
             return token
 
-    def test(self) -> None:
-        self._get_token()
+    def test(self) -> tuple[float, float, float]:
+        """Verify OAuth and the real public GraphQL endpoint before reporting ready."""
+        query = (
+            "query KLProviderReadiness {\n"
+            "  rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn }\n"
+            "}"
+        )
+        response = self._post_graphql({"query": query, "variables": {}})
+        if response.status_code == 429:
+            self._blocked_until = max(
+                self._blocked_until,
+                time.monotonic() + self._retry_after_seconds(response),
+            )
+            raise WCLError("WCL API rate limit; waiting for reset")
+        if response.status_code != 200:
+            raise WCLError(f"WCL API HTTP {response.status_code}")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise WCLError("WCL API returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise WCLError("WCL API response invalid")
+        errors = payload.get("errors")
+        if isinstance(errors, list) and errors:
+            first = errors[0] if isinstance(errors[0], dict) else {}
+            message = str(first.get("message") or "GraphQL error")[:180]
+            raise WCLError(f"WCL GraphQL error: {message}")
+        root = payload.get("data")
+        if not isinstance(root, dict):
+            raise WCLError("WCL API response missing data")
+        quota = self._apply_quota(root)
+        if quota is None:
+            raise WCLError("WCL API response missing rateLimitData")
+        return quota
 
     @staticmethod
     def _realm_key(value: object) -> str:
