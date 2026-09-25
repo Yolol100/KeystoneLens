@@ -335,20 +335,18 @@ class App:
                 if kind == "state":
                     state: EngineState = data
                     self._render_applicants(state)
-                    if not self.tooltip_sync.write(list(state.rows)):
-                        self.status_var.set(f"Tooltip-cache fout: {self.tooltip_sync.last_error}")
-                        continue
+                    preload_ok = self.tooltip_sync.write(list(state.rows))
                     ready = sum(1 for row in state.rows if row.wcl_status == "ready")
                     loading = sum(1 for row in state.rows if row.wcl_status in {"queued", "loading"})
                     if ready:
-                        self.status_var.set(
-                            f"Preload-database bijgewerkt • {self.tooltip_sync.record_count} records • "
-                            "nieuwe data actief bij volgende WoW-start"
-                        )
+                        status = f"{len(state.rows)} applicant(s) • {ready} WCL gereed • live lijst bijgewerkt"
                     elif loading:
-                        self.status_var.set(f"Warcraft Logs laden voor {loading} speler(s)…")
+                        status = f"Warcraft Logs laden voor {loading} speler(s)…"
                     else:
-                        self.status_var.set(state.status)
+                        status = state.status
+                    if not preload_ok:
+                        status += f" • preload-fout: {self.tooltip_sync.last_error}"
+                    self.status_var.set(status)
                 elif kind == "status":
                     self.status_var.set(str(data))
                 elif kind == "auth_failed":
