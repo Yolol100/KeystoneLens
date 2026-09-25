@@ -1,4 +1,4 @@
-KeystoneLens Portable 0.13.4
+KeystoneLens Portable 0.13.5
 
 Doel
 KeystoneLens toont in de Mythic+ Group Finder-tooltip alleen Warcraft Logs-data:
