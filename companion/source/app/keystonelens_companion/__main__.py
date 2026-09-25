@@ -16,6 +16,7 @@ from .addon_sync import TooltipCacheSync
 from .config import Config, load_config, log_path, save_config
 from .engine import ApplicantEngine
 from .models import EngineState
+from .preload_refresh import PreloadRefresher
 from .watcher import ScreenshotWatcher
 from .wcl import WCLCache, WCLClient
 
@@ -236,6 +237,8 @@ class App:
             return
 
         self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path)
+        if not self.tooltip_sync.publish():
+            self.status_var.set(f"Preload-database fout: {self.tooltip_sync.last_error}")
         try:
             self.wcl = WCLClient(self.cfg.client_id, self.cfg.client_secret, self.cache)
             self.engine.set_wcl(self.wcl)
@@ -253,8 +256,20 @@ class App:
     def _check_wcl_auth(self, client: WCLClient) -> None:
         try:
             client.test()
+            if self._shutdown_started or client is not self.wcl:
+                return
+            self.q.put(("status", f"Warcraft Logs verbonden • preload {self.tooltip_sync.record_count} records"))
+            summary = PreloadRefresher(client, self.tooltip_sync).run_once()
             if not self._shutdown_started and client is self.wcl:
-                self.q.put(("status", "Warcraft Logs verbonden • wacht op spelers"))
+                added = int(summary.get("added", 0))
+                records = int(summary.get("records", self.tooltip_sync.record_count))
+                if added:
+                    self.q.put((
+                        "status",
+                        f"Preload-database: {records} records • {added} nieuw • actief bij volgende WoW-start",
+                    ))
+                else:
+                    self.q.put(("status", f"Preload-database gereed • {records} records"))
         except Exception as exc:
             if not self._shutdown_started and client is self.wcl:
                 self.q.put(("auth_failed", str(exc)))
@@ -273,7 +288,10 @@ class App:
                     ready = sum(1 for row in state.rows if row.wcl_status == "ready")
                     loading = sum(1 for row in state.rows if row.wcl_status in {"queued", "loading"})
                     if ready:
-                        self.status_var.set(f"{ready} speler(s) klaar • /reload in WoW om nieuwe tooltipdata te laden")
+                        self.status_var.set(
+                            f"Preload-database bijgewerkt • {self.tooltip_sync.record_count} records • "
+                            "nieuwe data actief bij volgende WoW-start"
+                        )
                     elif loading:
                         self.status_var.set(f"Warcraft Logs laden voor {loading} speler(s)…")
                     else:
