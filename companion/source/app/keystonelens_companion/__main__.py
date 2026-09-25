@@ -417,13 +417,30 @@ class App:
 def _enable_dpi_awareness() -> None:
     if os.name != "nt":
         return
+
+    # Overlay coordinates are mapped from WoW UI ratios to Win32 client pixels.
+    # Per-Monitor V2 prevents DPI virtualization from shifting the live value on
+    # 125/150% displays or when WoW is moved between monitors.
     try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        user32 = ctypes.windll.user32
+        set_context = user32.SetProcessDpiAwarenessContext
+        set_context.argtypes = [ctypes.c_void_p]
+        set_context.restype = ctypes.c_bool
+        if set_context(ctypes.c_void_p(-4)):  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+            return
     except (AttributeError, OSError):
-        try:
-            ctypes.windll.user32.SetProcessDPIAware()
-        except (AttributeError, OSError):
-            pass
+        pass
+
+    try:
+        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:  # PROCESS_PER_MONITOR_DPI_AWARE
+            return
+    except (AttributeError, OSError):
+        pass
+
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
 
 
 def _write_crash_log(exc_type, exc_value, exc_traceback) -> None:
