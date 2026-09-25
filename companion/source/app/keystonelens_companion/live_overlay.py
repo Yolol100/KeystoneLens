@@ -3,7 +3,6 @@ from __future__ import annotations
 import ctypes
 from ctypes import wintypes
 import os
-import time
 import tkinter as tk
 
 from .metrics import percentile_hex, role_metric
