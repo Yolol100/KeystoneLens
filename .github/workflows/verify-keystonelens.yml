@@ -101,24 +101,25 @@ jobs:
           Copy-Item -LiteralPath "addon/KeystoneLensBridge" -Destination $addons -Recurse
           Copy-Item -LiteralPath "companion/source/data-addon/KeystoneLensCompanionData" -Destination $addons -Recurse
 
-          @"
-KeystoneLens $version - Complete pakket
-
-1. Kopieer de mappen uit WoW-AddOns naar:
-   World of Warcraft\_retail_\Interface\AddOns\
-
-2. Start daarna:
-   Windows-Companion\START-COMPANION.cmd
-
-3. Vul je Warcraft Logs Client ID en Client Secret in.
-4. Kies je World of Warcraft _retail_\Screenshots map.
-5. Open Mythic+ Group Finder.
-6. Gebruik /reload nadat nieuwe tooltipdata is opgehaald.
-
-Tooltip:
-- DPS/tank: Warcraft Logs M+ - DPS percentile
-- healer: Warcraft Logs M+ - Healing percentile
-"@ | Set-Content -LiteralPath (Join-Path $root "INSTALLEREN.txt") -Encoding UTF8
+          $instructions = @(
+            "KeystoneLens $version - Complete pakket",
+            "",
+            "1. Kopieer de mappen uit WoW-AddOns naar:",
+            "   World of Warcraft\_retail_\Interface\AddOns\",
+            "",
+            "2. Start daarna:",
+            "   Windows-Companion\START-COMPANION.cmd",
+            "",
+            "3. Vul je Warcraft Logs Client ID en Client Secret in.",
+            "4. Kies je World of Warcraft _retail_\Screenshots map.",
+            "5. Open Mythic+ Group Finder.",
+            "6. Gebruik /reload nadat nieuwe tooltipdata is opgehaald.",
+            "",
+            "Tooltip:",
+            "- DPS/tank: Warcraft Logs M+ - DPS percentile",
+            "- healer: Warcraft Logs M+ - Healing percentile"
+          )
+          $instructions | Set-Content -LiteralPath (Join-Path $root "INSTALLEREN.txt") -Encoding UTF8
 
           foreach ($required in @(
             "Windows-Companion\START-COMPANION.cmd",
