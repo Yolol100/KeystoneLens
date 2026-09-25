@@ -1,6 +1,6 @@
 ## Interface: 120007, 120100
 ## Title: |cff5da8ffKeystoneLens|r
-## Notes: Adds a compact Warcraft Logs Mythic+ DPS/Healing percentile below Raider.IO player tooltips.
+## Notes: Live Warcraft Logs Mythic+ DPS/Healing percentile below Raider.IO Group Finder tooltips.
 ## Author: KeystoneLens (transport fork based on ApplicantScout by Antrakt)
 ## Version: 0.13.8
 ## IconTexture: Interface\AddOns\KeystoneLensBridge\Media\KeystoneLensIcon
