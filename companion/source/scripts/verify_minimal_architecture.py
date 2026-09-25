@@ -101,6 +101,15 @@ for rel in (
 ):
     require((SOURCE / rel).is_file(), f"required portable component missing: {rel}")
 
+launcher = read(SOURCE / "portable" / "portable_launcher.py")
+start_cmd = read(SOURCE / "portable" / "START-COMPANION.cmd")
+builder = read(SOURCE / "portable" / "build-portable.ps1")
+require('os.environ["TCL_LIBRARY"]' in launcher, "portable launcher must bind bundled Tcl")
+require('os.environ["TK_LIBRARY"]' in launcher, "portable launcher must bind bundled Tk")
+require("def verify_ui_runtime" in launcher, "portable launcher must perform a real Tk smoke")
+require("--verify-ui" in start_cmd, "START-COMPANION must run the GUI smoke before pythonw")
+require("--verify-ui" in builder, "portable build must verify the extracted GUI runtime")
+
 requirements = read(SOURCE / "runtime" / "requirements-runtime.txt").casefold()
 for package in ("requests", "pillow", "zxing-cpp"):
     require(package in requirements, f"required portable dependency missing: {package}")
