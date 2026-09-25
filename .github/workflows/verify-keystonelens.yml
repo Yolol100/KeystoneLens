@@ -59,12 +59,6 @@ jobs:
       - name: Verify Raider.IO tooltip integration
         run: lua5.1 companion/source/scripts/test_tooltip_contract.lua
 
-      - name: Verify live hover transport
-        run: python companion/source/scripts/test_live_transport_contract.py
-
-      - name: Verify live overlay logic
-        run: python companion/source/scripts/test_live_overlay_contract.py
-
       - name: Verify minimal architecture
         run: python companion/source/scripts/verify_minimal_architecture.py
 
@@ -128,7 +122,7 @@ jobs:
             "3. Vul je Warcraft Logs Client ID en Client Secret in.",
             "4. Kies je World of Warcraft _retail_\Screenshots map.",
             "5. Open Mythic+ Group Finder.",
-            "6. Hover een applicant; de WCL waarde verschijnt live zonder WoW-reload.",
+            "6. Gebruik /reload nadat nieuwe tooltipdata is opgehaald.",
             "",
             "Tooltip:",
             "- DPS/tank: Warcraft Logs M+ - DPS percentile",
