@@ -182,10 +182,7 @@ class ApplicantEngine:
                 old = self._views.get(applicant.identity)
                 new_views[applicant.identity] = view_for_context(applicant, old)
 
-            if not partial_applicants:
-                self._views = new_views
-            else:
-                self._views = new_views
+            self._views = new_views
 
             self._lfg_unavailable = False
             self._applicants_unavailable = partial_applicants
