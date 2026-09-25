@@ -79,24 +79,6 @@ class PartyMember:
 
 
 @dataclass(frozen=True)
-class LiveHover:
-    generation: int
-    applicant_id: int
-    member_idx: int
-    name: str
-    spec_id: int
-    activity_id: int
-    value_x: int
-    value_y: int
-    value_w: int
-    value_h: int
-    owner_x: int
-    owner_y: int
-    owner_w: int
-    owner_h: int
-
-
-@dataclass(frozen=True)
 class Snapshot:
     listing: Optional[Listing]
     version: Optional[VersionInfo]
@@ -107,7 +89,6 @@ class Snapshot:
     lfg_unavailable: bool = False
     roster_unavailable: bool = False
     applicants_unavailable: bool = False
-    live_hover: Optional[LiveHover] = None
 
 
 @dataclass(frozen=True)
@@ -158,5 +139,3 @@ class EngineState:
     lfg_unavailable: bool = False
     applicants_unavailable: bool = False
     roster_unavailable: bool = False
-    listing_generation: int = 0
-    live_hover: Optional[LiveHover] = None
