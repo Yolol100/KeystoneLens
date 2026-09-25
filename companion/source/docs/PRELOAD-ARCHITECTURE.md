@@ -12,6 +12,16 @@ the current Lua state.
 The runtime tooltip source is `_G.KeystoneLensPreloadV4`, already resident in
 WoW memory.
 
+## Live Windows applicant board
+
+The Windows Companion has a separate live presentation path that does **not** depend on WoW reloading addon files:
+
+`screenshot/QR applicant discovery -> ApplicantEngine -> Warcraft Logs character query -> Windows table`
+
+This path is allowed to use normal HTTPS from the Companion process. It never injects data into WoW or claims that a changed addon file became live during the current game session.
+
+The board shows character/realm, the role metric (`DPS` or `Healing`) with the WCL percentile, and a display-only `S/A/B/C/D/E/F` tier. Valid WCL rows are sorted by percentile descending. Applicant cache evidence older than one hour is revalidated against WCL before being reused by the live board.
+
 ## Lookup contract
 
 Applicant lookup key:
@@ -82,6 +92,8 @@ The refresher:
 - stops discovery at 80% observed hourly quota use;
 - retains existing WCL 429 backoff and cache behavior;
 - advances a persistent cursor so later refreshes cover different slices;
+- cycles discovery through up to five WCL ranking pages rather than page 1 only;
+- expires stale quota snapshots after `pointsResetIn` so the next hourly window can resume;
 - refreshes at most once per hour while the authenticated Companion remains open.
 
 This intentionally does not attempt to download every WoW character.
