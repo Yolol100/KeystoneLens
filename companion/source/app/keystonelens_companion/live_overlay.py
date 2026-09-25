@@ -170,7 +170,9 @@ class LiveTooltipOverlay:
 
         metric = role_metric(view)
         if metric is None:
-            if view.wcl_status in {"none", "error", "disabled"}:
+            if view.wcl_status in {"queued", "loading"}:
+                self._show_value(hover, "…", "#777777")
+            elif view.wcl_status in {"none", "error", "disabled"}:
                 self._show_value(hover, "N/R", "#777777")
             return
 
