@@ -50,8 +50,8 @@ SPEC_NAMES: dict[int, str] = {
 
 
 SPEC_CLASS_NAMES: dict[int, str] = {
-    250: "Death Knight", 251: "Death Knight", 252: "Death Knight",
-    577: "Demon Hunter", 581: "Demon Hunter", 1480: "Demon Hunter",
+    250: "DeathKnight", 251: "DeathKnight", 252: "DeathKnight",
+    577: "DemonHunter", 581: "DemonHunter", 1480: "DemonHunter",
     102: "Druid", 103: "Druid", 104: "Druid", 105: "Druid",
     1467: "Evoker", 1468: "Evoker", 1473: "Evoker",
     253: "Hunter", 254: "Hunter", 255: "Hunter",
