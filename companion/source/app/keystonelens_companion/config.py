@@ -17,6 +17,7 @@ DEFAULT_CACHE_TTL_SECONDS = 43200
 MIN_CACHE_TTL_SECONDS = 300
 MAX_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 MAX_CONFIG_FILE_BYTES = 1 * 1024 * 1024
+VALID_REGIONS = ("EU", "US", "KR", "TW", "CN")
 
 
 @dataclass
@@ -24,6 +25,7 @@ class Config:
     client_id: str = ""
     client_secret: str = ""
     screenshots_path: str = ""
+    region: str = "EU"
     cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS
 
     @property
@@ -118,6 +120,11 @@ def _clean_text(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _clean_region(value: Any) -> str:
+    region = _clean_text(value).strip().upper()
+    return region if region in VALID_REGIONS else "EU"
+
+
 def _clean_ttl(value: Any) -> int:
     if isinstance(value, bool):
         return DEFAULT_CACHE_TTL_SECONDS
@@ -135,6 +142,7 @@ def _normalize_config(raw: dict[str, Any]) -> Config:
         client_id=_clean_text(raw.get("client_id")),
         client_secret=_clean_text(raw.get("client_secret")),
         screenshots_path=_clean_text(raw.get("screenshots_path")),
+        region=_clean_region(raw.get("region", "EU")),
         cache_ttl_seconds=_clean_ttl(raw.get("cache_ttl_seconds", DEFAULT_CACHE_TTL_SECONDS)),
     )
 
