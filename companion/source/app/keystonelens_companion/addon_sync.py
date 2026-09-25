@@ -97,10 +97,10 @@ class TooltipCacheSync:
     live IPC.
     """
 
-    def __init__(self, screenshots_path: str):
+    def __init__(self, screenshots_path: str, region: str | None = None):
         self.path = addon_cache_path(screenshots_path)
         self.toc_path = data_addon_toc_path(screenshots_path)
-        self.store = PreloadStore()
+        self.store = PreloadStore(preferred_region=region)
         self._lock = threading.RLock()
         self.last_hash = ""
         self.last_error = ""
