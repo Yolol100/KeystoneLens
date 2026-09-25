@@ -1,38 +1,35 @@
 # KeystoneLens
 
-KeystoneLens combines a World of Warcraft Retail bridge add-on with a local Windows Companion for Mythic+ recruitment analysis.
+KeystoneLens is a compact Warcraft Logs Mythic+ tooltip for World of Warcraft Retail.
 
-## Required components
+## What it shows
 
-- `addon/KeystoneLensBridge/` — WoW add-on. It captures/encodes local data and adds Companion information to supported tooltips.
-- `companion/source/` — Windows Companion source and the files required to build the portable Companion package.
+When you hover a player in your Mythic+ Group Finder applicant list, KeystoneLens adds one line:
 
-Both components are part of the product and are intentionally kept.
+- DPS/Tank: Warcraft Logs M+ — DPS 97%
+- Healer: Warcraft Logs M+ — Healing 94%
 
-## Bridge installation
+The percentage is the player's Warcraft Logs ranking percentile for the current dungeon and specialization.
 
-Place `addon/KeystoneLensBridge/` in `World of Warcraft/_retail_/Interface/AddOns/` as `KeystoneLensBridge`.
+The tooltip does not show Raider.IO score, Blizzard Mythic+ score, a custom KeystoneLens score, confidence labels, source breakdowns, run counts or cache/debug text.
 
-Optional integrations include Raider.IO, KeystoneLens Companion Data and LibKeystone.
+## Why a Companion is still needed
 
-## Windows Companion
+WoW addons cannot make normal internet requests. The existing Bridge transport identifies the current Group Finder applicants. The Windows Companion queries the official Warcraft Logs API and writes a small local data addon that the tooltip can read after /reload.
 
-The Companion source is in `companion/source/app/`. The portable package is assembled with `companion/source/portable/build-portable.ps1`, which uses the pinned runtime contract and `scripts/make_deterministic_zip.py`.
-
-The resulting portable package starts with `START-COMPANION.cmd`.
+The transport layer remains because it is required for automatic data transfer; the visible tooltip and stored tooltip data are intentionally minimal.
 
 ## Repository structure
 
-This repository intentionally keeps only product runtime/source files, the small amount of build logic required for the portable Companion, required third-party notices, licensing information and this README.
+- addon/KeystoneLensBridge/ — WoW bridge and compact tooltip
+- companion/source/app/ — Companion runtime and Warcraft Logs client
+- companion/source/data-addon/ — generated local tooltip cache template
+- companion/source/portable/ — portable Windows packaging
 
-- `addon/KeystoneLensBridge/` — Bridge runtime
-- `companion/source/app/` — Companion runtime source
-- `companion/source/data-addon/` — generated Companion Data add-on source
-- `companion/source/portable/` — portable launcher and required builder
-- `companion/source/runtime/` — pinned Windows runtime/dependency contract
-- `companion/source/scripts/make_deterministic_zip.py` — required portable ZIP builder helper
-- `companion/source/docs/THIRD-PARTY-NOTICES.md` — required third-party notices
+## Warcraft Logs metric
+
+KeystoneLens uses DPS for DPS/tank specializations and HPS for healer specializations. Only that role metric is needed for the tooltip.
 
 ## License
 
-See `LICENSE-SCOPE.md` and the license/notice files inside the individual components.
+See LICENSE-SCOPE.md and the notice files included with the project.
