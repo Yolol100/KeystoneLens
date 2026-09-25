@@ -213,17 +213,6 @@ local function AppendEntryLine(tooltip, entry, key, specID)
     return true
 end
 
-local function AppendCachedLine(fullName, specID)
-    if not GameTooltip or not GameTooltip:IsShown() then return false end
-    local entry, key, resolvedSpecID = GetFreshEntry(fullName, specID)
-    if not entry then return false end
-    if AppendEntryLine(GameTooltip, entry, key, resolvedSpecID) then
-        GameTooltip:Show()
-        return true
-    end
-    return false
-end
-
 local function GetDisplayedUnit(tooltip)
     if TooltipUtil and type(TooltipUtil.GetDisplayedUnit) == "function" then
         local ok, _, unit = pcall(TooltipUtil.GetDisplayedUnit, tooltip)
