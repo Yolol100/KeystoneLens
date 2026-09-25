@@ -6,6 +6,7 @@ from pathlib import Path
 import queue
 import sys
 import threading
+import time
 import traceback
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -72,8 +73,19 @@ class SettingsDialog(tk.Toplevel):
             self.destroy()
 
 
+SHUTDOWN_STEP_TIMEOUT_SECONDS = 0.75
+SHUTDOWN_FORCE_EXIT_SECONDS = 5.0
+DISABLE_SHUTDOWN_WATCHDOG_ENV = "KEYSTONELENS_DISABLE_FORCE_EXIT_WATCHDOG"
+
+
 class App:
     def __init__(self):
+        self._shutdown_started = False
+        self._shutdown_cleaned = False
+        self._shutdown_watchdog_started = False
+        self._shutdown_step_timeout = SHUTDOWN_STEP_TIMEOUT_SECONDS
+        self._shutdown_warnings: list[str] = []
+
         self.cfg = load_config()
         self.root = tk.Tk()
         self.root.title(f"KeystoneLens {__version__}")
@@ -121,6 +133,8 @@ class App:
                 pass
 
     def open_settings(self) -> None:
+        if self._shutdown_started:
+            return
         if any(isinstance(child, SettingsDialog) for child in self.root.winfo_children()):
             return
         SettingsDialog(self.root, self.cfg, self._settings_saved)
@@ -137,6 +151,8 @@ class App:
         return True
 
     def start_runtime(self) -> None:
+        if self._shutdown_started:
+            return
         if self.watcher:
             self.watcher.stop()
             self.watcher = None
@@ -168,13 +184,15 @@ class App:
     def _check_wcl_auth(self, client: WCLClient) -> None:
         try:
             client.test()
-            if client is self.wcl:
+            if not self._shutdown_started and client is self.wcl:
                 self.q.put(("status", "Warcraft Logs verbonden • wacht op spelers"))
         except Exception as exc:
-            if client is self.wcl:
+            if not self._shutdown_started and client is self.wcl:
                 self.q.put(("auth_failed", str(exc)))
 
     def _poll(self) -> None:
+        if self._shutdown_started:
+            return
         try:
             while True:
                 kind, data = self.q.get_nowait()
@@ -201,7 +219,8 @@ class App:
                     self.engine.set_wcl(None)
         except queue.Empty:
             pass
-        self.root.after(120, self._poll)
+        if not self._shutdown_started:
+            self.root.after(120, self._poll)
 
     def _tk_exception(self, exc_type, exc_value, exc_traceback) -> None:
         _write_crash_log(exc_type, exc_value, exc_traceback)
@@ -210,18 +229,107 @@ class App:
         except tk.TclError:
             pass
 
+    def _arm_force_exit_watchdog(self) -> None:
+        if self._shutdown_watchdog_started:
+            return
+        if os.environ.get(DISABLE_SHUTDOWN_WATCHDOG_ENV) == "1":
+            return
+
+        self._shutdown_watchdog_started = True
+
+        def force_exit_if_stuck() -> None:
+            time.sleep(SHUTDOWN_FORCE_EXIT_SECONDS)
+            os._exit(0)
+
+        threading.Thread(
+            target=force_exit_if_stuck,
+            name="KL-ShutdownWatchdog",
+            daemon=True,
+        ).start()
+
+    def _bounded_cleanup(self, label: str, callback) -> None:
+        done = threading.Event()
+        failure: list[str] = []
+
+        def run_step() -> None:
+            try:
+                callback()
+            except Exception as exc:
+                failure.append(f"{label}: {type(exc).__name__}: {exc}")
+            finally:
+                done.set()
+
+        threading.Thread(
+            target=run_step,
+            name=f"KL-Shutdown-{label}",
+            daemon=True,
+        ).start()
+
+        if not done.wait(self._shutdown_step_timeout):
+            self._shutdown_warnings.append(f"{label}: cleanup timed out")
+        elif failure:
+            self._shutdown_warnings.extend(failure)
+
+    def _cleanup_after_ui(self) -> None:
+        if self._shutdown_cleaned:
+            return
+
+        self._shutdown_cleaned = True
+        self._shutdown_started = True
+
+        watcher = self.watcher
+        self.watcher = None
+        wcl = self.wcl
+        self.wcl = None
+        engine = self.engine
+
+        if watcher:
+            watcher.request_stop()
+        engine.request_stop()
+
+        if watcher:
+            self._bounded_cleanup(
+                "watcher",
+                lambda: watcher.stop(timeout=self._shutdown_step_timeout / 2),
+            )
+        if wcl:
+            self._bounded_cleanup("wcl", wcl.close)
+        self._bounded_cleanup(
+            "engine",
+            lambda: engine.stop(timeout=self._shutdown_step_timeout / 2),
+        )
+
+        if self._shutdown_warnings:
+            try:
+                log_path().write_text(
+                    "Shutdown warnings:\n" + "\n".join(self._shutdown_warnings) + "\n",
+                    encoding="utf-8",
+                )
+            except OSError:
+                pass
+
     def quit(self) -> None:
+        """Used by both the window X and the Afsluiten button."""
+        if self._shutdown_started:
+            return
+
+        self._shutdown_started = True
+        self._arm_force_exit_watchdog()
+
         if self.watcher:
-            self.watcher.stop()
-            self.watcher = None
-        if self.wcl:
-            self.wcl.close()
-            self.wcl = None
-        self.engine.stop()
-        self.root.destroy()
+            self.watcher.request_stop()
+        self.engine.request_stop()
+
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
 
     def run(self) -> None:
-        self.root.mainloop()
+        try:
+            self.root.mainloop()
+        finally:
+            self._cleanup_after_ui()
 
 
 def _enable_dpi_awareness() -> None:
