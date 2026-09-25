@@ -59,6 +59,12 @@ jobs:
       - name: Verify Raider.IO tooltip integration
         run: lua5.1 companion/source/scripts/test_tooltip_contract.lua
 
+      - name: Verify preload database contract
+        run: python companion/source/scripts/test_preload_contract.py
+
+      - name: Verify preload refresh contract
+        run: python companion/source/scripts/test_preload_refresh_contract.py
+
       - name: Verify minimal architecture
         run: python companion/source/scripts/verify_minimal_architecture.py
 
@@ -121,8 +127,9 @@ jobs:
             "",
             "3. Vul je Warcraft Logs Client ID en Client Secret in.",
             "4. Kies je World of Warcraft _retail_\Screenshots map.",
-            "5. Open Mythic+ Group Finder.",
-            "6. Gebruik /reload nadat nieuwe tooltipdata is opgehaald.",
+            "5. Start de Companion bij voorkeur voor World of Warcraft.",
+            "6. Open Mythic+ Group Finder. Voor reeds vooraf geladen spelers verschijnt WCL direct.",
+            "7. Cache-misses worden opgeslagen voor een volgende WoW-start; er is geen per-applicant /reload-flow.",
             "",
             "Tooltip:",
             "- DPS/tank: Warcraft Logs M+ - DPS percentile",
@@ -145,6 +152,24 @@ jobs:
           }
 
           Compress-Archive -Path (Join-Path $root "*") -DestinationPath $completeZip -CompressionLevel Optimal
+
+          $verifyRoot = Join-Path $env:RUNNER_TEMP "KeystoneLens-Complete-Verify-$version"
+          if (Test-Path -LiteralPath $verifyRoot) { Remove-Item -LiteralPath $verifyRoot -Recurse -Force }
+          Expand-Archive -LiteralPath $completeZip -DestinationPath $verifyRoot -Force
+          foreach ($required in @(
+            "Windows-Companion\START-COMPANION.cmd",
+            "Windows-Companion\runtime\python.exe",
+            "WoW-AddOns\KeystoneLensBridge\KeystoneLensBridge.toc",
+            "WoW-AddOns\KeystoneLensBridge\Core\Tooltip.lua",
+            "WoW-AddOns\KeystoneLensCompanionData\KeystoneLensCompanionData.toc",
+            "WoW-AddOns\KeystoneLensCompanionData\Data.lua",
+            "INSTALLEREN.txt"
+          )) {
+            if (-not (Test-Path -LiteralPath (Join-Path $verifyRoot $required))) {
+              throw "Verified ZIP missing after extraction: $required"
+            }
+          }
+
           "COMPLETE_ARTIFACT=$completeZip" >> $env:GITHUB_ENV
 
       - name: Upload verified portable ZIP
