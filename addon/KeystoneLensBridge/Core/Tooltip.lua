@@ -321,13 +321,6 @@ local function GetApplicantIdentity(button)
     }
 end
 
-local function GetApplicantEntry(button)
-    local identity = GetApplicantIdentity(button)
-    if not identity then return nil end
-    local entry, key, specID = GetFreshEntry(identity.fullName, identity.specID)
-    return entry, key, specID, identity
-end
-
 local function ClampNorm16(value)
     value = tonumber(value) or 0
     if value < 0 then value = 0 end
@@ -409,25 +402,17 @@ local function AppendApplicantLine(tooltip, owner)
     local identity = GetApplicantIdentity(owner)
     if not identity then return false end
 
-    local entry, key, specID = GetFreshEntry(identity.fullName, identity.specID)
-    local appended = false
-    if entry then
-        appended = AppendEntryLine(tooltip, entry, key, specID)
-    else
-        local uniqueKey = "live:" .. identity.fullName .. ":" .. tostring(identity.specID)
-        if tooltipKey ~= uniqueKey then
-            tooltipKey = uniqueKey
-            tooltip:AddDoubleLine(
-                KL_ICON .. " Warcraft Logs M+",
-                "",
-                0.72, 0.72, 0.76,
-                0.55, 0.55, 0.55
-            )
-            appended = true
-        end
-    end
-
-    if not appended then return false end
+    -- Group Finder is live-only. Never draw a potentially stale Data.lua number
+    -- underneath the Companion overlay; reserve an empty right-hand cell instead.
+    local uniqueKey = "live:" .. identity.fullName .. ":" .. tostring(identity.specID)
+    if tooltipKey == uniqueKey then return false end
+    tooltipKey = uniqueKey
+    tooltip:AddDoubleLine(
+        KL_ICON .. " Warcraft Logs M+",
+        "",
+        0.72, 0.72, 0.76,
+        0.55, 0.55, 0.55
+    )
 
     tooltip:Show()
     local lineIndex = type(tooltip.NumLines) == "function" and tooltip:NumLines() or nil
