@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = ROOT / "companion" / "source" / "app"
 sys.path.insert(0, str(APP_ROOT))
 
+from keystonelens_companion.config import VALID_REGIONS, _normalize_config  # noqa: E402
 from keystonelens_companion.preload import (  # noqa: E402
     ACTIVE_SEASON_KEY,
     DATASET_VERSION,
@@ -104,6 +105,26 @@ def test_thirty_plus_records_and_region_reset():
         assert current[0]["full_name"] == "Usplayer-Illidan"
 
 
+
+def test_region_configuration_and_preferred_store():
+    assert VALID_REGIONS == ("EU", "US", "KR", "TW", "CN")
+    assert _normalize_config({}).region == "EU"
+    assert _normalize_config({"region": "us"}).region == "US"
+    assert _normalize_config({"region": "invalid"}).region == "EU"
+
+    now = time.time()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "preload.json"
+        store = PreloadStore(path, preferred_region="EU")
+        assert store.merge([row(fetched=now)], region="EU") == 1
+        assert store.save()
+
+        switched = PreloadStore(path, preferred_region="US")
+        region, rows = switched.snapshot()
+        assert region == "US"
+        assert rows == []
+
+
 def test_backup_recovery_and_atomic_abort():
     now = time.time()
     with tempfile.TemporaryDirectory() as tmp:
@@ -137,5 +158,6 @@ if __name__ == "__main__":
     test_fail_closed_records_and_cross_realm()
     test_multi_spec_unit_index_fails_closed()
     test_thirty_plus_records_and_region_reset()
+    test_region_configuration_and_preferred_store()
     test_backup_recovery_and_atomic_abort()
     print("KeystoneLens preload database contract passed.")
