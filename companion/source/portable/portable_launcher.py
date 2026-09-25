@@ -138,8 +138,15 @@ def verify_ui_runtime() -> None:
         if overlay.window is None:
             raise RuntimeError("Live tooltip overlay window could not be created.")
 
+        overlay.window.geometry("24x18+0+0")
+        overlay.window.deiconify()
+        root.update()
+
         root.iconify()
         root.update()
+        if overlay.window.state() != "normal":
+            raise RuntimeError("Live tooltip overlay followed the Companion into the minimized state.")
+
         if not restore_existing_window("KeystoneLens Verification"):
             raise RuntimeError("Could not find the verification window through Win32.")
         root.update()
