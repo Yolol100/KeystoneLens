@@ -31,6 +31,8 @@ If an applicant is not in the loaded dataset, KeystoneLens shows no WCL line for
 
 ## Preload coverage
 
+The Companion uses the configured WoW region (EU/US/KR/TW/CN) so preload quota is spent only on the region you actually need. Changing region clears incompatible local preload records before a new regional dataset is built.
+
 The Companion grows coverage in two ways:
 
 - applicants discovered through the existing addon-safe QR/screenshot transport;
