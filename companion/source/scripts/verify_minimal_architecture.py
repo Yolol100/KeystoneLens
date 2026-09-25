@@ -95,6 +95,11 @@ for token, label in (
 require("def request_stop" in watcher, "watcher must support immediate shutdown signaling")
 require("def request_stop" in engine, "engine must support immediate shutdown signaling")
 require((SOURCE / "scripts" / "test_shutdown_contract.py").is_file(), "shutdown regression test is missing")
+require((SOURCE / "scripts" / "test_window_visibility_contract.py").is_file(), "window restore regression test is missing")
+require("class SettingsDialog" not in main_app, "modal SettingsDialog must not return")
+require("grab_set()" not in main_app, "modal Tk grab must not return")
+require('self.root.bind("<Map>", self._on_root_mapped' in main_app, "taskbar restore Map binding is missing")
+require("def _show_main_window" in main_app, "main-window restore helper is missing")
 
 tooltip = read(BRIDGE / "Core" / "Tooltip.lua")
 for token, label in (
@@ -125,6 +130,8 @@ require('os.environ["TK_LIBRARY"]' in launcher, "portable launcher must bind bun
 require("def verify_ui_runtime" in launcher, "portable launcher must perform a real Tk smoke")
 require("--verify-ui" in start_cmd, "START-COMPANION must run the GUI smoke before pythonw")
 require("--verify-ui" in builder, "portable build must verify the extracted GUI runtime")
+require("def restore_existing_window" in launcher, "portable launcher must restore an existing window")
+require("if restore_existing_window():" in launcher, "second start must foreground the existing Companion")
 
 requirements = read(SOURCE / "runtime" / "requirements-runtime.txt").casefold()
 for package in ("requests", "pillow", "zxing-cpp"):
