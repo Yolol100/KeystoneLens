@@ -340,8 +340,12 @@ end
 local function IsRaiderIOScoreLabel(leftText)
     if IsSecretValue(leftText) or type(leftText) ~= "string" then return false end
     local plain = leftText:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-    return plain:find("Raider.IO", 1, true) ~= nil
-       and plain:find("M+", 1, true) ~= nil
+
+    -- Raider.IO's current-season/default headline is "Raider.IO M+ Score".
+    -- In its Best Season / Best Run headline modes, the current-season line is
+    -- "Current M+ Score". Deliberately ignore "Raider.IO M+ Score (S#)" so a
+    -- current WCL percentile never sits under a previous-season headline.
+    return plain == "Raider.IO M+ Score" or plain == "Current M+ Score"
 end
 
 local function GetTooltipOwner(tooltip)
