@@ -132,6 +132,7 @@ def test_engine_keeps_newest_matching_hover() -> None:
     try:
         base = dict(
             listing=listing(),
+            version=None,
             applicants=(applicant(),),
             listing_generation=7,
         )
@@ -146,6 +147,7 @@ def test_engine_keeps_newest_matching_hover() -> None:
         assert engine.handle_snapshot(
             Snapshot(
                 listing=listing(),
+                version=None,
                 applicants=(),
                 listing_generation=7,
             )
