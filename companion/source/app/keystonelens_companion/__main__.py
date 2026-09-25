@@ -288,7 +288,7 @@ class App:
 
     def _check_wcl_auth(self, client: WCLClient) -> None:
         try:
-            client.test()
+            spent, limit, _reset = client.test()
         except Exception as exc:
             if not self._shutdown_started and client is self.wcl:
                 self.q.put(("auth_failed", str(exc)))
@@ -296,7 +296,11 @@ class App:
 
         if self._shutdown_started or client is not self.wcl:
             return
-        self.q.put(("status", f"Warcraft Logs verbonden • preload {self.tooltip_sync.record_count} records"))
+        self.q.put((
+            "status",
+            f"Warcraft Logs API verbonden • quota {spent:g}/{limit:g} • "
+            f"preload {self.tooltip_sync.record_count} records",
+        ))
 
         while not self._shutdown_started and client is self.wcl:
             try:
