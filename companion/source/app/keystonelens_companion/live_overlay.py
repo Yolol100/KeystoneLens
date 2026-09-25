@@ -53,6 +53,7 @@ class LiveTooltipOverlay:
         self.window: tk.Toplevel | None = None
         self.label: tk.Label | None = None
         self.current_generation = 0
+        self.current_listing_generation = 0
         self.owner_rect: tuple[int, int, int, int] | None = None
         self.visible = False
 
@@ -139,6 +140,15 @@ class LiveTooltipOverlay:
     def update_from_state(self, state: EngineState) -> None:
         if not self.enabled:
             return
+
+        listing_generation = int(state.listing_generation or 0)
+        if (
+            listing_generation
+            and listing_generation != self.current_listing_generation
+        ):
+            self.current_listing_generation = listing_generation
+            self.current_generation = 0
+            self.hide()
 
         hover = state.live_hover
         if hover is None:
