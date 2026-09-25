@@ -41,7 +41,7 @@ class ApplicantEngine:
         """Invalidate pending work immediately; joining is a separate bounded step."""
         self._stop.set()
 
-    def stop(self, timeout: float = 1.0) -> bool:
+    def stop(self, timeout: float = 3.0) -> bool:
         self.request_stop()
         if self._worker.is_alive() and self._worker is not threading.current_thread():
             self._worker.join(timeout=max(0.0, float(timeout)))
