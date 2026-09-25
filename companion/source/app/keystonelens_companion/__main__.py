@@ -20,59 +20,6 @@ from .watcher import ScreenshotWatcher
 from .wcl import WCLCache, WCLClient
 
 
-class SettingsDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, cfg: Config, on_save):
-        super().__init__(parent)
-        self.title("KeystoneLens Settings")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-        self.on_save = on_save
-
-        self.client_id = tk.StringVar(value=cfg.client_id)
-        self.client_secret = tk.StringVar(value=cfg.client_secret)
-        self.screenshots = tk.StringVar(value=cfg.screenshots_path)
-
-        frame = tk.Frame(self, padx=14, pady=14)
-        frame.pack(fill="both", expand=True)
-
-        tk.Label(frame, text="Warcraft Logs Client ID").grid(row=0, column=0, sticky="w")
-        tk.Entry(frame, textvariable=self.client_id, width=48).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 10))
-
-        tk.Label(frame, text="Warcraft Logs Client Secret").grid(row=2, column=0, sticky="w")
-        tk.Entry(frame, textvariable=self.client_secret, show="•", width=48).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 10))
-
-        tk.Label(frame, text="WoW _retail_\\Screenshots map").grid(row=4, column=0, sticky="w")
-        tk.Entry(frame, textvariable=self.screenshots, width=40).grid(row=5, column=0, sticky="ew", pady=(2, 10))
-        tk.Button(frame, text="Kiezen", command=self._browse).grid(row=5, column=1, padx=(8, 0), pady=(2, 10))
-
-        buttons = tk.Frame(frame)
-        buttons.grid(row=6, column=0, columnspan=2, sticky="e")
-        tk.Button(buttons, text="Annuleren", command=self.destroy).pack(side="right")
-        tk.Button(buttons, text="Opslaan", command=self._save).pack(side="right", padx=(0, 8))
-
-    def _browse(self) -> None:
-        value = filedialog.askdirectory(parent=self, title="Kies de WoW Screenshots map")
-        if value:
-            self.screenshots.set(value)
-
-    def _save(self) -> None:
-        path = self.screenshots.get().strip()
-        if not path:
-            messagebox.showerror("KeystoneLens", "Kies eerst de WoW Screenshots map.", parent=self)
-            return
-        cfg = Config(
-            client_id=self.client_id.get().strip(),
-            client_secret=self.client_secret.get().strip(),
-            screenshots_path=path,
-        )
-        if not cfg.wcl_configured:
-            messagebox.showerror("KeystoneLens", "Vul je Warcraft Logs Client ID en Client Secret in.", parent=self)
-            return
-        if self.on_save(cfg):
-            self.destroy()
-
-
 SHUTDOWN_STEP_TIMEOUT_SECONDS = 0.75
 SHUTDOWN_FORCE_EXIT_SECONDS = 5.0
 DISABLE_SHUTDOWN_WATCHDOG_ENV = "KEYSTONELENS_DISABLE_FORCE_EXIT_WATCHDOG"
@@ -92,17 +39,54 @@ class App:
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self.root.report_callback_exception = self._tk_exception
+        self.root.bind("<Map>", self._on_root_mapped, add="+")
         self._apply_icon()
 
         self.status_var = tk.StringVar(value="Starten…")
+        self.client_id_var = tk.StringVar(value=self.cfg.client_id)
+        self.client_secret_var = tk.StringVar(value=self.cfg.client_secret)
+        self.screenshots_var = tk.StringVar(value=self.cfg.screenshots_path)
+        self._settings_visible = False
+
         frame = tk.Frame(self.root, padx=16, pady=16)
         frame.pack(fill="both", expand=True)
         tk.Label(frame, text="Warcraft Logs M+ Tooltip", font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(frame, textvariable=self.status_var, justify="left", wraplength=430).pack(anchor="w", pady=(8, 14))
-        buttons = tk.Frame(frame)
-        buttons.pack(anchor="e")
-        tk.Button(buttons, text="Instellingen", command=self.open_settings).pack(side="left")
-        tk.Button(buttons, text="Afsluiten", command=self.quit).pack(side="left", padx=(8, 0))
+        tk.Label(frame, textvariable=self.status_var, justify="left", wraplength=450).pack(anchor="w", pady=(8, 14))
+
+        self.settings_frame = tk.LabelFrame(frame, text="Instellingen", padx=10, pady=10)
+        tk.Label(self.settings_frame, text="Warcraft Logs Client ID").grid(row=0, column=0, sticky="w")
+        self.client_id_entry = tk.Entry(self.settings_frame, textvariable=self.client_id_var, width=50)
+        self.client_id_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 8))
+
+        tk.Label(self.settings_frame, text="Warcraft Logs Client Secret").grid(row=2, column=0, sticky="w")
+        tk.Entry(
+            self.settings_frame,
+            textvariable=self.client_secret_var,
+            show="•",
+            width=50,
+        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 8))
+
+        tk.Label(self.settings_frame, text="WoW _retail_\\Screenshots map").grid(row=4, column=0, sticky="w")
+        tk.Entry(self.settings_frame, textvariable=self.screenshots_var, width=40).grid(
+            row=5, column=0, sticky="ew", pady=(2, 8)
+        )
+        tk.Button(self.settings_frame, text="Kiezen", command=self._browse_screenshots).grid(
+            row=5, column=1, padx=(8, 0), pady=(2, 8)
+        )
+
+        settings_buttons = tk.Frame(self.settings_frame)
+        settings_buttons.grid(row=6, column=0, columnspan=2, sticky="e")
+        tk.Button(settings_buttons, text="Verbergen", command=lambda: self._set_settings_visible(False)).pack(
+            side="right"
+        )
+        tk.Button(settings_buttons, text="Opslaan", command=self._save_settings).pack(
+            side="right", padx=(0, 8)
+        )
+
+        self.button_frame = tk.Frame(frame)
+        self.button_frame.pack(anchor="e")
+        tk.Button(self.button_frame, text="Instellingen", command=self.open_settings).pack(side="left")
+        tk.Button(self.button_frame, text="Afsluiten", command=self.quit).pack(side="left", padx=(8, 0))
 
         self.q: queue.Queue[tuple[str, object]] = queue.Queue()
         self.cache = WCLCache(ttl=self.cfg.cache_ttl_seconds)
@@ -111,12 +95,13 @@ class App:
         self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path)
         self.engine = ApplicantEngine(None, lambda state: self.q.put(("state", state)))
 
+        self.root.after(0, self._show_main_window)
         self.root.after(100, self._poll)
         if self.cfg.ready and self.cfg.wcl_configured:
             self.start_runtime()
         else:
             self.status_var.set("Configureer Warcraft Logs en je WoW Screenshots map.")
-            self.root.after(250, self.open_settings)
+            self._set_settings_visible(True)
 
     def _apply_icon(self) -> None:
         if os.name != "nt":
@@ -132,23 +117,107 @@ class App:
             except tk.TclError:
                 pass
 
+    def _center_main_window(self) -> None:
+        try:
+            self.root.update_idletasks()
+            width = max(self.root.winfo_reqwidth(), self.root.winfo_width())
+            height = max(self.root.winfo_reqheight(), self.root.winfo_height())
+            x = max(0, (self.root.winfo_screenwidth() - width) // 2)
+            y = max(0, (self.root.winfo_screenheight() - height) // 3)
+            self.root.geometry(f"+{x}+{y}")
+        except tk.TclError:
+            pass
+
+    def _show_main_window(self, force_foreground: bool = False) -> None:
+        if self._shutdown_started:
+            return
+        try:
+            state = self.root.state()
+            if state in {"withdrawn", "iconic"}:
+                self.root.deiconify()
+                self.root.state("normal")
+            self.root.update_idletasks()
+            self.root.lift()
+            if force_foreground:
+                self.root.focus_force()
+        except tk.TclError:
+            return
+
+    def _on_root_mapped(self, event) -> None:
+        if self._shutdown_started or event.widget is not self.root:
+            return
+        try:
+            self.root.after_idle(self._show_main_window)
+        except tk.TclError:
+            pass
+
+    def _set_settings_visible(self, visible: bool) -> None:
+        if self._shutdown_started:
+            return
+        if visible and not self._settings_visible:
+            self.settings_frame.pack(
+                before=self.button_frame,
+                fill="x",
+                pady=(0, 14),
+            )
+            self._settings_visible = True
+            self.root.after_idle(self._center_main_window)
+        elif not visible and self._settings_visible:
+            self.settings_frame.pack_forget()
+            self._settings_visible = False
+            self.root.after_idle(self._center_main_window)
+
     def open_settings(self) -> None:
         if self._shutdown_started:
             return
-        if any(isinstance(child, SettingsDialog) for child in self.root.winfo_children()):
-            return
-        SettingsDialog(self.root, self.cfg, self._settings_saved)
+        self._show_main_window(force_foreground=True)
+        self._set_settings_visible(True)
+        try:
+            self.client_id_entry.focus_set()
+        except tk.TclError:
+            pass
 
-    def _settings_saved(self, cfg: Config) -> bool:
+    def _browse_screenshots(self) -> None:
+        value = filedialog.askdirectory(parent=self.root, title="Kies de WoW Screenshots map")
+        if value:
+            self.screenshots_var.set(value)
+            self._show_main_window(force_foreground=True)
+
+    def _save_settings(self) -> None:
+        path = self.screenshots_var.get().strip()
+        if not path:
+            messagebox.showerror("KeystoneLens", "Kies eerst de WoW Screenshots map.", parent=self.root)
+            return
+
+        cfg = Config(
+            client_id=self.client_id_var.get().strip(),
+            client_secret=self.client_secret_var.get().strip(),
+            screenshots_path=path,
+            cache_ttl_seconds=self.cfg.cache_ttl_seconds,
+        )
+        if not cfg.wcl_configured:
+            messagebox.showerror(
+                "KeystoneLens",
+                "Vul je Warcraft Logs Client ID en Client Secret in.",
+                parent=self.root,
+            )
+            return
+
         try:
             save_config(cfg)
         except (OSError, ValueError) as exc:
-            messagebox.showerror("KeystoneLens", f"Instellingen konden niet worden opgeslagen:\n{exc}", parent=self.root)
-            return False
+            messagebox.showerror(
+                "KeystoneLens",
+                f"Instellingen konden niet worden opgeslagen:\n{exc}",
+                parent=self.root,
+            )
+            return
+
         self.cfg = cfg
         self.cache.ttl = cfg.cache_ttl_seconds
+        self._set_settings_visible(False)
         self.start_runtime()
-        return True
+        self._show_main_window(force_foreground=True)
 
     def start_runtime(self) -> None:
         if self._shutdown_started:
