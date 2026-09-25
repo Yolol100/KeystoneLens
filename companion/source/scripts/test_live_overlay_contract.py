@@ -122,6 +122,26 @@ def test_dps_and_healing_labels() -> None:
     assert shown[-1][1] == "Healing 94%"
 
 
+def test_loading_state_is_visible() -> None:
+    view = ApplicantView(
+        applicant=applicant(62),
+        snapshot_listing=Listing(activity_id=777, key_level=12, dungeon_name="Test Dungeon"),
+        region="EU",
+        wcl=None,
+        wcl_status="loading",
+    )
+    loading_state = EngineState(
+        listing=Listing(activity_id=777, key_level=12, dungeon_name="Test Dungeon"),
+        rows=(view,),
+        party=(),
+        status="loading",
+        live_hover=hover(),
+    )
+    overlay, shown, _ = fake_overlay()
+    overlay.update_from_state(loading_state)
+    assert shown[-1][1] == "…"
+
+
 def test_identity_and_activity_fail_closed() -> None:
     overlay, shown, hidden = fake_overlay()
     bad = state(activity_id=778)
@@ -165,6 +185,7 @@ def test_geometry_mapping() -> None:
 
 if __name__ == "__main__":
     test_dps_and_healing_labels()
+    test_loading_state_is_visible()
     test_identity_and_activity_fail_closed()
     test_stale_generation_is_ignored()
     test_geometry_mapping()
