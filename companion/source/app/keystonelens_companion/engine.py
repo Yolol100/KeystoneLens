@@ -31,6 +31,8 @@ class ApplicantEngine:
         self._lfg_unavailable = False
         self._applicants_unavailable = False
         self._roster_unavailable = False
+        self._live_hover = None
+        self._live_hover_generation = 0
         self._queue: queue.Queue[tuple[str, int, str, str, int, str, int, str]] = queue.Queue()
         self._pending: set[tuple[str, str, int, int, str, int]] = set()
         self._stop = threading.Event()
@@ -86,6 +88,8 @@ class ApplicantEngine:
                     self._listing = None
                     self._listing_generation = incoming_generation
                     self._listing_closed = False
+                    self._live_hover = None
+                    self._live_hover_generation = 0
                 elif self._listing_closed and snapshot.listing is not None and not snapshot.terminal_clear:
                     # A delayed frame from a listing that already closed must not
                     # resurrect its applicants after the terminal-clear snapshot.
@@ -110,6 +114,8 @@ class ApplicantEngine:
                 self._listing = None
                 self._views.clear()
                 self._party = ()
+                self._live_hover = None
+                self._live_hover_generation = 0
                 if incoming_generation:
                     self._listing_generation = incoming_generation
                     self._listing_closed = True
@@ -146,6 +152,8 @@ class ApplicantEngine:
             )
             if context_changed:
                 self._clear_wcl_queue_locked()
+                self._live_hover = None
+                self._live_hover_generation = 0
 
             self._listing = effective_listing
 
@@ -188,6 +196,29 @@ class ApplicantEngine:
                 new_views[applicant.identity] = view_for_context(applicant, old)
 
             self._views = new_views
+
+            if self._live_hover:
+                identity = f"{self._live_hover.applicant_id}:{self._live_hover.member_idx}"
+                if identity not in self._views:
+                    self._live_hover = None
+                    self._live_hover_generation = 0
+
+            hover = snapshot.live_hover
+            if hover and (
+                self._live_hover is None
+                or _generation16_is_newer(hover.generation, self._live_hover_generation)
+            ):
+                identity = f"{hover.applicant_id}:{hover.member_idx}"
+                view = self._views.get(identity)
+                listing_activity = int(effective_listing.activity_id or 0) if effective_listing else 0
+                if (
+                    view is not None
+                    and view.applicant.name == hover.name
+                    and int(view.applicant.spec_id or 0) == int(hover.spec_id or 0)
+                    and listing_activity == int(hover.activity_id or 0)
+                ):
+                    self._live_hover = hover
+                    self._live_hover_generation = int(hover.generation or 0)
 
             self._lfg_unavailable = False
             self._applicants_unavailable = partial_applicants
@@ -375,6 +406,7 @@ class ApplicantEngine:
             lfg_unavailable=self._lfg_unavailable,
             applicants_unavailable=self._applicants_unavailable,
             roster_unavailable=self._roster_unavailable,
+            live_hover=self._live_hover,
         ))
 
 
@@ -408,3 +440,10 @@ def _generation_is_newer(candidate: int, current: int) -> bool:
         return False
     delta = (candidate - current) % 255
     return 0 < delta <= 127
+
+
+def _generation16_is_newer(candidate: int, current: int) -> bool:
+    if candidate <= 0 or current <= 0 or candidate == current:
+        return False
+    delta = (candidate - current) % 65535
+    return 0 < delta <= 32767
