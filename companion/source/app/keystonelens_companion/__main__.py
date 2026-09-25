@@ -276,6 +276,7 @@ class App:
 
         self._shutdown_cleaned = True
         self._shutdown_started = True
+        self._arm_force_exit_watchdog()
 
         watcher = self.watcher
         self.watcher = None
