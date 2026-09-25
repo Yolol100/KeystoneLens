@@ -83,7 +83,7 @@ try {
     if (-not (Test-Path -LiteralPath $Python) -or -not (Test-Path -LiteralPath $PythonW)) {
         throw 'Portable Python runtime is incomplete after staging.'
     }
-    $VersionCheck = "import sys,tkinter,pip; expected=tuple(map(int,'$PythonVersion'.split('.'))); raise SystemExit(0 if sys.version_info[:3] == expected else 4)"
+    $VersionCheck = "import sys,tkinter,pip; root=tkinter.Tk(); root.withdraw(); root.update_idletasks(); root.destroy(); expected=tuple(map(int,'$PythonVersion'.split('.'))); raise SystemExit(0 if sys.version_info[:3] == expected else 4)"
     & $Python -B -I -c $VersionCheck
     if ($LASTEXITCODE -ne 0) { throw 'Portable Python Tk/pip/version verification failed.' }
 
@@ -137,8 +137,8 @@ try {
 
     # -B prevents verification imports from regenerating bytecode inside the
     # staged tree. Clean once more immediately before packaging as a hard gate.
-    & $Python -B -I (Join-Path $Stage 'portable_launcher.py') --verify
-    if ($LASTEXITCODE -ne 0) { throw 'Portable staged runtime verification failed.' }
+    & $Python -B -I (Join-Path $Stage 'portable_launcher.py') --verify-ui
+    if ($LASTEXITCODE -ne 0) { throw 'Portable staged GUI/runtime verification failed.' }
     Remove-GeneratedPythonArtifacts -Root $Stage
 
     Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
@@ -150,8 +150,8 @@ try {
     New-Item -ItemType Directory -Force -Path $Extracted | Out-Null
     Expand-Archive -LiteralPath $ZipPath -DestinationPath $Extracted -Force
     $ExtractedPython = Join-Path $Extracted 'runtime\python.exe'
-    & $ExtractedPython -B -I (Join-Path $Extracted 'portable_launcher.py') --verify
-    if ($LASTEXITCODE -ne 0) { throw 'Extracted portable ZIP verification failed.' }
+    & $ExtractedPython -B -I (Join-Path $Extracted 'portable_launcher.py') --verify-ui
+    if ($LASTEXITCODE -ne 0) { throw 'Extracted portable ZIP GUI/runtime verification failed.' }
     if (-not (Test-Path -LiteralPath (Join-Path $Extracted 'THIRD-PARTY-NOTICES.md'))) {
         throw 'Portable package is missing third-party notices.'
     }
