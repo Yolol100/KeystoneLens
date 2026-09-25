@@ -2,7 +2,7 @@
 ## Title: |cff5da8ffKeystoneLens|r
 ## Notes: Compact Warcraft Logs Mythic+ DPS/Healing percentile in Group Finder tooltips.
 ## Author: KeystoneLens (transport fork based on ApplicantScout by Antrakt)
-## Version: 0.13.1
+## Version: 0.13.2
 ## IconTexture: Interface\AddOns\KeystoneLensBridge\Media\KeystoneLensIcon
 ## SavedVariables: KeystoneLensBridgeDB
 ## OptionalDeps: KeystoneLensCompanionData, LibKeystone
