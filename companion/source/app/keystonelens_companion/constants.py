@@ -48,5 +48,22 @@ SPEC_NAMES: dict[int, str] = {
     71: "Arms", 72: "Fury", 73: "Protection",
 }
 
+
+SPEC_CLASS_NAMES: dict[int, str] = {
+    250: "Death Knight", 251: "Death Knight", 252: "Death Knight",
+    577: "Demon Hunter", 581: "Demon Hunter", 1480: "Demon Hunter",
+    102: "Druid", 103: "Druid", 104: "Druid", 105: "Druid",
+    1467: "Evoker", 1468: "Evoker", 1473: "Evoker",
+    253: "Hunter", 254: "Hunter", 255: "Hunter",
+    62: "Mage", 63: "Mage", 64: "Mage",
+    268: "Monk", 269: "Monk", 270: "Monk",
+    65: "Paladin", 66: "Paladin", 70: "Paladin",
+    256: "Priest", 257: "Priest", 258: "Priest",
+    259: "Rogue", 260: "Rogue", 261: "Rogue",
+    262: "Shaman", 263: "Shaman", 264: "Shaman",
+    265: "Warlock", 266: "Warlock", 267: "Warlock",
+    71: "Warrior", 72: "Warrior", 73: "Warrior",
+}
+
 HEALER_SPECS = frozenset({65, 105, 256, 257, 264, 270, 1468})
 REGION_NAMES = {1: "US", 2: "KR", 3: "EU", 4: "TW", 5: "CN"}
