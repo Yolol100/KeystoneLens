@@ -103,11 +103,10 @@ function State.New(renderSettleSeconds)
         lastPayloadBuildError = nil,
         lastPayloadTotalBytes = 0,
         groupTransportGen = 0,
-        rioMPlusSummaryCache = {},
         cleanUnknownLabel = nil,
         cleanUnknownObjectLabel = nil,
         -- Read-only by convention: payload builders only serialize these zero fields.
-        emptyRaiderIOMPlusSummary = {
+        emptyLegacyMPlusSummary = {
             currentScore = 0,
             mainScore = 0,
             hasProfile = false,
