@@ -105,6 +105,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
 
+      - name: Initialize Windows CI stage
+        shell: powershell
+        run: '"CI_STAGE=checkout-complete" >> $env:GITHUB_ENV'
+
       - name: Build and verify portable ZIP
         shell: powershell
         run: |
@@ -112,6 +116,7 @@ jobs:
           ./companion/source/portable/build-portable.ps1 -OutputDir $out
           Get-ChildItem -LiteralPath $out -Filter "KeystoneLens-Portable-*-Windows-x64.zip" |
             ForEach-Object { "PORTABLE_ARTIFACT=$($_.FullName)" >> $env:GITHUB_ENV }
+          "CI_STAGE=portable-built" >> $env:GITHUB_ENV
 
       - name: Build complete download package
         shell: powershell
@@ -187,6 +192,7 @@ jobs:
           }
 
           "COMPLETE_ARTIFACT=$completeZip" >> $env:GITHUB_ENV
+          "CI_STAGE=complete-zip-verified" >> $env:GITHUB_ENV
 
       - name: Upload verified portable ZIP
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -204,6 +210,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Mark artifacts uploaded
+        shell: powershell
+        run: '"CI_STAGE=artifacts-uploaded" >> $env:GITHUB_ENV'
+
       - name: Publish Windows package status
         if: always()
         shell: bash
@@ -211,7 +221,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
           JOB_STATUS: ${{ job.status }}
+          CI_STAGE: ${{ env.CI_STAGE }}
         run: |
           state="failure"
-          if [ "$JOB_STATUS" = "success" ]; then state="success"; fi
-          curl -fsS -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/statuses/$SHA"             -d "{\"state\":\"$state\",\"context\":\"keystonelens/portable-windows\",\"description\":\"Portable and complete ZIP verified\"}"
+          description="Windows CI failed after ${CI_STAGE:-unknown-stage}"
+          if [ "$JOB_STATUS" = "success" ]; then
+            state="success"
+            description="Portable and complete ZIP verified"
+          fi
+          curl -fsS -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/statuses/$SHA"             -d "{\"state\":\"$state\",\"context\":\"keystonelens/portable-windows\",\"description\":\"$description\"}"
