@@ -153,7 +153,7 @@ end
 local function setCache(spec, metric, percentile, fetchedAt, fullName)
     local code = metric == "HPS" and "H" or "D"
     local stamp = fetchedAt or now
-    local identity = string.lower(fullName or currentFullName)
+    local identity = fullName or currentFullName
     _G.KeystoneLensPreloadV4 = {
         version = 4,
         generatedAt = stamp,
@@ -272,7 +272,7 @@ assertEq(#GameTooltip.lines, 1, "wrong region leaked WCL data")
 -- 10. Malformed or missing records fail closed.
 clearTooltip()
 setCache(62, "DPS", 97.0, now)
-_G.KeystoneLensPreloadV4.entries["alice-draenor|62|altaroffangs"] = { "X", 150, now }
+_G.KeystoneLensPreloadV4.entries["Alice-Draenor|62|altaroffangs"] = { "X", 150, now }
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3043")
 assertEq(#GameTooltip.lines, 1, "malformed preload record was rendered")
 
@@ -296,10 +296,10 @@ currentOwner = {}
 displayedUnit = "unit-player"
 displayedRealm = "Kazzak"
 _G.KeystoneLensPreloadV4.entries = {
-    ["alice-draenor|62|altaroffangs"] = { "D", 99, now },
+    ["Alice-Draenor|62|altaroffangs"] = { "D", 99, now },
 }
 _G.KeystoneLensPreloadV4.unitEntries = {
-    ["alice-draenor|altaroffangs"] = { "D", 99, now },
+    ["Alice-Draenor|altaroffangs"] = { "D", 99, now },
 }
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3060")
 assertEq(#GameTooltip.lines, 1, "cross-realm player matched a same-realm short cache key")
@@ -351,5 +351,13 @@ for i = 1, 35 do
     GameTooltip:AddDoubleLine("Raider.IO M+ Score", tostring(3000 + i))
     assertEq(#GameTooltip.lines, 2, "rapid applicant lookup failed at index " .. tostring(i))
 end
+
+-- 18. Accented character names keep their canonical UTF-8 identity.
+currentFullName = "Éowyn-Draenor"
+setCache(62, "DPS", 93.4, now, currentFullName)
+clearTooltip()
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3090")
+assertEq(#GameTooltip.lines, 2, "accented applicant identity did not match preload")
+assertEq(GameTooltip.lines[2].right, "DPS 93%", "accented applicant percentile changed")
 
 print("KeystoneLens tooltip integration contract passed.")
