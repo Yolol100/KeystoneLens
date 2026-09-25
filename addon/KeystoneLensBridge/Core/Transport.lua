@@ -41,6 +41,8 @@ local wasHostingListing = false
 -- Set by event handlers (pure boolean assignment; primitives can't carry
 -- taint to readers). Drained by scan-tick from a clean native-scheduler frame.
 local scanDirty = false
+local liveHoverContext = nil
+local liveHoverGeneration = 0
 
 -- ───────────────────────────────────────────────────────────
 -- QR Code transport
@@ -465,6 +467,8 @@ StartSession = function()
     isSessionActive = true
     sessionGen = sessionGen + 1
     entryCreationKeyState.ClearPendingForcedScreenshot()
+    liveHoverContext = nil
+    liveHoverGeneration = 0
 
     -- QR transport state reset: force fresh full snapshot at session start.
     -- BuildPayload emits VERSION on every shot so companion-launched-mid-session
@@ -519,6 +523,7 @@ EndSession = function(emitTerminalClear)
     isSessionActive = false  -- claim the transition; further scans early-return
 
     scanDirty = false
+    liveHoverContext = nil
     -- Force-shot path bypasses suppressShotsUntil via force=true, but clear
     -- the gate explicitly so a fresh StartSession that happens before the
     -- old gate would have expired starts with a clean render-settle window.
@@ -671,6 +676,51 @@ MarkDirty = function(reason)
     if wasClean and KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
         print("|cff999999[APS-debug]|r DIRTY reason=" .. tostring(reason))
     end
+end
+
+
+local function _ClampLiveCoord(value)
+    local n = SafeNumber(value, 0)
+    if n < 0 then n = 0 end
+    if n > 65535 then n = 65535 end
+    return math.floor(n + 0.5)
+end
+
+-- Tooltip.lua calls this only for the currently hovered Group Finder applicant.
+-- The context rides inside the next APS1 screenshot so the Companion can paint
+-- the exact WCL value over the reserved right-hand tooltip cell without /reload.
+KL.RequestLiveHover = function(context)
+    if not isSessionActive or type(context) ~= "table" then return false end
+
+    local name = SafeStr(context.name, "")
+    local applicantID = math.floor(SafeNumber(context.applicantID, 0))
+    local memberIdx = math.floor(SafeNumber(context.memberIdx, 0))
+    local specID = math.floor(SafeNumber(context.specID, 0))
+    local activityID = math.floor(SafeNumber(context.activityID, 0))
+    if name == "" or applicantID <= 0 or memberIdx <= 0
+       or specID <= 0 or activityID <= 0 then
+        return false
+    end
+
+    liveHoverGeneration = (liveHoverGeneration % 65535) + 1
+    liveHoverContext = {
+        generation = liveHoverGeneration,
+        applicantID = applicantID,
+        memberIdx = math.min(memberIdx, 255),
+        name = name,
+        specID = math.min(specID, 65535),
+        activityID = activityID,
+        valueX = _ClampLiveCoord(context.valueX),
+        valueY = _ClampLiveCoord(context.valueY),
+        valueW = _ClampLiveCoord(context.valueW),
+        valueH = _ClampLiveCoord(context.valueH),
+        ownerX = _ClampLiveCoord(context.ownerX),
+        ownerY = _ClampLiveCoord(context.ownerY),
+        ownerW = _ClampLiveCoord(context.ownerW),
+        ownerH = _ClampLiveCoord(context.ownerH),
+    }
+    MarkDirty("live-hover")
+    return true
 end
 
 -- ───────────────────────────────────────────────────────────
@@ -3231,7 +3281,7 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
     -- Header (length patched after we know body size)
     table.insert(out, "APS1")
     local wireVersionChunkIndex = #out + 1
-    table.insert(out, "\0")                 -- v12 normally; v13 only for applicant partials
+    table.insert(out, "\0")                 -- v14: live hover context for no-reload WCL overlay
     local lengthChunkIndex = #out + 1
     table.insert(out, "\0\0")                -- length placeholder (uint16 BE)
     local headerFlagsChunkIndex = #out + 1
@@ -3518,10 +3568,10 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
     if applicantsIncomplete then
         headerFlags = headerFlags + 0x08
     end
-    -- v12/v13 retain historical score slots plus atomic application metadata.
-    -- KeystoneLens ignores those legacy score fields; v13 adds applicant-authority
-    -- unavailable; paired older companions fail closed instead of clearing rows.
-    out[wireVersionChunkIndex] = string.char(applicantsIncomplete and 0x0D or 0x0C)
+    -- v14 retains the v12/v13 applicant semantics and appends one optional
+    -- live-hover block after the roster. The Companion uses that block only for
+    -- the no-reload visual value; it does not alter applicant authority.
+    out[wireVersionChunkIndex] = string.char(0x0E)
     out[headerFlagsChunkIndex] = string.char(headerFlags)
     if cleanEntry and not applicantsIncomplete and not rosterUnavailable
        and #validAppOrder == 0
@@ -3541,6 +3591,27 @@ local function BuildPayload(entry, applicantIDs, terminalClear, lfgUnavailable, 
     end
     table.insert(out, _Uint16BE(rosterCount))
     table.insert(out, rosterPayload)
+
+    local hover = (not terminalClear) and liveHoverContext or nil
+    if hover then
+        table.insert(out, string.char(1))
+        table.insert(out, _Uint16BE(hover.generation))
+        table.insert(out, _Uint32BE(hover.applicantID))
+        table.insert(out, string.char(_ClampUInt8(hover.memberIdx)))
+        table.insert(out, _Uint16BE(hover.specID))
+        table.insert(out, _Uint32BE(hover.activityID))
+        _PackCleanLenStr(out, hover.name)
+        table.insert(out, _Uint16BE(hover.valueX))
+        table.insert(out, _Uint16BE(hover.valueY))
+        table.insert(out, _Uint16BE(hover.valueW))
+        table.insert(out, _Uint16BE(hover.valueH))
+        table.insert(out, _Uint16BE(hover.ownerX))
+        table.insert(out, _Uint16BE(hover.ownerY))
+        table.insert(out, _Uint16BE(hover.ownerW))
+        table.insert(out, _Uint16BE(hover.ownerH))
+    else
+        table.insert(out, string.char(0))
+    end
 
     -- Patch the dedicated length chunk before concat so finalization does not
     -- copy almost the entire body through substring slicing. CRC32 and the
