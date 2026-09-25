@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+from ctypes import wintypes
 import importlib
 import json
 import os
@@ -21,8 +22,18 @@ MUTEX_NAME = "KeystoneLens.Companion.Singleton"
 ERROR_ALREADY_EXISTS = 183
 
 
-def configure_import_path() -> None:
+def configure_runtime_environment() -> None:
     sys.path[:0] = [str(APP_DIR), str(PACKAGES_DIR)]
+
+    # A private Python install is relocated when the portable ZIP is extracted.
+    # Point Tcl/Tk explicitly at the bundled runtime so Tk() never inherits a
+    # stale system-Python or installer path from the user's environment.
+    tcl_dir = RUNTIME_DIR / "tcl" / "tcl8.6"
+    tk_dir = RUNTIME_DIR / "tcl" / "tk8.6"
+    if tcl_dir.is_dir():
+        os.environ["TCL_LIBRARY"] = str(tcl_dir)
+    if tk_dir.is_dir():
+        os.environ["TK_LIBRARY"] = str(tk_dir)
 
 
 def expected_python_version() -> tuple[int, int, int]:
@@ -59,6 +70,17 @@ def verify_runtime(*, import_full_app: bool) -> None:
         importlib.import_module("keystonelens_companion.__main__")
 
 
+def verify_ui_runtime() -> None:
+    import tkinter as tk
+
+    root = tk.Tk()
+    try:
+        root.withdraw()
+        root.update_idletasks()
+    finally:
+        root.destroy()
+
+
 def show_message(text: str, flags: int) -> None:
     try:
         ctypes.windll.user32.MessageBoxW(None, text, "KeystoneLens", flags)
@@ -71,19 +93,31 @@ def show_startup_error(message: str) -> None:
         STARTUP_LOG.write_text(message, encoding="utf-8")
     except OSError:
         pass
-    show_message(
+
+    summary = ""
+    for line in reversed(message.splitlines()):
+        if line.strip():
+            summary = line.strip()
+            break
+    if len(summary) > 180:
+        summary = summary[:177] + "..."
+
+    popup = (
         "KeystoneLens Portable could not start.\n\n"
-        f"Details were written to:\n{STARTUP_LOG}",
-        0x10,
+        f"Details were written to:\n{STARTUP_LOG}"
     )
+    if summary:
+        popup += f"\n\nError: {summary}"
+    show_message(popup, 0x10)
 
 
 def acquire_single_instance_mutex():
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-    kernel32.CreateMutexW.restype = ctypes.c_void_p
-    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-    kernel32.CloseHandle.restype = ctypes.c_bool
+    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
     ctypes.set_last_error(0)
     handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
     if not handle:
@@ -109,15 +143,36 @@ def system_exit_code(exc: SystemExit) -> int:
     return 1
 
 
+def app_crash_detail(exit_code: int) -> str:
+    local = os.environ.get("LOCALAPPDATA", "")
+    app_log = Path(local) / "KeystoneLens" / "keystonelens.log" if local else None
+    if app_log is not None:
+        try:
+            if app_log.is_file():
+                detail = app_log.read_text(encoding="utf-8", errors="replace").strip()
+                if detail:
+                    return detail
+        except OSError:
+            pass
+    return f"KeystoneLens application exited during startup with code {exit_code}."
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--verify-ui", action="store_true")
     args, passthrough = parser.parse_known_args()
-    configure_import_path()
+
+    configure_runtime_environment()
     mutex = None
+    verification = args.verify or args.verify_ui
 
     try:
-        verify_runtime(import_full_app=args.verify)
+        verify_runtime(import_full_app=verification)
+        if args.verify_ui:
+            verify_ui_runtime()
+            print("KeystoneLens portable GUI runtime verification passed.")
+            return 0
         if args.verify:
             print("KeystoneLens portable runtime verification passed.")
             return 0
@@ -131,11 +186,16 @@ def main() -> int:
         runpy.run_module("keystonelens_companion.__main__", run_name="__main__")
         return 0
     except SystemExit as exc:
-        return system_exit_code(exc)
+        code = system_exit_code(exc)
+        if code != 0 and not verification:
+            show_startup_error(app_crash_detail(code))
+        return code
     except Exception:
         detail = traceback.format_exc()
-        if args.verify:
-            print(detail, file=sys.stderr)
+        if verification:
+            stream = sys.stderr
+            if stream is not None:
+                stream.write(detail)
         else:
             show_startup_error(detail)
         return 1
