@@ -37,10 +37,15 @@ class ApplicantEngine:
         self._worker = threading.Thread(target=self._run_worker, daemon=True, name="KL-WCLWorker")
         self._worker.start()
 
-    def stop(self) -> None:
+    def request_stop(self) -> None:
+        """Invalidate pending work immediately; joining is a separate bounded step."""
         self._stop.set()
+
+    def stop(self, timeout: float = 1.0) -> bool:
+        self.request_stop()
         if self._worker.is_alive() and self._worker is not threading.current_thread():
-            self._worker.join(timeout=3.0)
+            self._worker.join(timeout=max(0.0, float(timeout)))
+        return not self._worker.is_alive()
 
     def _clear_wcl_queue_locked(self) -> None:
         """Drop queued WCL lookups when their listing/client context is obsolete."""
