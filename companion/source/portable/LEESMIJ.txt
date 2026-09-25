@@ -24,3 +24,8 @@ RUNTIME.json en START-COMPANION.cmd bij elkaar staan.
 
 De exacte versie staat in VERSION. Third-party componenten en licenties staan in
 THIRD-PARTY-NOTICES.md.
+
+Afsluiten
+Gebruik de X rechtsboven of de knop Afsluiten. Beide stoppen de Companion,
+de screenshot-watcher en de WCL-worker. Een shutdown-watchdog voorkomt dat een
+achtergrondproces blijft hangen.
