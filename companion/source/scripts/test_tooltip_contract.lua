@@ -214,7 +214,9 @@ assertTrue(type(unitPostCall) == "function", "unit tooltip post-call was not reg
 assertTrue(type(member.OnEnter) == "function", "LFG applicant member was not hooked")
 assertTrue(type(scrollBox.framesChanged) == "function", "recycled LFG frame callback was not registered")
 
--- 1. Cached value: exact requested placement directly under Raider.IO.
+-- 1. Exact placement: Group Finder always reserves a blank live cell directly
+-- under Raider.IO, even when a warm Data.lua value exists. This prevents an
+-- old cached number from ghosting underneath the Companion's live value.
 clearTooltip()
 currentOwner = member
 displayedUnit = nil
@@ -222,7 +224,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3000")
 assertEq(#GameTooltip.lines, 2, "WCL line was not injected directly after Raider.IO score")
 assertEq(GameTooltip.lines[1].left, "Raider.IO M+ Score", "Raider.IO score line moved")
 assertTrue(GameTooltip.lines[2].left:find("Warcraft Logs M+", 1, true) ~= nil, "WCL label missing")
-assertEq(GameTooltip.lines[2].right, "DPS 97%", "DPS percentile formatting changed")
+assertEq(GameTooltip.lines[2].right, "", "Group Finder must reserve a blank live value cell")
 assertEq(#liveRequests, 1, "cached applicant did not publish live hover geometry")
 assertEq(liveRequests[1].applicantID, 42, "live hover applicant ID changed")
 assertEq(liveRequests[1].memberIdx, 1, "live hover member index changed")
@@ -254,13 +256,13 @@ assertTrue(GameTooltip.lines[3].left:find("Warcraft Logs M+", 1, true) ~= nil, "
 member.OnEnter(member)
 assertEq(#GameTooltip.lines, 3, "fallback LFG hook duplicated the WCL line")
 
--- 5. Healing uses the same compact line and still publishes live geometry.
+-- 5. Healers use the same reserved live row; the Companion owns the rendered HPS value.
 clearTooltip()
 currentSpec = 65
 setCache(65, "HPS", 94.2, now)
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3010")
 assertEq(#GameTooltip.lines, 2, "healing WCL line missing")
-assertEq(GameTooltip.lines[2].right, "Healing 94%", "healing percentile formatting changed")
+assertEq(GameTooltip.lines[2].right, "", "Group Finder healer row must stay live-only")
 assertEq(#liveRequests, 1, "healer did not publish live hover geometry")
 
 -- 6. Wrong spec never leaks cached data; it falls back to the blank live row.
