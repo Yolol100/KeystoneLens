@@ -11,7 +11,7 @@ Gebruik
 3. Vul een Warcraft Logs Client ID en Client Secret in.
 4. Kies je World of Warcraft _retail_\Screenshots-map.
 5. Open je Mythic+ Group Finder listing.
-6. Zodra de Companion data heeft bijgewerkt: gebruik /reload in WoW.
+6. Hover een applicant. De Warcraft Logs waarde verschijnt live; geen WoW-reload nodig.
 
 Niet meer aanwezig
 - Geen Raider.IO-client in de Companion.
@@ -34,4 +34,4 @@ Venster herstellen
 Als KeystoneLens geminimaliseerd is, herstelt een klik op het taakbalkicoon het hoofdvenster. Start je START-COMPANION.cmd nogmaals terwijl KeystoneLens al draait, dan wordt de bestaande instantie naar voren gehaald in plaats van een tweede instantie te starten.
 
 Raider.IO integratie
-Als Raider.IO is geinstalleerd, voegt KeystoneLens zijn ene Warcraft Logs M+ regel direct onder de Raider.IO M+ score toe. Raider.IO is optioneel en wordt niet aangepast; zonder Raider.IO blijft de compacte KeystoneLens tooltip werken.
+Als Raider.IO is geinstalleerd, reserveert KeystoneLens zijn ene Warcraft Logs M+ regel direct onder de actuele Raider.IO M+ score. Nieuwe Group Finder applicants worden live door de Companion ingevuld; daarvoor is geen WoW-reload nodig. Raider.IO is optioneel en wordt niet aangepast.
