@@ -18,6 +18,7 @@ end
 local now = 2000
 local activeActivity = 777
 local currentSpec = 62
+local currentFullName = "Alice-Draenor"
 local currentMetric = "DPS"
 local currentPercentile = 97.4
 local currentOwner = nil
@@ -128,7 +129,7 @@ _G.C_LFGList = {
     end,
     GetApplicantMemberInfo = function(applicantID, memberIdx)
         if applicantID ~= 42 or memberIdx ~= 1 then return nil end
-        return "Alice-Draenor",
+        return currentFullName,
             nil, nil, nil, nil, nil, nil, nil,
             nil, nil, nil, nil, nil, nil, nil,
             currentSpec
@@ -149,9 +150,10 @@ _G.CreateFrame = function()
     return eventFrame
 end
 
-local function setCache(spec, metric, percentile, fetchedAt)
+local function setCache(spec, metric, percentile, fetchedAt, fullName)
     local code = metric == "HPS" and "H" or "D"
     local stamp = fetchedAt or now
+    local identity = string.lower(fullName or currentFullName)
     _G.KeystoneLensPreloadV4 = {
         version = 4,
         generatedAt = stamp,
@@ -159,12 +161,12 @@ local function setCache(spec, metric, percentile, fetchedAt)
         region = 3,
         season = "midnight-s2",
         entries = {
-            ["alice-draenor|" .. tostring(spec) .. "|altaroffangs"] = {
+            [identity .. "|" .. tostring(spec) .. "|altaroffangs"] = {
                 code, percentile, stamp,
             },
         },
         unitEntries = {
-            ["alice-draenor|altaroffangs"] = {
+            [identity .. "|altaroffangs"] = {
                 code, percentile, stamp,
             },
         },
@@ -222,14 +224,22 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3010")
 assertEq(#GameTooltip.lines, 2, "healing WCL line missing")
 assertEq(GameTooltip.lines[2].right, "Healing 94%", "healing percentile formatting changed")
 
--- 5. Wrong spec fails closed.
+-- 5. Tank uses DPS, never a separate tank score.
+clearTooltip()
+currentSpec = 66
+setCache(66, "DPS", 88.6, now)
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3015")
+assertEq(#GameTooltip.lines, 2, "tank WCL line missing")
+assertEq(GameTooltip.lines[2].right, "DPS 89%", "tank must use DPS metric")
+
+-- 6. Wrong spec fails closed.
 clearTooltip()
 currentSpec = 62
 setCache(63, "DPS", 88.0, now)
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3020")
 assertEq(#GameTooltip.lines, 1, "wrong specialization leaked WCL data")
 
--- 6. Wrong active dungeon fails closed.
+-- 7. Wrong active dungeon fails closed.
 clearTooltip()
 currentSpec = 62
 setCache(62, "DPS", 97.0, now)
@@ -238,7 +248,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3030")
 assertEq(#GameTooltip.lines, 1, "wrong activity leaked WCL data")
 activeActivity = 777
 
--- 7. Stale data fails closed.
+-- 8. Stale data fails closed.
 clearTooltip()
 setCache(62, "DPS", 97.0, 1)
 now = 700000
@@ -246,7 +256,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3040")
 assertEq(#GameTooltip.lines, 1, "stale WCL data was rendered")
 now = 2000
 
--- 8. Wrong season and region fail closed.
+-- 9. Wrong season and region fail closed.
 clearTooltip()
 setCache(62, "DPS", 97.0, now)
 _G.KeystoneLensPreloadV4.season = "midnight-s1"
@@ -259,7 +269,7 @@ _G.KeystoneLensPreloadV4.region = 1
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3042")
 assertEq(#GameTooltip.lines, 1, "wrong region leaked WCL data")
 
--- 9. Malformed or missing records fail closed.
+-- 10. Malformed or missing records fail closed.
 clearTooltip()
 setCache(62, "DPS", 97.0, now)
 _G.KeystoneLensPreloadV4.entries["alice-draenor|62|altaroffangs"] = { "X", 150, now }
@@ -271,7 +281,7 @@ _G.KeystoneLensPreloadV4 = nil
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3044")
 assertEq(#GameTooltip.lines, 1, "missing preload database rendered a WCL line")
 
--- 10. Normal player tooltip path also appends after Raider.IO while an LFG activity is active.
+-- 11. Normal player tooltip path also appends after Raider.IO while an LFG activity is active.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
@@ -280,7 +290,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3050")
 assertEq(#GameTooltip.lines, 2, "unit tooltip did not inject WCL under Raider.IO score")
 assertEq(GameTooltip.lines[2].right, "DPS 92%", "unit tooltip percentile formatting changed")
 
--- 11. A same-name player on another realm must never inherit the local player's cache.
+-- 12. A same-name player on another realm must never inherit the local player's cache.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
@@ -296,7 +306,7 @@ assertEq(#GameTooltip.lines, 1, "cross-realm player matched a same-realm short c
 displayedRealm = "Draenor"
 setCache(62, "DPS", 91.6, now)
 
--- 12. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
+-- 13. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
 clearTooltip()
 currentOwner = member
 displayedUnit = nil
@@ -305,7 +315,7 @@ member.OnEnter(member)
 assertEq(#GameTooltip.lines, 1, "standalone/fallback WCL line missing")
 assertTrue(GameTooltip.lines[1].left:find("Warcraft Logs M+", 1, true) ~= nil, "fallback WCL label missing")
 
--- 13. The unit post-call fallback works independently of the Raider.IO score hook.
+-- 14. The unit post-call fallback works independently of the Raider.IO score hook.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
@@ -313,5 +323,33 @@ GameTooltip.lines = {}
 unitPostCall(GameTooltip)
 assertEq(#GameTooltip.lines, 1, "unit post-call fallback did not render WCL")
 assertEq(GameTooltip.lines[1].right, "DPS 92%", "unit post-call fallback value changed")
+
+-- 15. Same character name on another applicant realm must not collide.
+clearTooltip()
+currentOwner = member
+displayedUnit = nil
+currentSpec = 62
+currentFullName = "Alice-Kazzak"
+setCache(62, "DPS", 99, now, "Alice-Draenor")
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3070")
+assertEq(#GameTooltip.lines, 1, "same-name cross-realm applicant inherited wrong WCL data")
+
+-- 16. Recycled applicant frames keep using the current identity.
+currentFullName = "Bob-Draenor"
+setCache(62, "DPS", 86.2, now, currentFullName)
+scrollBox.framesChanged({ row })
+clearTooltip()
+member.OnEnter(member)
+assertEq(#GameTooltip.lines, 1, "recycled applicant row lost WCL lookup")
+assertEq(GameTooltip.lines[1].right, "DPS 86%", "recycled applicant row used stale identity")
+
+-- 17. Rapid sequential applicant hovers remain deterministic for 30+ identities.
+for i = 1, 35 do
+    currentFullName = "Player" .. tostring(i) .. "-Draenor"
+    setCache(62, "DPS", 80 + (i % 10), now, currentFullName)
+    clearTooltip()
+    GameTooltip:AddDoubleLine("Raider.IO M+ Score", tostring(3000 + i))
+    assertEq(#GameTooltip.lines, 2, "rapid applicant lookup failed at index " .. tostring(i))
+end
 
 print("KeystoneLens tooltip integration contract passed.")
