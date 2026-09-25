@@ -102,14 +102,23 @@ require('self.root.bind("<Map>", self._on_root_mapped' in main_app, "taskbar res
 require("def _show_main_window" in main_app, "main-window restore helper is missing")
 
 tooltip = read(BRIDGE / "Core" / "Tooltip.lua")
+bridge_toc = read(BRIDGE / "KeystoneLensBridge.toc")
 for token, label in (
     ("REQUIRED_CACHE_VERSION = 3", "cache v3"),
     ("local specID = results[17]", "current applicant spec extraction"),
     ("tonumber(entry.activityID) ~= activityID", "activity guard"),
     ("tonumber(entry.specID) ~= specID", "spec guard"),
     ('metric ~= "DPS" and metric ~= "HPS"', "DPS/HPS metric guard"),
+    ("RegisterRaiderIOScoreHook", "Raider.IO score-line integration"),
+    ('plain:find("Raider.IO", 1, true)', "Raider.IO score-label detection"),
+    ("AppendCurrentTooltipContext", "shared LFG/unit tooltip context"),
+    ("TooltipDataProcessor.AddTooltipPostCall", "normal player tooltip integration"),
+    ("TooltipUtil.GetDisplayedUnit", "taint-safe displayed-unit lookup"),
+    ("ScrollBoxUtil.OnViewFramesChanged", "current LFG recycled-frame hook"),
 ):
     require(token in tooltip, f"tooltip contract changed: {label}")
+require("RaiderIO" in bridge_toc, "RaiderIO must remain an OptionalDep for deterministic tooltip order")
+require((SOURCE / "scripts" / "test_tooltip_contract.lua").is_file(), "Raider.IO tooltip regression suite is missing")
 for unwanted in ("KL Score", "KL evidence", "KL bronnen", "rioComponent", "wclRuns"):
     require(unwanted not in tooltip, f"tooltip is no longer minimal: {unwanted}")
 
