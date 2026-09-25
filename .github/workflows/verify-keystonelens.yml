@@ -59,6 +59,9 @@ jobs:
       - name: Verify minimal architecture
         run: python companion/source/scripts/verify_minimal_architecture.py
 
+      - name: Verify Companion shutdown contract
+        run: python companion/source/scripts/test_shutdown_contract.py
+
       - name: Check whitespace errors
         run: git diff --check HEAD^ HEAD
 
