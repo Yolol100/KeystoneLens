@@ -28,7 +28,7 @@ MAX_REALM_CATALOG_FILE_BYTES = 8 * 1024 * 1024
 REALM_CATALOG_TTL_SECONDS = 30 * 24 * 60 * 60
 REALM_CATALOG_RETRY_SECONDS = 10 * 60
 REALM_CATALOG_VERSION = 1
-WCL_CONTEXT_VERSION = "midnight-season-aware-v13:source-season-bound:role-aware-ranking-average:parses2w"
+WCL_CONTEXT_VERSION = "midnight-season-aware-v14:compact-role-metric:parses2w"
 WCL_ENCOUNTER_CATALOG_TTL_SECONDS = 24 * 60 * 60
 WCL_ENCOUNTER_CATALOG_RETRY_SECONDS = 10 * 60
 
@@ -1038,21 +1038,12 @@ class WCLClient:
             vars_decl += [f"${nvar}:String!", f"${svar}:String!"]
             variables[nvar] = name
             variables[svar] = slug
-            role_metric = "hps" if spec_id in HEALER_SPECS else "wdps"
-            extra_healer = (
-                f"      tankhealing: encounterRankings(encounterID:{encounter}, metric:tankhps, byBracket:true, compare:Parses)\n"
-                if spec_id in HEALER_SPECS else ""
-            )
+            role_metric = "hps" if spec_id in HEALER_SPECS else "dps"
             fields.append(
                 f"    {alias}: character(name:${nvar}, serverSlug:${svar}, serverRegion:$serverRegion) {{\n"
                 "      name\n"
-                f"      run: encounterRankings(encounterID:{encounter}, metric:playerscore, byBracket:true, compare:Parses)\n"
-                f"      speed: encounterRankings(encounterID:{encounter}, metric:playerspeed, byBracket:true, compare:Parses)\n"
-                f"      throughput: encounterRankings(encounterID:{encounter}, metric:{role_metric}, byBracket:true, compare:Parses)\n"
-                + extra_healer
-                + f"      damage: encounterRankings(encounterID:{encounter}, metric:dps, byBracket:true, compare:Parses)\n"
-                + f"      bossdamage: encounterRankings(encounterID:{encounter}, metric:bossdps, byBracket:true, compare:Parses)\n"
-                + "    }"
+                f"      role: encounterRankings(encounterID:{encounter}, metric:{role_metric}, byBracket:true, compare:Parses)\n"
+                "    }"
             )
             resolved_job = (name, slug, realm, _region, spec_id, _dungeon, target)
             valid.append((alias, index, resolved_job, spec_name, job))
@@ -1187,37 +1178,19 @@ class WCLClient:
                     error="WCL character data invalid",
                 )
             else:
-                run = char.get("run")
-                ranks = run.get("ranks") if isinstance(run, dict) else []
-                bracket = _reduce_ranks(ranks, spec_name)
-                role_metric = "hps" if spec_id in HEALER_SPECS else "wdps"
-                metric_brackets: dict[str, WCLBracket] = {}
-                metric_fields = [
-                    ("playerspeed", "speed"),
-                    (role_metric, "throughput"),
-                    ("dps", "damage"),
-                    ("bossdps", "bossdamage"),
-                ]
-                if spec_id in HEALER_SPECS:
-                    metric_fields.append(("tankhps", "tankhealing"))
-                for metric_name, field_name in metric_fields:
-                    raw_metric = char.get(field_name)
-                    metric_ranks = raw_metric.get("ranks") if isinstance(raw_metric, dict) else []
-                    metric_bracket = _reduce_ranks(metric_ranks, spec_name)
-                    if metric_bracket:
-                        metric_brackets[metric_name] = metric_bracket
+                role_metric = "hps" if spec_id in HEALER_SPECS else "dps"
+                raw_metric = char.get("role")
+                metric_ranks = raw_metric.get("ranks") if isinstance(raw_metric, dict) else []
+                metric_bracket = _reduce_ranks(metric_ranks, spec_name)
+                metric_brackets = {role_metric: metric_bracket} if metric_bracket else {}
 
-                # GraphQL can return partial data plus an error for one nested
-                # ranking field. Keep a valid playerscore instead of poisoning
-                # every applicant in the batch. Only surface the alias error if
-                # this character produced no usable score at all.
                 error = ""
-                if bracket is None and not metric_brackets and local_errors:
+                if not metric_brackets and local_errors:
                     error = f"WCL GraphQL error: {local_errors[0]}"
-                elif bracket is None and not metric_brackets and global_errors:
+                elif not metric_brackets and global_errors:
                     error = f"WCL GraphQL error: {global_errors[0]}"
                 result = WCLResult(
-                    name, realm, dungeon, spec_id, bracket, time.time(), target_key=target,
+                    name, realm, dungeon, spec_id, None, time.time(), target_key=target,
                     error=error, quota_spent=spent, quota_limit=limit, quota_reset=reset,
                     metric_brackets=metric_brackets,
                 )
