@@ -32,3 +32,6 @@ achtergrondproces blijft hangen.
 
 Venster herstellen
 Als KeystoneLens geminimaliseerd is, herstelt een klik op het taakbalkicoon het hoofdvenster. Start je START-COMPANION.cmd nogmaals terwijl KeystoneLens al draait, dan wordt de bestaande instantie naar voren gehaald in plaats van een tweede instantie te starten.
+
+Raider.IO integratie
+Als Raider.IO is geinstalleerd, voegt KeystoneLens zijn ene Warcraft Logs M+ regel direct onder de Raider.IO M+ score toe. Raider.IO is optioneel en wordt niet aangepast; zonder Raider.IO blijft de compacte KeystoneLens tooltip werken.
