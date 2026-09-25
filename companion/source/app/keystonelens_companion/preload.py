@@ -242,10 +242,10 @@ def render_lua_dataset(region: str, records: Iterable[dict[str, object]], *, now
         fetched_at = int(float(clean["fetched_at"]))
         if percentile is None:
             continue
-        flat = f"{full_name.casefold()}|{spec_id}|{dkey}"
+        flat = f"{full_name}|{spec_id}|{dkey}"
         escaped = flat.replace("\\", "\\\\").replace('"', '\\"')
         entries.append(f'    ["{escaped}"]={{"{metric}",{percentile:.2f},{fetched_at}}},')
-        unit_base = f"{full_name.casefold()}|{dkey}"
+        unit_base = f"{full_name}|{dkey}"
         unit_candidates.setdefault(unit_base, []).append((spec_id, metric, float(percentile), fetched_at))
     unit_entries: list[str] = []
     for flat, values in unit_candidates.items():
