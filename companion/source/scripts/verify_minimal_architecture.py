@@ -168,6 +168,23 @@ for token, label in (
 require("def role_metric" in metrics, "shared role metric helper is missing")
 require("LiveTooltipOverlay(self.root)" in main_app, "Companion does not create the live overlay")
 require("self.live_overlay.update_from_state(state)" in main_app, "Companion does not publish engine state to live overlay")
+
+# Live mode is deliberately display-only. Do not let future convenience changes
+# turn the Companion into input automation, process-memory inspection, or a
+# message-injection bridge into WoW.
+for forbidden_api in (
+    "SendInput",
+    "mouse_event",
+    "keybd_event",
+    "SetCursorPos",
+    "ReadProcessMemory",
+    "WriteProcessMemory",
+    "VirtualProtectEx",
+    "CreateRemoteThread",
+    "PostMessageW",
+    "SendMessageW",
+):
+    require(forbidden_api not in overlay, f"live overlay must stay display-only: {forbidden_api}")
 require("listing_generation=self._listing_generation" in engine, "engine state does not publish listing generation")
 require("/reload in WoW om nieuwe tooltipdata te laden" not in main_app, "live UI regressed to a reload requirement")
 
