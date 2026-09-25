@@ -1,10 +1,6 @@
-"""Season and UI constants for KeystoneLens Companion 0.12.8"""
 from __future__ import annotations
 
-# Verified WCL encounter IDs. Known production IDs take precedence over the
-# live zone-catalog fallback in WCLClient._resolve_encounter_id. This avoids a
-# total WCL outage when Warcraft Logs temporarily returns an empty/incomplete
-# zone encounter catalog.
+# Verified Warcraft Logs Mythic+ encounter IDs.
 DUNGEONS: dict[str, int] = {
     "Algeth'ar Academy": 112526,
     "Magisters' Terrace": 12811,
@@ -14,8 +10,6 @@ DUNGEONS: dict[str, int] = {
     "Seat of the Triumvirate": 361753,
     "Skyreach": 61209,
     "Windrunner Spire": 12805,
-    # Midnight Season 2 production (WCL zone 55). Encounter IDs are canonical
-    # WCL encounter identities; the live zone catalog remains a fallback only.
     "Altar of Fangs": 62993,
     "Murder Row": 62813,
     "Den of Nalorakk": 62825,
@@ -38,12 +32,6 @@ ACTIVITY_TO_DUNGEON: dict[int, str] = {
     1765: "Nexus-Point Xenas", 1766: "Nexus-Point Xenas", 1767: "Nexus-Point Xenas", 1768: "Nexus-Point Xenas",
 }
 
-CLASS_NAMES: dict[int, str] = {
-    1: "Warrior", 2: "Paladin", 3: "Hunter", 4: "Rogue", 5: "Priest",
-    6: "Death Knight", 7: "Shaman", 8: "Mage", 9: "Warlock", 10: "Monk",
-    11: "Druid", 12: "Demon Hunter", 13: "Evoker",
-}
-
 SPEC_NAMES: dict[int, str] = {
     250: "Blood", 251: "Frost", 252: "Unholy",
     577: "Havoc", 581: "Vengeance", 1480: "Devourer",
@@ -60,21 +48,5 @@ SPEC_NAMES: dict[int, str] = {
     71: "Arms", 72: "Fury", 73: "Protection",
 }
 
-ROLE_NAMES = {0:"TANK", 1:"HEALER", 2:"DPS", 3:"DPS"}
 HEALER_SPECS = frozenset({65, 105, 256, 257, 264, 270, 1468})
-TANK_SPECS = frozenset({66, 73, 104, 250, 268, 581})
-REGION_NAMES = {1:"US", 2:"KR", 3:"EU", 4:"TW", 5:"CN"}
-
-# Readability-first overlay palette.
-BG = "#0d1016"
-PANEL = "#141923"
-PANEL_ALT = "#11161f"
-BORDER = "#2b3342"
-TEXT = "#f3f5f7"
-MUTED = "#9099a8"
-ACCENT = "#5da8ff"
-GREEN = "#52d273"
-YELLOW = "#f1c75b"
-ORANGE = "#f39a55"
-RED = "#ef6b6b"
-PURPLE = "#bc84ff"
+REGION_NAMES = {1: "US", 2: "KR", 3: "EU", 4: "TW", 5: "CN"}
