@@ -62,6 +62,9 @@ jobs:
       - name: Verify Companion shutdown contract
         run: python companion/source/scripts/test_shutdown_contract.py
 
+      - name: Verify Companion window restore contract
+        run: python companion/source/scripts/test_window_visibility_contract.py
+
       - name: Check whitespace errors
         run: git diff --check HEAD^ HEAD
 
