@@ -294,7 +294,18 @@ assertEq(GameTooltip.lines[2].right, "", "stale WCL data was rendered")
 assertEq(#liveRequests, 1, "stale cache did not fall through to live Companion data")
 now = 2000
 
--- 9. Normal player tooltip still uses safely preloaded local cache.
+-- 9. Protected/unreadable layout geometry fails closed without breaking the tooltip.
+clearTooltip()
+currentOwner = member
+displayedUnit = nil
+local originalGetLeft = member.GetLeft
+member.GetLeft = function() error("protected layout") end
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3045")
+assertEq(#GameTooltip.lines, 2, "protected layout removed the WCL placeholder")
+assertEq(#liveRequests, 0, "protected layout must not publish unsafe geometry")
+member.GetLeft = originalGetLeft
+
+-- 10. Normal player tooltip still uses safely preloaded local cache.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
@@ -304,7 +315,7 @@ assertEq(#GameTooltip.lines, 2, "unit tooltip did not inject WCL under Raider.IO
 assertEq(GameTooltip.lines[2].right, "DPS 92%", "unit tooltip percentile formatting changed")
 assertEq(#liveRequests, 0, "normal unit tooltip must not invent an LFG live request")
 
--- 10. Same-name cross-realm players never inherit a short local cache key.
+-- 11. Same-name cross-realm players never inherit a short local cache key.
 clearTooltip()
 displayedRealm = "Kazzak"
 _G.KeystoneLensTooltipCacheV3.entries = {
