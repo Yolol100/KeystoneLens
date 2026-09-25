@@ -406,6 +406,7 @@ class ApplicantEngine:
             lfg_unavailable=self._lfg_unavailable,
             applicants_unavailable=self._applicants_unavailable,
             roster_unavailable=self._roster_unavailable,
+            listing_generation=self._listing_generation,
             live_hover=self._live_hover,
         ))
 
