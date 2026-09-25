@@ -49,7 +49,7 @@ dofile(os.getenv("KL_DATA"))
 local loaded = os.clock() - started
 collectgarbage("collect")
 local after = collectgarbage("count")
-local key = "player24999-draenor|62|altaroffangs"
+local key = "Player24999-Draenor|62|altaroffangs"
 local lookupStarted = os.clock()
 local found = nil
 for i = 1, 100000 do
