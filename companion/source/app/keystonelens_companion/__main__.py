@@ -13,7 +13,7 @@ from tkinter import filedialog, messagebox
 
 from . import __version__
 from .addon_sync import TooltipCacheSync
-from .config import Config, load_config, log_path, save_config
+from .config import Config, VALID_REGIONS, load_config, log_path, save_config
 from .engine import ApplicantEngine
 from .models import EngineState
 from .preload_refresh import PreloadRefresher, REFRESH_INTERVAL_SECONDS
@@ -47,6 +47,7 @@ class App:
         self.client_id_var = tk.StringVar(value=self.cfg.client_id)
         self.client_secret_var = tk.StringVar(value=self.cfg.client_secret)
         self.screenshots_var = tk.StringVar(value=self.cfg.screenshots_path)
+        self.region_var = tk.StringVar(value=self.cfg.region)
         self._settings_visible = False
 
         frame = tk.Frame(self.root, padx=16, pady=16)
@@ -67,16 +68,21 @@ class App:
             width=50,
         ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 8))
 
-        tk.Label(self.settings_frame, text="WoW _retail_\\Screenshots map").grid(row=4, column=0, sticky="w")
+        tk.Label(self.settings_frame, text="WoW regio").grid(row=4, column=0, sticky="w")
+        tk.OptionMenu(self.settings_frame, self.region_var, *VALID_REGIONS).grid(
+            row=5, column=0, sticky="w", pady=(2, 8)
+        )
+
+        tk.Label(self.settings_frame, text="WoW _retail_\\Screenshots map").grid(row=6, column=0, sticky="w")
         tk.Entry(self.settings_frame, textvariable=self.screenshots_var, width=40).grid(
-            row=5, column=0, sticky="ew", pady=(2, 8)
+            row=7, column=0, sticky="ew", pady=(2, 8)
         )
         tk.Button(self.settings_frame, text="Kiezen", command=self._browse_screenshots).grid(
-            row=5, column=1, padx=(8, 0), pady=(2, 8)
+            row=7, column=1, padx=(8, 0), pady=(2, 8)
         )
 
         settings_buttons = tk.Frame(self.settings_frame)
-        settings_buttons.grid(row=6, column=0, columnspan=2, sticky="e")
+        settings_buttons.grid(row=8, column=0, columnspan=2, sticky="e")
         tk.Button(settings_buttons, text="Verbergen", command=lambda: self._set_settings_visible(False)).pack(
             side="right"
         )
@@ -93,7 +99,7 @@ class App:
         self.cache = WCLCache(ttl=self.cfg.cache_ttl_seconds)
         self.wcl: WCLClient | None = None
         self.watcher: ScreenshotWatcher | None = None
-        self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path)
+        self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path, region=self.cfg.region)
         self.engine = ApplicantEngine(None, lambda state: self.q.put(("state", state)))
 
         self.root.after(0, self._show_main_window)
@@ -194,6 +200,7 @@ class App:
             client_id=self.client_id_var.get().strip(),
             client_secret=self.client_secret_var.get().strip(),
             screenshots_path=path,
+            region=self.region_var.get().strip().upper(),
             cache_ttl_seconds=self.cfg.cache_ttl_seconds,
         )
         if not cfg.wcl_configured:
@@ -236,7 +243,7 @@ class App:
             self.status_var.set("Configureer Warcraft Logs en je WoW Screenshots map.")
             return
 
-        self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path)
+        self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path, region=self.cfg.region)
         if not self.tooltip_sync.publish():
             self.status_var.set(f"Preload-database fout: {self.tooltip_sync.last_error}")
         try:
