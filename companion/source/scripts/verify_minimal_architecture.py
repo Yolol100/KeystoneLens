@@ -78,6 +78,7 @@ require('"Demon Hunter"' not in constants, "spaced Demon Hunter WCL discovery sl
 
 engine = read(APP / "engine.py")
 main_app = read(APP / "__main__.py")
+config = read(APP / "config.py")
 watcher = read(APP / "watcher.py")
 for token, label in (
     ("def _clear_wcl_queue_locked", "WCL queue invalidation"),
@@ -106,6 +107,9 @@ require("class SettingsDialog" not in main_app, "modal SettingsDialog must not r
 require("grab_set()" not in main_app, "modal Tk grab must not return")
 require('self.root.bind("<Map>", self._on_root_mapped' in main_app, "taskbar restore Map binding is missing")
 require("def _show_main_window" in main_app, "main-window restore helper is missing")
+require('VALID_REGIONS = ("EU", "US", "KR", "TW", "CN")' in config, "configured preload regions changed")
+require("self.region_var" in main_app, "Companion region selector is missing")
+require("region=self.cfg.region" in main_app, "configured region is not bound to preload sync")
 
 tooltip = read(BRIDGE / "Core" / "Tooltip.lua")
 bridge_toc = read(BRIDGE / "KeystoneLensBridge.toc")
