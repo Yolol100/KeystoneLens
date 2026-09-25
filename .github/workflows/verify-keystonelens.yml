@@ -183,7 +183,24 @@ jobs:
             }
           }
 
-          Compress-Archive -Path (Join-Path $root "*") -DestinationPath $completeZip -CompressionLevel Optimal
+          $packagePython = Join-Path $companion "runtime\python.exe"
+          $reproZip = Join-Path $env:RUNNER_TEMP "KeystoneLens-Complete-$version-repro.zip"
+          if (Test-Path -LiteralPath $reproZip) { Remove-Item -LiteralPath $reproZip -Force }
+
+          & $packagePython -B "companion/source/scripts/make_deterministic_zip.py" --root $root --out $completeZip
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $completeZip)) {
+            throw "Deterministic complete ZIP creation failed."
+          }
+          & $packagePython -B "companion/source/scripts/make_deterministic_zip.py" --root $root --out $reproZip
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $reproZip)) {
+            throw "Complete ZIP reproducibility build failed."
+          }
+          $completeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $completeZip).Hash.ToLowerInvariant()
+          $reproHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $reproZip).Hash.ToLowerInvariant()
+          if ($completeHash -ne $reproHash) {
+            throw "Complete ZIP reproducibility mismatch: $completeHash != $reproHash"
+          }
+          Remove-Item -LiteralPath $reproZip -Force
 
           $verifyRoot = Join-Path $env:RUNNER_TEMP "KeystoneLens-Complete-Verify-$version"
           if (Test-Path -LiteralPath $verifyRoot) { Remove-Item -LiteralPath $verifyRoot -Recurse -Force }
