@@ -123,6 +123,7 @@ for token, label in (
     ("TooltipUtil.GetDisplayedUnit", "taint-safe displayed-unit lookup"),
     ("ScrollBoxUtil.OnViewFramesChanged", "current LFG recycled-frame hook"),
     ("RequestLiveHoverValue", "live LFG hover transport"),
+    ("ReadLayoutNumber", "protected geometry fail-closed"),
     ('local uniqueKey = "live:"', "live-only Group Finder row identity"),
     ("Group Finder is live-only", "no-reload placeholder row"),
 ):
@@ -156,6 +157,8 @@ for token, label in (
     ("WS_EX_TRANSPARENT", "mouse-through overlay"),
     ("WS_EX_NOACTIVATE", "no-activate overlay"),
     ("GWLP_HWNDPARENT", "detached overlay owner"),
+    ("GetWindowTextLengthW.argtypes", "x64 HWND title signature"),
+    ("GetClientRect.argtypes", "x64 HWND client-rect signature"),
     ('"world of warcraft" in title', "foreground WoW gate"),
     ("role_metric(view)", "shared DPS/HPS metric policy"),
     ("current_listing_generation", "listing-bound hover ordering"),
