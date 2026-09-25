@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import struct
 import sys
+import types
 import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = ROOT / "companion" / "source" / "app"
 sys.path.insert(0, str(APP_ROOT))
+
+requests_stub = types.ModuleType("requests")
+requests_stub.RequestException = RuntimeError
+requests_stub.Session = object
+sys.modules.setdefault("requests", requests_stub)
 
 from keystonelens_companion.aps1 import APS1Error, parse_snapshot  # noqa: E402
 from keystonelens_companion.engine import ApplicantEngine  # noqa: E402
