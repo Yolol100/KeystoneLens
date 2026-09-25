@@ -13,7 +13,9 @@ from .registries import ACTIVE_SEASON_KEY, SEASON_REGISTRY
 from .util import realm_slug
 from .wcl import WCLClient
 
-CURSOR_PATH = local_app_dir() / "wcl-preload-cursor-v1.json"
+CURSOR_PATH = local_app_dir() / "wcl-preload-cursor-v2.json"
+CURSOR_VERSION = 2
+MAX_DISCOVERY_PAGES = 5
 MAX_SLICES_PER_RUN = 4
 SEEDS_PER_SLICE = 50
 QUOTA_STOP_FRACTION = 0.80
@@ -31,19 +33,30 @@ class PreloadRefresher:
     def _slices(self) -> list[tuple[str, int]]:
         season = SEASON_REGISTRY[ACTIVE_SEASON_KEY]
         specs = sorted(SPEC_NAMES)
-        return [(dungeon, spec_id) for dungeon in season.dungeons for spec_id in specs]
+        return [(dungeon, spec_id) for spec_id in specs for dungeon in season.dungeons]
 
-    def _load_cursor(self) -> int:
+    def _load_cursor(self) -> tuple[int, int]:
         try:
             raw = json.loads(self.cursor_path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict) and int(raw.get("version", 0)) == 1:
-                return max(0, int(raw.get("index", 0)))
+            if isinstance(raw, dict):
+                version = int(raw.get("version", 0))
+                index = max(0, int(raw.get("index", 0)))
+                if version == CURSOR_VERSION:
+                    page = max(1, min(MAX_DISCOVERY_PAGES, int(raw.get("page", 1))))
+                    return index, page
+                if version == 1:
+                    return index, 1
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             pass
-        return 0
+        return 0, 1
 
-    def _save_cursor(self, index: int) -> None:
-        payload = {"version": 1, "index": max(0, int(index)), "saved_at": int(time.time())}
+    def _save_cursor(self, index: int, page: int) -> None:
+        payload = {
+            "version": CURSOR_VERSION,
+            "index": max(0, int(index)),
+            "page": max(1, min(MAX_DISCOVERY_PAGES, int(page))),
+            "saved_at": int(time.time()),
+        }
         try:
             self.cursor_path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.cursor_path.with_suffix(".tmp")
@@ -81,7 +94,9 @@ class PreloadRefresher:
             return {"records": self.sync.record_count, "added": 0, "seeds": 0, "slices": 0}
 
         region = self.sync.region
-        index = self._load_cursor() % len(slices)
+        index, page = self._load_cursor()
+        index %= len(slices)
+        page = max(1, min(MAX_DISCOVERY_PAGES, int(page)))
         records: list[dict[str, object]] = []
         seed_count = 0
         slices_done = 0
@@ -91,11 +106,14 @@ class PreloadRefresher:
                 break
             dungeon, spec_id = slices[index]
             seeds = self.client.discover_ranked_characters(
-                region, dungeon, spec_id, page=1, limit=SEEDS_PER_SLICE
+                region, dungeon, spec_id, page=page, limit=SEEDS_PER_SLICE
             )
             seed_count += len(seeds)
             slices_done += 1
-            index = (index + 1) % len(slices)
+            index += 1
+            if index >= len(slices):
+                index = 0
+                page = 1 if page >= MAX_DISCOVERY_PAGES else page + 1
 
             jobs = [
                 (name, realm_slug(realm), realm, region, spec_id, dungeon, 0)
@@ -112,7 +130,7 @@ class PreloadRefresher:
                     if record is not None:
                         records.append(record)
 
-        self._save_cursor(index)
+        self._save_cursor(index, page)
         added = self.sync.merge_external(records, region=region) if records else 0
         if added:
             self.sync.publish()
@@ -121,6 +139,7 @@ class PreloadRefresher:
             "added": int(added),
             "seeds": int(seed_count),
             "slices": int(slices_done),
+            "page": int(page),
             "quota": round(self.client.quota_fraction(), 4),
             "region": region,
         }
