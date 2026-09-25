@@ -100,7 +100,7 @@ def _clean_record(value: object, *, now: float | None = None) -> dict[str, objec
 
 
 class PreloadStore:
-    def __init__(self, path: Path | None = None):
+    def __init__(self, path: Path | None = None, preferred_region: str | None = None):
         self.path = path or STORE_PATH
         self.backup_path = BACKUP_PATH if path is None else path.with_suffix(".bak.json")
         self._lock = threading.RLock()
@@ -108,6 +108,10 @@ class PreloadStore:
         self.records: dict[str, dict[str, object]] = {}
         self.last_error = ""
         self._load()
+        preferred = str(preferred_region or "").strip().upper()
+        if preferred in _REGION_IDS and preferred != self.region:
+            self.region = preferred
+            self.records = {}
 
     def _read(self, path: Path) -> tuple[str, dict[str, dict[str, object]]] | None:
         try:
