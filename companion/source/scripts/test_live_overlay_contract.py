@@ -96,6 +96,7 @@ def state(
         rows=(view,),
         party=(),
         status="ready",
+        listing_generation=7,
         live_hover=hover(generation, spec_id, activity_id),
     )
 
@@ -104,6 +105,7 @@ def fake_overlay():
     overlay = LiveTooltipOverlay.__new__(LiveTooltipOverlay)
     overlay.enabled = True
     overlay.current_generation = 0
+    overlay.current_listing_generation = 0
     overlay.visible = False
     shown = []
     hidden = []
@@ -168,6 +170,20 @@ def test_stale_generation_is_ignored() -> None:
     assert not hidden
 
 
+def test_new_listing_resets_hover_generation() -> None:
+    overlay, shown, _ = fake_overlay()
+    overlay.current_listing_generation = 7
+    overlay.current_generation = 500
+
+    fresh = state(generation=1)
+    fresh = EngineState(**{**fresh.__dict__, "listing_generation": 8})
+    overlay.update_from_state(fresh)
+
+    assert shown
+    assert shown[-1][1] == "DPS 97%"
+    assert overlay.current_listing_generation == 8
+
+
 def test_geometry_mapping() -> None:
     rect = _normalized_rect_to_screen(
         0,
@@ -188,5 +204,6 @@ if __name__ == "__main__":
     test_loading_state_is_visible()
     test_identity_and_activity_fail_closed()
     test_stale_generation_is_ignored()
+    test_new_listing_resets_hover_generation()
     test_geometry_mapping()
     print("KeystoneLens live overlay contract passed.")
