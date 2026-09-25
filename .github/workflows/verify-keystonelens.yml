@@ -14,6 +14,10 @@ on:
       - ".github/workflows/verify-keystonelens.yml"
   workflow_dispatch:
 
+concurrency:
+  group: keystonelens-verify-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
