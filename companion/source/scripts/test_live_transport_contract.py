@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import struct
 import sys
+import threading
+import time
 import types
 import zlib
 from pathlib import Path
@@ -24,6 +26,9 @@ from keystonelens_companion.models import (  # noqa: E402
     LiveHover,
     Listing,
     Snapshot,
+    VersionInfo,
+    WCLBracket,
+    WCLResult,
 )
 
 
@@ -157,9 +162,82 @@ def test_engine_keeps_newest_matching_hover() -> None:
         engine.stop(timeout=1.0)
 
 
+
+class FakeWCL:
+    def __init__(self):
+        self.called = threading.Event()
+        self.jobs = []
+
+    def fetch_batch_current_dungeon(self, jobs):
+        self.jobs.extend(jobs)
+        self.called.set()
+        out = []
+        for name, _realm_slug, realm, _region, spec_id, dungeon, target in jobs:
+            bracket = WCLBracket(
+                key_level=target,
+                best_percentile=97.0,
+                median_percentile=95.0,
+                run_count=3,
+                average_percentile=96.0,
+            )
+            out.append(WCLResult(
+                name=name,
+                realm=realm,
+                dungeon_name=dungeon,
+                spec_id=spec_id,
+                bracket=None,
+                fetched_at=time.time(),
+                target_key=target,
+                metric_brackets={"dps": bracket},
+            ))
+        return out
+
+
+def test_new_applicant_becomes_live_without_reload() -> None:
+    states = []
+    ready = threading.Event()
+
+    def on_state(state):
+        states.append(state)
+        if (
+            state.live_hover is not None
+            and state.rows
+            and state.rows[0].wcl_status == "ready"
+        ):
+            ready.set()
+
+    client = FakeWCL()
+    engine = ApplicantEngine(client, on_state)
+    try:
+        snap = Snapshot(
+            listing=listing(),
+            version=VersionInfo(
+                addon_version="0.13.8",
+                game_version="12.0.0",
+                region_id=3,
+                player_name="Host-Draenor",
+            ),
+            applicants=(applicant(),),
+            listing_generation=7,
+            live_hover=hover(11),
+        )
+        assert engine.handle_snapshot(snap)
+        assert client.called.wait(2.0), "brand-new applicant never queued a WCL lookup"
+        assert ready.wait(2.0), "WCL result never published back into the active live hover"
+        final = states[-1]
+        assert final.live_hover is not None
+        assert final.live_hover.generation == 11
+        assert final.rows[0].wcl_status == "ready"
+        assert final.rows[0].wcl is not None
+        assert final.rows[0].wcl.metric_brackets["dps"].average_percentile == 96.0
+    finally:
+        engine.stop(timeout=1.0)
+
+
 if __name__ == "__main__":
     test_v14_hover_round_trip()
     test_v13_stays_backward_compatible()
     test_unknown_version_fails_closed()
     test_engine_keeps_newest_matching_hover()
+    test_new_applicant_becomes_live_without_reload()
     print("KeystoneLens APS1 live-hover transport contract passed.")
