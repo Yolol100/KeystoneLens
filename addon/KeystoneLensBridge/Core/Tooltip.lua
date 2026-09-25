@@ -4,6 +4,11 @@
 --
 -- The cache is intentionally fail-closed: character, active LFG activity, specialization,
 -- metric, cache version and freshness all have to match before anything is rendered.
+-- New applicants do not need /reload: the addon reserves this row, sends its exact
+-- screen coordinates through APS1, and the Companion paints the live WCL value there.
+
+local _, KL = ...
+KL = type(KL) == "table" and KL or {}
 
 local hooked = setmetatable({}, { __mode = "k" })
 local tooltipKey = nil
@@ -283,7 +288,7 @@ local function ResolveApplicantContext(button)
     return nil
 end
 
-local function GetApplicantEntry(button)
+local function GetApplicantIdentity(button)
     local applicantID, memberIdx = ResolveApplicantContext(button)
     if not applicantID or not memberIdx
        or IsSecretValue(applicantID)
@@ -300,8 +305,146 @@ local function GetApplicantEntry(button)
     if not NormalizeFullName(fullName) or IsSecretValue(specID) then return nil end
 
     specID = tonumber(specID)
-    if not specID or specID <= 0 then return nil end
-    return GetFreshEntry(fullName, specID)
+    applicantID = tonumber(applicantID)
+    memberIdx = tonumber(memberIdx)
+    if not specID or specID <= 0
+       or not applicantID or applicantID <= 0
+       or not memberIdx or memberIdx <= 0 then
+        return nil
+    end
+
+    return {
+        applicantID = applicantID,
+        memberIdx = memberIdx,
+        fullName = fullName,
+        specID = specID,
+    }
+end
+
+local function GetApplicantEntry(button)
+    local identity = GetApplicantIdentity(button)
+    if not identity then return nil end
+    local entry, key, specID = GetFreshEntry(identity.fullName, identity.specID)
+    return entry, key, specID, identity
+end
+
+local function ClampNorm16(value)
+    value = tonumber(value) or 0
+    if value < 0 then value = 0 end
+    if value > 1 then value = 1 end
+    return math.floor(value * 65535 + 0.5)
+end
+
+local function NormalizedFrameRect(frame)
+    if not frame or not UIParent
+       or type(frame.GetLeft) ~= "function"
+       or type(frame.GetBottom) ~= "function"
+       or type(frame.GetWidth) ~= "function"
+       or type(frame.GetHeight) ~= "function"
+       or type(UIParent.GetWidth) ~= "function"
+       or type(UIParent.GetHeight) ~= "function" then
+        return nil
+    end
+
+    local parentW, parentH = UIParent:GetWidth(), UIParent:GetHeight()
+    local left, bottom = frame:GetLeft(), frame:GetBottom()
+    local width, height = frame:GetWidth(), frame:GetHeight()
+    if not parentW or not parentH or parentW <= 0 or parentH <= 0
+       or not left or not bottom or not width or not height
+       or width <= 0 or height <= 0 then
+        return nil
+    end
+
+    return {
+        x = ClampNorm16(left / parentW),
+        y = ClampNorm16(bottom / parentH),
+        w = ClampNorm16(width / parentW),
+        h = ClampNorm16(height / parentH),
+    }
+end
+
+local function RequestLiveHoverValue(tooltip, owner, identity, lineIndex)
+    if type(KL.RequestLiveHover) ~= "function"
+       or not tooltip or not owner or not identity or not lineIndex then
+        return
+    end
+
+    local activityID = CurrentListingActivityID()
+    if not activityID then return end
+
+    local leftLine = _G["GameTooltipTextLeft" .. tostring(lineIndex)]
+    if not leftLine then return end
+
+    local lineRect = NormalizedFrameRect(leftLine)
+    local ownerRect = NormalizedFrameRect(owner)
+    if not lineRect or not ownerRect then return end
+
+    -- Reserve the right-most third of this exact tooltip row for the Companion.
+    -- The transparent/no-activate overlay paints only inside this rectangle.
+    local tooltipRect = NormalizedFrameRect(tooltip)
+    if not tooltipRect then return end
+    local valueWidth = math.max(math.floor(tooltipRect.w * 0.34), 1)
+    local valueX = math.max(0, math.min(65535, tooltipRect.x + tooltipRect.w - valueWidth))
+
+    KL.RequestLiveHover({
+        applicantID = identity.applicantID,
+        memberIdx = identity.memberIdx,
+        name = identity.fullName,
+        specID = identity.specID,
+        activityID = activityID,
+        valueX = valueX,
+        valueY = lineRect.y,
+        valueW = valueWidth,
+        valueH = math.max(lineRect.h, 1),
+        ownerX = ownerRect.x,
+        ownerY = ownerRect.y,
+        ownerW = ownerRect.w,
+        ownerH = ownerRect.h,
+    })
+end
+
+local function AppendApplicantLine(tooltip, owner)
+    if not tooltip or tooltip ~= GameTooltip or not owner then return false end
+
+    local identity = GetApplicantIdentity(owner)
+    if not identity then return false end
+
+    local entry, key, specID = GetFreshEntry(identity.fullName, identity.specID)
+    local appended = false
+    if entry then
+        appended = AppendEntryLine(tooltip, entry, key, specID)
+    else
+        local uniqueKey = "live:" .. identity.fullName .. ":" .. tostring(identity.specID)
+        if tooltipKey ~= uniqueKey then
+            tooltipKey = uniqueKey
+            tooltip:AddDoubleLine(
+                KL_ICON .. " Warcraft Logs M+",
+                "",
+                0.72, 0.72, 0.76,
+                0.55, 0.55, 0.55
+            )
+            appended = true
+        end
+    end
+
+    if not appended then return false end
+
+    tooltip:Show()
+    local lineIndex = type(tooltip.NumLines) == "function" and tooltip:NumLines() or nil
+    if lineIndex then
+        local function requestIfStillHovered()
+            if owner and owner.IsMouseOver and owner:IsMouseOver()
+               and tooltip and tooltip:IsShown() then
+                RequestLiveHoverValue(tooltip, owner, identity, lineIndex)
+            end
+        end
+        if C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(0, requestIfStillHovered)
+        else
+            requestIfStillHovered()
+        end
+    end
+    return true
 end
 
 local function OnMemberEnter(self)
@@ -310,15 +453,11 @@ local function OnMemberEnter(self)
            or not GameTooltip or not GameTooltip:IsShown() then
             return
         end
-
-        local entry, key, specID = GetApplicantEntry(self)
-        if entry and AppendEntryLine(GameTooltip, entry, key, specID) then
-            GameTooltip:Show()
-        end
+        AppendApplicantLine(GameTooltip, self)
     end
 
     -- Fallback ordering path: Raider.IO builds its LFG tooltip synchronously.
-    -- The dedicated AddDoubleLine hook below normally inserts KeystoneLens
+    -- The dedicated AddDoubleLine hook below normally reserves KeystoneLens
     -- immediately after Raider.IO's M+ score. This next-frame append keeps the
     -- feature working when Raider.IO changes its score label or is not installed.
     if C_Timer and type(C_Timer.After) == "function" then
@@ -351,13 +490,10 @@ local function AppendCurrentTooltipContext(tooltip)
 
     local owner = GetTooltipOwner(tooltip)
     if owner then
-        local entry, key, specID = GetApplicantEntry(owner)
-        if entry then
-            raiderIOInjecting = true
-            local appended = AppendEntryLine(tooltip, entry, key, specID)
-            raiderIOInjecting = false
-            return appended
-        end
+        raiderIOInjecting = true
+        local appended = AppendApplicantLine(tooltip, owner)
+        raiderIOInjecting = false
+        if appended then return true end
     end
 
     local unit = GetDisplayedUnit(tooltip)
