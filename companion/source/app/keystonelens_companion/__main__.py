@@ -256,23 +256,32 @@ class App:
     def _check_wcl_auth(self, client: WCLClient) -> None:
         try:
             client.test()
-            if self._shutdown_started or client is not self.wcl:
-                return
-            self.q.put(("status", f"Warcraft Logs verbonden • preload {self.tooltip_sync.record_count} records"))
-            summary = PreloadRefresher(client, self.tooltip_sync).run_once()
-            if not self._shutdown_started and client is self.wcl:
-                added = int(summary.get("added", 0))
-                records = int(summary.get("records", self.tooltip_sync.record_count))
-                if added:
-                    self.q.put((
-                        "status",
-                        f"Preload-database: {records} records • {added} nieuw • actief bij volgende WoW-start",
-                    ))
-                else:
-                    self.q.put(("status", f"Preload-database gereed • {records} records"))
         except Exception as exc:
             if not self._shutdown_started and client is self.wcl:
                 self.q.put(("auth_failed", str(exc)))
+            return
+
+        if self._shutdown_started or client is not self.wcl:
+            return
+        self.q.put(("status", f"Warcraft Logs verbonden • preload {self.tooltip_sync.record_count} records"))
+
+        try:
+            summary = PreloadRefresher(client, self.tooltip_sync).run_once()
+        except Exception as exc:
+            if not self._shutdown_started and client is self.wcl:
+                self.q.put(("status", f"Warcraft Logs verbonden • preload-refresh overgeslagen: {exc}"))
+            return
+
+        if not self._shutdown_started and client is self.wcl:
+            added = int(summary.get("added", 0))
+            records = int(summary.get("records", self.tooltip_sync.record_count))
+            if added:
+                self.q.put((
+                    "status",
+                    f"Preload-database: {records} records • {added} nieuw • actief bij volgende WoW-start",
+                ))
+            else:
+                self.q.put(("status", f"Preload-database gereed • {records} records"))
 
     def _poll(self) -> None:
         if self._shutdown_started:
