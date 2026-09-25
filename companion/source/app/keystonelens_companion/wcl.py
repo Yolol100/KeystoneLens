@@ -186,23 +186,29 @@ class WCLCache:
 
             if row is not None:
                 age = now - fetched
-                row_ttl = float(self._row_ttl(row))
-                if max_age_seconds is not None:
-                    try:
-                        requested_ttl = float(max_age_seconds)
-                    except (TypeError, ValueError, OverflowError):
-                        requested_ttl = row_ttl
-                    if math.isfinite(requested_ttl) and requested_ttl > 0:
-                        row_ttl = min(row_ttl, requested_ttl)
+                full_ttl = float(self._row_ttl(row))
                 if (
                     not math.isfinite(fetched)
                     or fetched <= 0
                     or age < -MAX_CACHE_FUTURE_SKEW_SECONDS
-                    or age > row_ttl
+                    or age > full_ttl
                 ):
                     self._data.pop(key, None)
                     should_save = True
                     row = None
+                elif max_age_seconds is not None:
+                    try:
+                        requested_ttl = float(max_age_seconds)
+                    except (TypeError, ValueError, OverflowError):
+                        requested_ttl = full_ttl
+                    if (
+                        math.isfinite(requested_ttl)
+                        and requested_ttl > 0
+                        and age > min(full_ttl, requested_ttl)
+                    ):
+                        # Too old for the caller's live-freshness requirement,
+                        # but still valid for the longer shared/preload cache.
+                        return None
 
             if row is not None:
                 raw_bracket = row.get("bracket")
