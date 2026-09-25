@@ -7,6 +7,7 @@ from typing import Callable
 
 from .constants import ACTIVITY_TO_DUNGEON, REGION_NAMES
 from .models import ApplicantView, EngineState, Listing, Snapshot, WCLResult
+from .registries import canonical_dungeon_name
 from .util import realm_slug, split_name_realm
 from .wcl import WCLClient
 
@@ -22,6 +23,7 @@ class ApplicantEngine:
         self._party = ()
         self._listing: Listing | None = None
         self._listing_generation = 0
+        self._listing_closed = False
         self._revision = 0
         self._region = "EU"
         self._default_realm = ""
@@ -40,14 +42,28 @@ class ApplicantEngine:
         if self._worker.is_alive() and self._worker is not threading.current_thread():
             self._worker.join(timeout=3.0)
 
+    def _clear_wcl_queue_locked(self) -> None:
+        """Drop queued WCL lookups when their listing/client context is obsolete."""
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+            else:
+                self._queue.task_done()
+        self._pending.clear()
+
     def set_wcl(self, client: WCLClient | None) -> None:
         with self._lock:
+            self._clear_wcl_queue_locked()
             self.wcl = client
+            self._revision += 1
+            revision = self._revision
             for view in self._views.values():
                 view.wcl = None
                 view.wcl_status = "queued" if client else "disabled"
                 view.updated_at = time.time()
-                view.revision = self._revision
+                view.revision = revision
             if client:
                 self._queue_missing_locked()
             self._emit_locked()
@@ -55,27 +71,46 @@ class ApplicantEngine:
     def handle_snapshot(self, snapshot: Snapshot) -> bool:
         with self._lock:
             incoming_generation = max(0, min(255, int(snapshot.listing_generation or 0)))
-            if self._listing_generation and incoming_generation and incoming_generation != self._listing_generation:
-                if not _generation_is_newer(incoming_generation, self._listing_generation):
+
+            if self._listing_generation and incoming_generation:
+                if incoming_generation != self._listing_generation:
+                    if not _generation_is_newer(incoming_generation, self._listing_generation):
+                        return False
+                    self._clear_wcl_queue_locked()
+                    self._views.clear()
+                    self._listing = None
+                    self._listing_generation = incoming_generation
+                    self._listing_closed = False
+                elif self._listing_closed and snapshot.listing is not None and not snapshot.terminal_clear:
+                    # A delayed frame from a listing that already closed must not
+                    # resurrect its applicants after the terminal-clear snapshot.
                     return False
-                self._listing_generation = incoming_generation
-                self._views.clear()
             elif incoming_generation:
                 self._listing_generation = incoming_generation
+
+            old_region = self._region
+            if snapshot.version:
+                self._region = REGION_NAMES.get(int(snapshot.version.region_id or 0), self._region)
+                _player_name, player_realm = split_name_realm(
+                    snapshot.version.player_name, self._default_realm
+                )
+                if player_realm:
+                    self._default_realm = player_realm
 
             self._revision += 1
             revision = self._revision
 
-            if snapshot.version:
-                self._region = REGION_NAMES.get(int(snapshot.version.region_id or 0), self._region)
-                _player_name, player_realm = split_name_realm(snapshot.version.player_name, self._default_realm)
-                if player_realm:
-                    self._default_realm = player_realm
-
             if snapshot.terminal_clear:
+                self._clear_wcl_queue_locked()
                 self._listing = None
                 self._views.clear()
                 self._party = ()
+                if incoming_generation:
+                    self._listing_generation = incoming_generation
+                    self._listing_closed = True
+                else:
+                    self._listing_generation = 0
+                    self._listing_closed = False
                 self._status = "Open a Mythic+ Group Finder listing"
                 self._lfg_unavailable = False
                 self._applicants_unavailable = False
@@ -83,59 +118,109 @@ class ApplicantEngine:
                 self._emit_locked()
                 return True
 
-            self._lfg_unavailable = bool(snapshot.lfg_unavailable)
-            self._applicants_unavailable = bool(snapshot.applicants_unavailable)
-            self._roster_unavailable = bool(snapshot.roster_unavailable)
+            # A blocked/secret LFG read is non-authoritative. Keep the most recent
+            # valid listing and applicants instead of turning one bad frame into
+            # an empty tooltip cache.
+            if snapshot.lfg_unavailable:
+                self._lfg_unavailable = True
+                self._applicants_unavailable = bool(snapshot.applicants_unavailable)
+                self._roster_unavailable = bool(snapshot.roster_unavailable)
+                self._status = "Group Finder data temporarily unavailable • keeping last valid list"
+                self._emit_locked()
+                return True
 
             incoming_listing = _normalized_listing(snapshot.listing)
-            if not snapshot.lfg_unavailable:
-                listing_changed = _listing_key(incoming_listing) != _listing_key(self._listing)
-                self._listing = incoming_listing
-                if listing_changed:
-                    for view in self._views.values():
-                        view.wcl = None
-                        view.wcl_status = "queued" if self.wcl else "disabled"
-                        view.revision = revision
+            old_listing = self._listing
+            partial_applicants = bool(snapshot.applicants_unavailable)
+            listing_missing_partial = partial_applicants and incoming_listing is None and old_listing is not None
+            effective_listing = old_listing if listing_missing_partial else incoming_listing
+
+            context_changed = (
+                _listing_key(effective_listing) != _listing_key(old_listing)
+                or self._region != old_region
+            )
+            if context_changed:
+                self._clear_wcl_queue_locked()
+
+            self._listing = effective_listing
 
             if not snapshot.roster_unavailable:
                 self._party = snapshot.party
 
-            if not snapshot.applicants_unavailable:
-                new_views: dict[str, ApplicantView] = {}
-                for applicant in snapshot.applicants:
-                    old = self._views.get(applicant.identity)
-                    same_context = bool(
-                        old
-                        and old.applicant.name == applicant.name
-                        and old.applicant.spec_id == applicant.spec_id
-                        and old.region == self._region
-                        and _listing_key(old.snapshot_listing) == _listing_key(self._listing)
-                    )
-                    if same_context:
-                        old.applicant = applicant
-                        old.snapshot_listing = self._listing
-                        old.updated_at = time.time()
-                        new_views[applicant.identity] = old
-                    else:
-                        new_views[applicant.identity] = ApplicantView(
-                            applicant=applicant,
-                            snapshot_listing=self._listing,
-                            region=self._region,
-                            wcl=None,
-                            wcl_status="queued" if self.wcl else "disabled",
-                            updated_at=time.time(),
-                            revision=revision,
-                        )
+            def view_for_context(applicant, old: ApplicantView | None) -> ApplicantView:
+                same_context = bool(
+                    old
+                    and old.applicant.name == applicant.name
+                    and old.applicant.spec_id == applicant.spec_id
+                    and old.region == self._region
+                    and _listing_key(old.snapshot_listing) == _listing_key(effective_listing)
+                )
+                if same_context:
+                    old.applicant = applicant
+                    old.snapshot_listing = effective_listing
+                    old.updated_at = time.time()
+                    return old
+                return ApplicantView(
+                    applicant=applicant,
+                    snapshot_listing=effective_listing,
+                    region=self._region,
+                    wcl=None,
+                    wcl_status="queued" if self.wcl else "disabled",
+                    updated_at=time.time(),
+                    revision=revision,
+                )
+
+            # v13 partial snapshots may still contain valid applicant rows. Merge
+            # those into the last complete view and never delete absent rows until
+            # a later authoritative snapshot proves that they disappeared.
+            new_views: dict[str, ApplicantView] = {}
+            if partial_applicants:
+                for identity, old in self._views.items():
+                    new_views[identity] = view_for_context(old.applicant, old)
+
+            for applicant in snapshot.applicants:
+                old = self._views.get(applicant.identity)
+                new_views[applicant.identity] = view_for_context(applicant, old)
+
+            if not partial_applicants:
+                self._views = new_views
+            else:
                 self._views = new_views
 
-            if self._listing is None:
-                self._status = "Open a Mythic+ Group Finder listing"
+            self._lfg_unavailable = False
+            self._applicants_unavailable = partial_applicants
+            self._roster_unavailable = bool(snapshot.roster_unavailable)
+
+            if snapshot.listing is None:
+                if not partial_applicants:
+                    self._clear_wcl_queue_locked()
+                    self._views.clear()
+                    self._listing = None
+                    if incoming_generation:
+                        self._listing_closed = True
+                self._status = (
+                    "Group Finder data temporarily unavailable • keeping last valid list"
+                    if partial_applicants
+                    else "Open a Mythic+ Group Finder listing"
+                )
+            elif partial_applicants:
+                if incoming_generation:
+                    self._listing_closed = False
+                self._status = f"{len(self._views)} applicant(s) • partial data • {self._region}"
+            elif snapshot.roster_unavailable:
+                if incoming_generation:
+                    self._listing_closed = False
+                self._status = "Party temporarily unreadable • applicants are kept"
             elif not self._views:
+                if incoming_generation:
+                    self._listing_closed = False
                 self._status = "Waiting for applicants"
             else:
+                if incoming_generation:
+                    self._listing_closed = False
                 self._status = f"{len(self._views)} applicant(s) • {self._region}"
 
-            if self.wcl:
+            if self.wcl and self._views:
                 self._queue_missing_locked()
             self._emit_locked()
             return True
@@ -294,7 +379,9 @@ class ApplicantEngine:
 def _normalized_listing(listing: Listing | None) -> Listing | None:
     if listing is None:
         return None
-    dungeon = listing.dungeon_name or ACTIVITY_TO_DUNGEON.get(int(listing.activity_id or 0), "")
+    dungeon = canonical_dungeon_name(listing.dungeon_name)
+    if not dungeon:
+        dungeon = ACTIVITY_TO_DUNGEON.get(int(listing.activity_id or 0), "")
     if dungeon == listing.dungeon_name:
         return listing
     return Listing(
