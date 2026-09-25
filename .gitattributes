@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.ico binary
+*.tga binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.pyd binary
