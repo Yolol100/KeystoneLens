@@ -11,7 +11,6 @@ local unitTooltipRegistered = false
 local raiderIOScoreHookRegistered = false
 local raiderIOInjecting = false
 local KL_ICON = "|TInterface\\AddOns\\KeystoneLensBridge\\Media\\KeystoneLensIcon:16:16:0:0|t"
-local REQUIRED_CACHE_VERSION = 3
 local UNIT_HOOK_DELAY_SECONDS = 1.0
 
 local function IsSecretValue(value)
@@ -74,103 +73,124 @@ local function CurrentListingActivityID()
     return activityID and activityID > 0 and activityID or nil
 end
 
-local function Cache()
-    local cache = _G.KeystoneLensTooltipCacheV3
-    if type(cache) ~= "table"
-       or tonumber(cache.version) ~= REQUIRED_CACHE_VERSION
-       or type(cache.entries) ~= "table" then
+local REQUIRED_DATASET_VERSION = 4
+local REQUIRED_SEASON = "midnight-s2"
+
+local function DungeonKey(value)
+    if IsSecretValue(value) or type(value) ~= "string" or value == "" then
         return nil
     end
-    return cache
+    local key = string.lower(value):gsub("[^%w]", "")
+    return key ~= "" and key or nil
 end
 
-local function FindEntry(fullName)
-    local cache = Cache()
-    local key = NormalizeFullName(fullName)
-    if not cache or not key then return nil end
-
-    local entry = cache.entries[key]
-    if type(entry) == "table" then
-        return entry, key, cache
-    end
-
-    local lowerKey = string.lower(key)
-    entry = cache.entries[lowerKey]
-    if type(entry) == "table" then
-        return entry, lowerKey, cache
-    end
-
-    return nil
-end
-
-local function ValidateEntry(entry, cache, activityID, specID)
-    if type(entry) ~= "table" or type(cache) ~= "table" then return nil end
-
-    activityID = tonumber(activityID)
-    if not activityID or activityID <= 0 or tonumber(entry.activityID) ~= activityID then
+local function CurrentDungeonKey()
+    local activityID = CurrentListingActivityID()
+    if not activityID
+       or not C_LFGList
+       or type(C_LFGList.GetActivityInfoTable) ~= "function" then
         return nil
     end
 
-    if specID ~= nil then
-        specID = IsSecretValue(specID) and nil or tonumber(specID)
-        if not specID or specID <= 0 or tonumber(entry.specID) ~= specID then
+    local ok, info = pcall(C_LFGList.GetActivityInfoTable, activityID)
+    if not ok or IsSecretValue(info) or type(info) ~= "table" then
+        return nil
+    end
+    return DungeonKey(info.fullName or info.name or info.shortName)
+end
+
+local function Dataset()
+    local data = _G.KeystoneLensPreloadV4
+    if type(data) ~= "table"
+       or tonumber(data.version) ~= REQUIRED_DATASET_VERSION
+       or data.season ~= REQUIRED_SEASON
+       or type(data.entries) ~= "table"
+       or type(data.unitEntries) ~= "table" then
+        return nil
+    end
+
+    local region = tonumber(data.region)
+    if region and region > 0 and type(GetCurrentRegion) == "function" then
+        local ok, currentRegion = pcall(GetCurrentRegion)
+        if not ok or tonumber(currentRegion) ~= region then
             return nil
         end
-    else
-        specID = tonumber(entry.specID)
-        if not specID or specID <= 0 then return nil end
     end
 
-    local percentile = tonumber(entry.percentile)
+    local now = type(time) == "function" and time() or 0
+    local generatedAt = tonumber(data.generatedAt) or 0
+    local maxAge = tonumber(data.maxAge) or 0
+    if maxAge <= 0 then return nil end
+    if now > 0 and generatedAt > 0 and now - generatedAt > maxAge then
+        return nil
+    end
+    return data
+end
+
+local function ValidateTuple(tuple, data)
+    if type(tuple) ~= "table" or type(data) ~= "table" then return nil end
+    local code = tuple[1]
+    local percentile = tonumber(tuple[2])
+    local fetchedAt = tonumber(tuple[3]) or tonumber(data.generatedAt) or 0
+    if code ~= "D" and code ~= "H" then return nil end
     if not percentile or percentile < 0 or percentile > 100 then return nil end
 
-    local metric = tostring(entry.metric or ""):upper()
-    if metric ~= "DPS" and metric ~= "HPS" then return nil end
-
+    local maxAge = tonumber(data.maxAge) or 0
     local now = type(time) == "function" and time() or 0
-    local fetched = tonumber(entry.fetchedAt) or tonumber(cache.generatedAt) or 0
-    local maxAge = tonumber(cache.maxAge) or 43200
     if maxAge <= 0 then return nil end
-    if now > 0 and fetched > 0 and now - fetched > maxAge then return nil end
+    if now > 0 and fetchedAt > 0 and now - fetchedAt > maxAge then return nil end
 
-    return entry, specID
+    return {
+        metric = code == "H" and "HPS" or "DPS",
+        percentile = percentile,
+        fetchedAt = fetchedAt,
+    }
+end
+
+local function ApplicantKey(fullName, specID, dungeonKey)
+    local normalized = NormalizeFullName(fullName)
+    specID = IsSecretValue(specID) and nil or tonumber(specID)
+    if not normalized or not specID or specID <= 0 or not dungeonKey then return nil end
+    return string.lower(normalized) .. "|" .. tostring(specID) .. "|" .. dungeonKey
+end
+
+local function UnitKey(fullName, dungeonKey)
+    local normalized = NormalizeFullName(fullName)
+    if not normalized or not dungeonKey then return nil end
+    return string.lower(normalized) .. "|" .. dungeonKey
 end
 
 local function GetFreshEntry(fullName, specID)
-    local entry, key, cache = FindEntry(fullName)
-    if not entry then return nil end
+    local data = Dataset()
+    local dungeonKey = CurrentDungeonKey()
+    local key = ApplicantKey(fullName, specID, dungeonKey)
+    if not data or not key then return nil end
 
-    local activityID = CurrentListingActivityID()
-    if not activityID then return nil end
-
-    entry, specID = ValidateEntry(entry, cache, activityID, specID)
+    local entry = ValidateTuple(data.entries[key], data)
     if not entry then return nil end
-    return entry, key, specID
+    return entry, key, tonumber(specID)
 end
 
 local function GetFreshEntryForUnit(name, realm)
-    local normalizedRealm = NormalizeRealm(realm)
-    local localRealm = CurrentRealm()
-    local fullName = BuildFullName(name, normalizedRealm)
-    local entry, key, cache = FindEntry(fullName)
+    local data = Dataset()
+    local dungeonKey = CurrentDungeonKey()
+    if not data or not dungeonKey then return nil end
 
-    -- LFG may store a same-realm player as a short name. Only use that fallback
-    -- when the displayed unit is definitely on the local realm; never let a
-    -- cross-realm player collide with a same-name local applicant.
+    local normalizedRealm = NormalizeRealm(realm)
+    local fullName = BuildFullName(name, normalizedRealm)
+    local key = UnitKey(fullName, dungeonKey)
+    local entry = key and ValidateTuple(data.unitEntries[key], data) or nil
+
+    local localRealm = CurrentRealm()
     if not entry
        and (not normalizedRealm
             or (localRealm and string.lower(normalizedRealm) == string.lower(localRealm))) then
-        entry, key, cache = FindEntry(name)
+        key = UnitKey(BuildFullName(name, localRealm), dungeonKey)
+        entry = key and ValidateTuple(data.unitEntries[key], data) or nil
     end
-    if not entry then return nil end
 
-    local activityID = CurrentListingActivityID()
-    if not activityID then return nil end
-
-    local specID
-    entry, specID = ValidateEntry(entry, cache, activityID, nil)
     if not entry then return nil end
-    return entry, key, specID
+    return entry, key, nil
 end
 
 local function PercentileColor(percentile)
