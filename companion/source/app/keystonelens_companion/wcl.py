@@ -677,7 +677,7 @@ class WCLClient:
         dungeon = canonical_dungeon_name(dungeon)
         encounter = self._resolve_encounter_id(dungeon)
         class_name = SPEC_CLASS_NAMES.get(int(spec_id or 0), "")
-        spec_name = SPEC_NAMES.get(int(spec_id or 0), "")
+        spec_name = SPEC_NAMES.get(int(spec_id or 0), "").replace(" ", "")
         metric = "hps" if int(spec_id or 0) in HEALER_SPECS else "dps"
         if not encounter or not class_name or not spec_name:
             return []
