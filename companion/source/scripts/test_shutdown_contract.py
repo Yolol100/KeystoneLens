@@ -7,11 +7,20 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+import types
 
 ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = ROOT / "companion" / "source" / "app"
 sys.path.insert(0, str(APP_ROOT))
 os.environ["KEYSTONELENS_DISABLE_FORCE_EXIT_WATCHDOG"] = "1"
+
+# The source CI job intentionally does not install Windows runtime packages.
+# Stub only the HTTP package needed while importing the app graph; this test
+# exercises shutdown lifecycle, not Warcraft Logs transport.
+requests_stub = types.ModuleType("requests")
+requests_stub.RequestException = RuntimeError
+requests_stub.Session = object
+sys.modules.setdefault("requests", requests_stub)
 
 import keystonelens_companion.__main__ as app_module  # noqa: E402
 
