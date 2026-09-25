@@ -52,9 +52,14 @@ def test_roundtrip_and_indexes():
         assert "_G.KeystoneLensPreloadV4" in lua
         assert f"version = {DATASET_VERSION}" in lua
         assert 'season = "midnight-s2"' in lua
-        assert '["alice-draenor|62|altaroffangs"]' in lua
+        assert '["Alice-Draenor|62|altaroffangs"]' in lua
         assert 'unitEntries = {' in lua
         assert '{"D",97.40,' in lua
+        unicode_lua = render_lua_dataset("EU", [
+            row(name="Éowyn-Draenor", fetched=time.time()),
+        ], now=time.time())
+        assert '["Éowyn-Draenor|62|altaroffangs"]' in unicode_lua
+        assert '["éowyn-draenor|62|altaroffangs"]' not in unicode_lua
 
 
 def test_fail_closed_records_and_cross_realm():
@@ -86,9 +91,9 @@ def test_multi_spec_unit_index_fails_closed():
         row(spec=62, pct=90, fetched=now),
         row(spec=63, pct=91, fetched=now),
     ], now=now)
-    assert '["alice-draenor|62|altaroffangs"]' in lua
-    assert '["alice-draenor|63|altaroffangs"]' in lua
-    assert '["alice-draenor|altaroffangs"]' not in lua
+    assert '["Alice-Draenor|62|altaroffangs"]' in lua
+    assert '["Alice-Draenor|63|altaroffangs"]' in lua
+    assert '["Alice-Draenor|altaroffangs"]' not in lua
 
 
 def test_thirty_plus_records_and_region_reset():
