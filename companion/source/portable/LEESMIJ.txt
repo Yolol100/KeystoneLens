@@ -1,9 +1,9 @@
 KeystoneLens Portable 0.15.0
 
 Doel
-KeystoneLens toont in de Mythic+ Group Finder-tooltip alleen Warcraft Logs-data:
-- DPS/tank: DPS percentile
-- healer: Healing/HPS percentile
+KeystoneLens toont Warcraft Logs Mythic+-data op twee plekken:
+- in-game tooltip: DPS/tank percentile of healer percentile;
+- Windows Companion: live applicantlijst met Speler, Warcraft Logs en Rank.
 
 Gebruik
 1. Pak de HELE ZIP uit, bijvoorbeeld naar C:\KeystoneLens.
@@ -11,24 +11,33 @@ Gebruik
 3. Vul een Warcraft Logs Client ID en Client Secret in.
 4. Kies je WoW-regio (EU/US/KR/TW/CN).
 5. Kies je World of Warcraft _retail_\Screenshots-map.
-6. Laat de Companion de lokale preload-database onderhouden.
+6. Laat de Companion draaien.
 7. Open je Mythic+ Group Finder listing.
-8. Staat een applicant al in de geladen database, dan verschijnt de WCL-regel direct onder Raider.IO. Geen per-applicant /reload.
+8. Nieuwe applicants verschijnen automatisch in de Windows-lijst zodra de screenshot/QR-discovery ze ziet.
+9. De Companion haalt WCL op en sorteert geldige resultaten van hoogste naar laagste percentile.
+10. Staat een applicant al in de in-game preload, dan verschijnt dezelfde WCL-percentile ook direct onder Raider.IO. Geen per-applicant /reload.
 
 Cache miss
-Staat een applicant nog niet in de database die WoW bij het starten heeft geladen, dan toont KeystoneLens voor die speler geen WCL-regel. De Companion kan die speler leren en opslaan voor een volgende WoW-start. Een bestand dat tijdens een draaiende WoW-sessie wordt bijgewerkt, wordt niet als live IPC behandeld.
+Staat een applicant nog niet in de database die WoW bij het starten heeft geladen, dan toont de in-game tooltip voor die speler geen WCL-regel. De Windows Companion kan de speler wel direct via WCL ophalen en in de live lijst tonen. Daarna wordt de data opgeslagen voor een volgende WoW-start. Een bestand dat tijdens een draaiende WoW-sessie wordt bijgewerkt, wordt niet als live IPC behandeld.
 
 Niet aanwezig
 - Geen Raider.IO-client in de Companion.
 - Geen eigen KeystoneLens score.
 - Geen recruitment-overlay.
-- Geen scorefilters, rankingvensters of extra WCL-metrics.
+- Geen scorefilters, recruitmentdetails of extra WCL-metrics.
 - Geen DLL/process injection of andere ToS-riskante runtimekoppeling.
 
 Preload
 De Companion bewaart een begrensde, actuele Season 2 database en breidt die incrementeel uit via:
 - applicants die via de bestaande QR/screenshottransport worden ontdekt;
 - kleine WCL ranking-discovery slices, waarna de normale character-WCL-query de percentile valideert.
+
+Windows-lijst
+- Speler: naam + realm.
+- Warcraft Logs: DPS xx% of Healing xx%.
+- Rank: S/A/B/C/D/E/F, alleen als leesbare band van diezelfde WCL-percentile.
+- Geldige resultaten staan automatisch van hoogste naar laagste percentile.
+- Live applicant-cache ouder dan 1 uur wordt opnieuw bij WCL gevalideerd, binnen quota/backoff.
 
 Credentials blijven alleen in de Companion/config en worden nooit naar WoW-addonbestanden geschreven.
 
