@@ -59,6 +59,12 @@ jobs:
       - name: Verify Raider.IO tooltip integration
         run: lua5.1 companion/source/scripts/test_tooltip_contract.lua
 
+      - name: Verify live hover transport
+        run: python companion/source/scripts/test_live_transport_contract.py
+
+      - name: Verify live overlay logic
+        run: python companion/source/scripts/test_live_overlay_contract.py
+
       - name: Verify minimal architecture
         run: python companion/source/scripts/verify_minimal_architecture.py
 
