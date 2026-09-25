@@ -158,7 +158,17 @@ class WCLCache:
         self._data = keep
         return len(self._data) != before
 
-    def get(self, region: str, realm: str, name: str, spec_id: int, dungeon: str, target_key: int) -> WCLResult | None:
+    def get(
+        self,
+        region: str,
+        realm: str,
+        name: str,
+        spec_id: int,
+        dungeon: str,
+        target_key: int,
+        *,
+        max_age_seconds: float | None = None,
+    ) -> WCLResult | None:
         key = self._key(region, realm, name, spec_id, dungeon, target_key)
         now = time.time()
         should_save = False
@@ -176,11 +186,19 @@ class WCLCache:
 
             if row is not None:
                 age = now - fetched
+                row_ttl = float(self._row_ttl(row))
+                if max_age_seconds is not None:
+                    try:
+                        requested_ttl = float(max_age_seconds)
+                    except (TypeError, ValueError, OverflowError):
+                        requested_ttl = row_ttl
+                    if math.isfinite(requested_ttl) and requested_ttl > 0:
+                        row_ttl = min(row_ttl, requested_ttl)
                 if (
                     not math.isfinite(fetched)
                     or fetched <= 0
                     or age < -MAX_CACHE_FUTURE_SKEW_SECONDS
-                    or age > self._row_ttl(row)
+                    or age > row_ttl
                 ):
                     self._data.pop(key, None)
                     should_save = True
@@ -309,6 +327,7 @@ class WCLClient:
         self._closed = threading.Event()
         self._blocked_until = 0.0
         self.last_quota: tuple[float, float, float] | None = None
+        self._last_quota_observed_at = 0.0
         self._realm_lock = threading.Lock()
         self._realm_catalog_path = self.cache.path.with_name("wcl-realms.json")
         self._realm_catalog: dict[str, object] | None = self._load_realm_catalog()
@@ -428,15 +447,18 @@ class WCLClient:
             return None
         return spent, limit, reset
 
+    def _record_quota(self, quota: tuple[float, float, float]) -> tuple[float, float, float]:
+        spent, limit, reset = quota
+        observed_at = time.monotonic()
+        self.last_quota = quota
+        self._last_quota_observed_at = observed_at
+        if spent / limit >= .96:
+            self._blocked_until = max(self._blocked_until, observed_at + max(5.0, reset))
+        return quota
+
     def _apply_quota(self, root: dict[str, object]) -> tuple[float, float, float] | None:
         quota = self._catalog_quota(root)
-        if quota is None:
-            return None
-        spent, limit, reset = quota
-        self.last_quota = quota
-        if spent / limit >= .96:
-            self._blocked_until = max(self._blocked_until, time.monotonic() + max(5.0, reset))
-        return quota
+        return self._record_quota(quota) if quota is not None else None
 
     def _refresh_realm_catalog(self) -> dict[str, object] | None:
         query = (
@@ -470,10 +492,7 @@ class WCLClient:
             return None
         quota = self._catalog_quota(root)
         if quota is not None:
-            self.last_quota = quota
-            spent, limit, reset = quota
-            if spent / limit >= .96:
-                self._blocked_until = max(self._blocked_until, time.monotonic() + max(5.0, reset))
+            self._record_quota(quota)
         world = root.get("worldData")
         region_rows = world.get("regions") if isinstance(world, dict) else None
         if not isinstance(region_rows, list):
@@ -568,7 +587,12 @@ class WCLClient:
                 return slug
         return fallback_slug
 
-    def fetch_batch_current_dungeon(self, jobs: list[tuple[str, str, str, str, int, str, int]]) -> list[WCLResult]:
+    def fetch_batch_current_dungeon(
+        self,
+        jobs: list[tuple[str, str, str, str, int, str, int]],
+        *,
+        max_cache_age_seconds: float | None = None,
+    ) -> list[WCLResult]:
         """Fetch up to 10 applicants, batching jobs that share region and dungeon."""
         if not jobs:
             return []
@@ -583,7 +607,15 @@ class WCLClient:
         misses: list[tuple[int, tuple[str, str, str, str, int, str, int]]] = []
         for index, job in enumerate(jobs):
             name, _slug, realm, region, spec_id, dungeon, target = job
-            cached = self.cache.get(region, realm, name, spec_id, dungeon, target)
+            cached = self.cache.get(
+                region,
+                realm,
+                name,
+                spec_id,
+                dungeon,
+                target,
+                max_age_seconds=max_cache_age_seconds,
+            )
             if cached is not None:
                 results[index] = cached
             else:
@@ -649,7 +681,17 @@ class WCLClient:
         quota = self.last_quota
         if not quota:
             return 0.0
-        spent, limit, _reset = quota
+        spent, limit, reset = quota
+        now = time.monotonic()
+        observed_at = float(self._last_quota_observed_at or 0.0)
+        if (
+            not math.isfinite(reset)
+            or reset <= 0
+            or (observed_at > 0 and now - observed_at >= reset)
+        ):
+            self.last_quota = None
+            self._last_quota_observed_at = 0.0
+            return 0.0
         if not math.isfinite(spent) or not math.isfinite(limit) or limit <= 0:
             return 1.0
         return max(0.0, spent / limit)
