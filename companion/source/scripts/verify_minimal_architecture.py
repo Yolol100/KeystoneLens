@@ -123,7 +123,8 @@ for token, label in (
     ("TooltipUtil.GetDisplayedUnit", "taint-safe displayed-unit lookup"),
     ("ScrollBoxUtil.OnViewFramesChanged", "current LFG recycled-frame hook"),
     ("RequestLiveHoverValue", "live LFG hover transport"),
-    ('tooltip:AddDoubleLine(\n                KL_ICON .. " Warcraft Logs M+"', "no-reload placeholder row"),
+    ('local uniqueKey = "live:"', "live-only Group Finder row identity"),
+    ("Group Finder is live-only", "no-reload placeholder row"),
 ):
     require(token in tooltip, f"tooltip contract changed: {label}")
 require("RaiderIO" in bridge_toc, "RaiderIO must remain an OptionalDep for deterministic tooltip order")
