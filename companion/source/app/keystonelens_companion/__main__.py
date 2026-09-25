@@ -15,6 +15,7 @@ from . import __version__
 from .addon_sync import TooltipCacheSync
 from .config import Config, load_config, log_path, save_config
 from .engine import ApplicantEngine
+from .live_overlay import LiveTooltipOverlay
 from .models import EngineState
 from .watcher import ScreenshotWatcher
 from .wcl import WCLCache, WCLClient
@@ -94,6 +95,7 @@ class App:
         self.watcher: ScreenshotWatcher | None = None
         self.tooltip_sync = TooltipCacheSync(self.cfg.screenshots_path)
         self.engine = ApplicantEngine(None, lambda state: self.q.put(("state", state)))
+        self.live_overlay = LiveTooltipOverlay(self.root)
 
         self.root.after(0, self._show_main_window)
         self.root.after(100, self._poll)
@@ -222,6 +224,7 @@ class App:
     def start_runtime(self) -> None:
         if self._shutdown_started:
             return
+        self.live_overlay.hide()
         if self.watcher:
             self.watcher.stop()
             self.watcher = None
@@ -267,13 +270,14 @@ class App:
                 kind, data = self.q.get_nowait()
                 if kind == "state":
                     state: EngineState = data
+                    self.live_overlay.update_from_state(state)
                     if not self.tooltip_sync.write(list(state.rows)):
                         self.status_var.set(f"Tooltip-cache fout: {self.tooltip_sync.last_error}")
                         continue
                     ready = sum(1 for row in state.rows if row.wcl_status == "ready")
                     loading = sum(1 for row in state.rows if row.wcl_status in {"queued", "loading"})
                     if ready:
-                        self.status_var.set(f"{ready} speler(s) klaar • /reload in WoW om nieuwe tooltipdata te laden")
+                        self.status_var.set(f"{ready} speler(s) klaar • live tooltip actief • geen /reload nodig")
                     elif loading:
                         self.status_var.set(f"Warcraft Logs laden voor {loading} speler(s)…")
                     else:
@@ -281,6 +285,7 @@ class App:
                 elif kind == "status":
                     self.status_var.set(str(data))
                 elif kind == "auth_failed":
+                    self.live_overlay.hide()
                     self.status_var.set(f"Warcraft Logs verbinding mislukt: {data}")
                     if self.wcl:
                         self.wcl.close()
@@ -347,6 +352,8 @@ class App:
         self._shutdown_started = True
         self._arm_force_exit_watchdog()
 
+        self.live_overlay.close()
+
         watcher = self.watcher
         self.watcher = None
         wcl = self.wcl
@@ -389,6 +396,7 @@ class App:
         if self.watcher:
             self.watcher.request_stop()
         self.engine.request_stop()
+        self.live_overlay.close()
 
         try:
             self.root.destroy()
