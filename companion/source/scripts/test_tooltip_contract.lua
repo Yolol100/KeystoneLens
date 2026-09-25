@@ -241,12 +241,37 @@ activeActivity = 777
 -- 7. Stale data fails closed.
 clearTooltip()
 setCache(62, "DPS", 97.0, 1)
-now = 50000
+now = 700000
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3040")
 assertEq(#GameTooltip.lines, 1, "stale WCL data was rendered")
 now = 2000
 
--- 8. Normal player tooltip path also appends after Raider.IO while an LFG activity is active.
+-- 8. Wrong season and region fail closed.
+clearTooltip()
+setCache(62, "DPS", 97.0, now)
+_G.KeystoneLensPreloadV4.season = "midnight-s1"
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3041")
+assertEq(#GameTooltip.lines, 1, "wrong season leaked WCL data")
+
+clearTooltip()
+setCache(62, "DPS", 97.0, now)
+_G.KeystoneLensPreloadV4.region = 1
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3042")
+assertEq(#GameTooltip.lines, 1, "wrong region leaked WCL data")
+
+-- 9. Malformed or missing records fail closed.
+clearTooltip()
+setCache(62, "DPS", 97.0, now)
+_G.KeystoneLensPreloadV4.entries["alice-draenor|62|altaroffangs"] = { "X", 150, now }
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3043")
+assertEq(#GameTooltip.lines, 1, "malformed preload record was rendered")
+
+clearTooltip()
+_G.KeystoneLensPreloadV4 = nil
+GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3044")
+assertEq(#GameTooltip.lines, 1, "missing preload database rendered a WCL line")
+
+-- 10. Normal player tooltip path also appends after Raider.IO while an LFG activity is active.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
@@ -255,7 +280,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3050")
 assertEq(#GameTooltip.lines, 2, "unit tooltip did not inject WCL under Raider.IO score")
 assertEq(GameTooltip.lines[2].right, "DPS 92%", "unit tooltip percentile formatting changed")
 
--- 9. A same-name player on another realm must never inherit the local player's cache.
+-- 11. A same-name player on another realm must never inherit the local player's cache.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
@@ -271,7 +296,7 @@ assertEq(#GameTooltip.lines, 1, "cross-realm player matched a same-realm short c
 displayedRealm = "Draenor"
 setCache(62, "DPS", 91.6, now)
 
--- 10. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
+-- 12. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
 clearTooltip()
 currentOwner = member
 displayedUnit = nil
@@ -280,7 +305,7 @@ member.OnEnter(member)
 assertEq(#GameTooltip.lines, 1, "standalone/fallback WCL line missing")
 assertTrue(GameTooltip.lines[1].left:find("Warcraft Logs M+", 1, true) ~= nil, "fallback WCL label missing")
 
--- 11. The unit post-call fallback works independently of the Raider.IO score hook.
+-- 13. The unit post-call fallback works independently of the Raider.IO score hook.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
