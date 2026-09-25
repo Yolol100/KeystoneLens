@@ -71,6 +71,11 @@ for dungeon_id in ("12993", "12813", "12825", "12859", "12923"):
 for stale_id in ("62993", "62813", "62825", "62859", "62923"):
     require(stale_id not in constants, f"stale PTR-like fallback ID returned: {stale_id}")
 
+require('"DeathKnight"' in constants, "WCL Death Knight discovery slug must be DeathKnight")
+require('"DemonHunter"' in constants, "WCL Demon Hunter discovery slug must be DemonHunter")
+require('"Death Knight"' not in constants, "spaced Death Knight WCL discovery slug returned")
+require('"Demon Hunter"' not in constants, "spaced Demon Hunter WCL discovery slug returned")
+
 engine = read(APP / "engine.py")
 main_app = read(APP / "__main__.py")
 watcher = read(APP / "watcher.py")
@@ -135,6 +140,12 @@ for token, label in (
 ):
     require(token in preload, f"preload architecture changed: {label}")
 require("WoW reads Data.lua only while loading addons" in addon_sync, "file-load boundary must stay explicit")
+refresh = read(APP / "preload_refresh.py")
+require("SEEDS_PER_SLICE = 50" in refresh, "preload discovery coverage changed")
+require("REFRESH_INTERVAL_SECONDS = 60 * 60" in refresh, "hourly preload maintenance changed")
+data_lua = read(SOURCE / "data-addon" / "KeystoneLensCompanionData" / "Data.lua")
+require("_G.KeystoneLensPreloadV4" in data_lua, "shipped data addon is not preload v4")
+require("_G.KeystoneLensTooltipCacheV3 = nil" in data_lua, "legacy runtime cache must be cleared")
 launcher = read(SOURCE / "portable" / "portable_launcher.py")
 for forbidden in ("LiveHover", "LiveTooltipOverlay", "live_overlay", "valueX", "valueY"):
     require(
