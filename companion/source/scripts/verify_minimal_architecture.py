@@ -187,7 +187,10 @@ require("def verify_companion_window" in launcher, "portable launcher must const
 require('("Speler", "Warcraft Logs", "Rank")' in launcher, "portable live board headings are not verified")
 require("--verify-ui" in start_cmd, "START-COMPANION must run the GUI smoke before pythonw")
 require("--verify-ui" in builder, "portable build must verify the extracted GUI runtime")
-require("verify_complete_package_parity.py" in read(ROOT / ".github" / "workflows" / "verify-keystonelens.yml"), "Windows CI must verify exact package source parity")
+workflow = read(ROOT / ".github" / "workflows" / "verify-keystonelens.yml")
+require("verify_complete_package_parity.py" in workflow, "Windows CI must verify exact package source parity")
+require("make_deterministic_zip.py" in workflow, "complete Windows ZIP must use deterministic packaging")
+require("Complete ZIP reproducibility mismatch" in workflow, "complete Windows ZIP reproducibility gate is missing")
 require("def restore_existing_window" in launcher, "portable launcher must restore an existing window")
 require("if restore_existing_window():" in launcher, "second start must foreground the existing Companion")
 
