@@ -82,10 +82,73 @@ jobs:
           Get-ChildItem -LiteralPath $out -Filter "KeystoneLens-Portable-*-Windows-x64.zip" |
             ForEach-Object { "PORTABLE_ARTIFACT=$($_.FullName)" >> $env:GITHUB_ENV }
 
+      - name: Build complete download package
+        shell: powershell
+        run: |
+          $version = (Get-Content -LiteralPath "companion/source/VERSION" -Raw).Trim()
+          $root = Join-Path $env:RUNNER_TEMP "KeystoneLens-Complete-$version"
+          $companion = Join-Path $root "Windows-Companion"
+          $addons = Join-Path $root "WoW-AddOns"
+          $completeZip = Join-Path $env:RUNNER_TEMP "KeystoneLens-Complete-$version-Windows-x64.zip"
+
+          if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+          if (Test-Path -LiteralPath $completeZip) { Remove-Item -LiteralPath $completeZip -Force }
+
+          New-Item -ItemType Directory -Path $companion -Force | Out-Null
+          New-Item -ItemType Directory -Path $addons -Force | Out-Null
+
+          Expand-Archive -LiteralPath $env:PORTABLE_ARTIFACT -DestinationPath $companion -Force
+          Copy-Item -LiteralPath "addon/KeystoneLensBridge" -Destination $addons -Recurse
+          Copy-Item -LiteralPath "companion/source/data-addon/KeystoneLensCompanionData" -Destination $addons -Recurse
+
+          @"
+KeystoneLens $version - Complete pakket
+
+1. Kopieer de mappen uit WoW-AddOns naar:
+   World of Warcraft\_retail_\Interface\AddOns\
+
+2. Start daarna:
+   Windows-Companion\START-COMPANION.cmd
+
+3. Vul je Warcraft Logs Client ID en Client Secret in.
+4. Kies je World of Warcraft _retail_\Screenshots map.
+5. Open Mythic+ Group Finder.
+6. Gebruik /reload nadat nieuwe tooltipdata is opgehaald.
+
+Tooltip:
+- DPS/tank: Warcraft Logs M+ - DPS percentile
+- healer: Warcraft Logs M+ - Healing percentile
+"@ | Set-Content -LiteralPath (Join-Path $root "INSTALLEREN.txt") -Encoding UTF8
+
+          foreach ($required in @(
+            "Windows-Companion\START-COMPANION.cmd",
+            "Windows-Companion\runtime\python.exe",
+            "WoW-AddOns\KeystoneLensBridge\KeystoneLensBridge.toc",
+            "WoW-AddOns\KeystoneLensBridge\Core\Tooltip.lua",
+            "WoW-AddOns\KeystoneLensCompanionData\KeystoneLensCompanionData.toc",
+            "WoW-AddOns\KeystoneLensCompanionData\Data.lua",
+            "INSTALLEREN.txt"
+          )) {
+            if (-not (Test-Path -LiteralPath (Join-Path $root $required))) {
+              throw "Complete package missing: $required"
+            }
+          }
+
+          Compress-Archive -Path (Join-Path $root "*") -DestinationPath $completeZip -CompressionLevel Optimal
+          "COMPLETE_ARTIFACT=$completeZip" >> $env:GITHUB_ENV
+
       - name: Upload verified portable ZIP
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: KeystoneLens-Windows-x64
           path: ${{ env.PORTABLE_ARTIFACT }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload complete KeystoneLens ZIP
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: KeystoneLens-Complete-Windows-x64
+          path: ${{ env.COMPLETE_ARTIFACT }}
           if-no-files-found: error
           retention-days: 7
