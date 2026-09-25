@@ -21,6 +21,16 @@ That is all the tooltip shows. There is no Raider.IO score, Blizzard score, cust
 
 WoW addons cannot make normal internet requests, so the Companion and transport layer remain necessary.
 
+## Windows portable build
+
+The Companion is required for automatic Warcraft Logs data. The portable Windows build is kept intentionally because it is the simplest zero-install delivery: it bundles the private Python runtime and only the dependencies needed for WCL HTTP requests plus QR/screenshot decoding.
+
+The build verifies the staged package, creates a deterministic ZIP, extracts that exact ZIP again, and verifies the extracted runtime before it is accepted.
+
+## Verification
+
+GitHub Actions now checks the minimal architecture contract and Python syntax. On pushes to `main`, it also builds and verifies the Windows portable ZIP and stores the verified ZIP as a short-lived workflow artifact.
+
 ## Repository
 
 - `addon/KeystoneLensBridge/` — WoW transport + compact tooltip.
