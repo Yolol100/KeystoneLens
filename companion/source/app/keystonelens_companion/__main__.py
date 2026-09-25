@@ -16,7 +16,7 @@ from .addon_sync import TooltipCacheSync
 from .config import Config, load_config, log_path, save_config
 from .engine import ApplicantEngine
 from .models import EngineState
-from .preload_refresh import PreloadRefresher
+from .preload_refresh import PreloadRefresher, REFRESH_INTERVAL_SECONDS
 from .watcher import ScreenshotWatcher
 from .wcl import WCLCache, WCLClient
 
@@ -265,23 +265,33 @@ class App:
             return
         self.q.put(("status", f"Warcraft Logs verbonden • preload {self.tooltip_sync.record_count} records"))
 
-        try:
-            summary = PreloadRefresher(client, self.tooltip_sync).run_once()
-        except Exception as exc:
-            if not self._shutdown_started and client is self.wcl:
-                self.q.put(("status", f"Warcraft Logs verbonden • preload-refresh overgeslagen: {exc}"))
-            return
-
-        if not self._shutdown_started and client is self.wcl:
-            added = int(summary.get("added", 0))
-            records = int(summary.get("records", self.tooltip_sync.record_count))
-            if added:
-                self.q.put((
-                    "status",
-                    f"Preload-database: {records} records • {added} nieuw • actief bij volgende WoW-start",
-                ))
+        while not self._shutdown_started and client is self.wcl:
+            try:
+                summary = PreloadRefresher(client, self.tooltip_sync).run_once()
+            except Exception as exc:
+                if not self._shutdown_started and client is self.wcl:
+                    self.q.put(("status", f"Warcraft Logs verbonden • preload-refresh overgeslagen: {exc}"))
             else:
-                self.q.put(("status", f"Preload-database gereed • {records} records"))
+                if not self._shutdown_started and client is self.wcl:
+                    added = int(summary.get("added", 0))
+                    records = int(summary.get("records", self.tooltip_sync.record_count))
+                    if added:
+                        self.q.put((
+                            "status",
+                            f"Preload-database: {records} records • {added} nieuw • actief bij volgende WoW-start",
+                        ))
+                    else:
+                        self.q.put(("status", f"Preload-database gereed • {records} records"))
+
+            # Keep the authenticated worker bounded and interruptible. Five-second
+            # slices avoid an hour-long blocking sleep during shutdown/reconfigure.
+            deadline = time.monotonic() + REFRESH_INTERVAL_SECONDS
+            while (
+                time.monotonic() < deadline
+                and not self._shutdown_started
+                and client is self.wcl
+            ):
+                time.sleep(min(5.0, max(0.0, deadline - time.monotonic())))
 
     def _poll(self) -> None:
         if self._shutdown_started:
