@@ -276,11 +276,17 @@ def _generation16_is_newer(candidate: int, current: int) -> bool:
 
 
 def _window_title(user32, hwnd) -> str:
-    length = int(user32.GetWindowTextLengthW(hwnd))
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+
+    handle = wintypes.HWND(hwnd)
+    length = int(user32.GetWindowTextLengthW(handle))
     if length <= 0:
         return ""
     buffer = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, buffer, length + 1)
+    user32.GetWindowTextW(handle, buffer, length + 1)
     return buffer.value
 
 
@@ -309,11 +315,17 @@ def _wow_client_rect() -> tuple[int, int, int, int] | None:
         return None
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
+        user32.GetClientRect.restype = wintypes.BOOL
+        user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
+        user32.ClientToScreen.restype = wintypes.BOOL
+
+        handle = wintypes.HWND(hwnd)
         rect = RECT()
-        if not user32.GetClientRect(wintypes.HWND(hwnd), ctypes.byref(rect)):
+        if not user32.GetClientRect(handle, ctypes.byref(rect)):
             return None
         origin = POINT(0, 0)
-        if not user32.ClientToScreen(wintypes.HWND(hwnd), ctypes.byref(origin)):
+        if not user32.ClientToScreen(handle, ctypes.byref(origin)):
             return None
         width = int(rect.right - rect.left)
         height = int(rect.bottom - rect.top)
@@ -352,6 +364,8 @@ def _cursor_position() -> tuple[int, int] | None:
         return None
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+        user32.GetCursorPos.restype = wintypes.BOOL
         point = POINT()
         if not user32.GetCursorPos(ctypes.byref(point)):
             return None
