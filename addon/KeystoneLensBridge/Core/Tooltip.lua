@@ -8,6 +8,8 @@
 local hooked = setmetatable({}, { __mode = "k" })
 local tooltipKey = nil
 local unitTooltipRegistered = false
+local raiderIOScoreHookRegistered = false
+local raiderIOInjecting = false
 local KL_ICON = "|TInterface\\AddOns\\KeystoneLensBridge\\Media\\KeystoneLensIcon:16:16:0:0|t"
 local REQUIRED_CACHE_VERSION = 3
 local UNIT_HOOK_DELAY_SECONDS = 1.0
@@ -290,40 +292,112 @@ local function ResolveApplicantContext(button)
     return nil
 end
 
-local function OnMemberEnter(self)
-    local applicantID, memberIdx = ResolveApplicantContext(self)
+local function GetApplicantEntry(button)
+    local applicantID, memberIdx = ResolveApplicantContext(button)
     if not applicantID or not memberIdx
        or IsSecretValue(applicantID)
        or not C_LFGList
        or type(C_LFGList.GetApplicantMemberInfo) ~= "function" then
-        return
+        return nil
     end
 
     local results = { pcall(C_LFGList.GetApplicantMemberInfo, applicantID, memberIdx) }
-    if results[1] ~= true then return end
+    if results[1] ~= true then return nil end
 
     local fullName = results[2]
     local specID = results[17] -- pcall adds one slot before the API's 16th specID return.
-    if not NormalizeFullName(fullName) or IsSecretValue(specID) then return end
+    if not NormalizeFullName(fullName) or IsSecretValue(specID) then return nil end
 
     specID = tonumber(specID)
-    if not specID or specID <= 0 then return end
+    if not specID or specID <= 0 then return nil end
+    return GetFreshEntry(fullName, specID)
+end
 
+local function OnMemberEnter(self)
     local function appendIfStillHovered()
-        if self and self.IsMouseOver and self:IsMouseOver()
-           and GameTooltip and GameTooltip:IsShown() then
-            AppendCachedLine(fullName, specID)
+        if not self or not self.IsMouseOver or not self:IsMouseOver()
+           or not GameTooltip or not GameTooltip:IsShown() then
+            return
+        end
+
+        local entry, key, specID = GetApplicantEntry(self)
+        if entry and AppendEntryLine(GameTooltip, entry, key, specID) then
+            GameTooltip:Show()
         end
     end
 
-    -- Raider.IO builds its LFG tooltip synchronously. Deferring to the next
-    -- frame makes KeystoneLens append after Raider.IO instead of competing
-    -- with or rebuilding its tooltip.
+    -- Fallback ordering path: Raider.IO builds its LFG tooltip synchronously.
+    -- The dedicated AddDoubleLine hook below normally inserts KeystoneLens
+    -- immediately after Raider.IO's M+ score. This next-frame append keeps the
+    -- feature working when Raider.IO changes its score label or is not installed.
     if C_Timer and type(C_Timer.After) == "function" then
         C_Timer.After(0, appendIfStillHovered)
     else
         appendIfStillHovered()
     end
+end
+
+local function IsRaiderIOScoreLabel(leftText)
+    if IsSecretValue(leftText) or type(leftText) ~= "string" then return false end
+    local plain = leftText:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return plain:find("Raider.IO", 1, true) ~= nil
+       and plain:find("M+", 1, true) ~= nil
+end
+
+local function GetTooltipOwner(tooltip)
+    if not tooltip or type(tooltip.GetOwner) ~= "function" then return nil end
+    local ok, owner = pcall(tooltip.GetOwner, tooltip)
+    if ok and owner and not IsSecretValue(owner) then return owner end
+    return nil
+end
+
+local function AppendCurrentTooltipContext(tooltip)
+    if raiderIOInjecting or tooltip ~= GameTooltip then return false end
+
+    local owner = GetTooltipOwner(tooltip)
+    if owner then
+        local entry, key, specID = GetApplicantEntry(owner)
+        if entry then
+            raiderIOInjecting = true
+            local appended = AppendEntryLine(tooltip, entry, key, specID)
+            raiderIOInjecting = false
+            return appended
+        end
+    end
+
+    local unit = GetDisplayedUnit(tooltip)
+    if not unit then return false end
+
+    local okPlayer, isPlayer = pcall(UnitIsPlayer, unit)
+    if not okPlayer or not isPlayer then return false end
+
+    local okName, name, realm = pcall(UnitFullName, unit)
+    if not okName or IsSecretValue(name) or IsSecretValue(realm) or not name then
+        return false
+    end
+
+    local entry, key, specID = GetFreshEntryForUnit(name, realm)
+    if not entry then return false end
+
+    raiderIOInjecting = true
+    local appended = AppendEntryLine(tooltip, entry, key, specID)
+    raiderIOInjecting = false
+    return appended
+end
+
+local function RegisterRaiderIOScoreHook()
+    if raiderIOScoreHookRegistered
+       or type(hooksecurefunc) ~= "function"
+       or not GameTooltip
+       or type(GameTooltip.AddDoubleLine) ~= "function" then
+        return
+    end
+
+    raiderIOScoreHookRegistered = true
+    hooksecurefunc(GameTooltip, "AddDoubleLine", function(tooltip, leftText)
+        if raiderIOInjecting or not IsRaiderIOScoreLabel(leftText) then return end
+        AppendCurrentTooltipContext(tooltip)
+    end)
 end
 
 local function HookMember(button)
@@ -422,6 +496,7 @@ frame:SetScript("OnEvent", function(_, event, addonName)
         -- Raider.IO is an OptionalDep, so if it is enabled it loads before
         -- KeystoneLens. The small delay additionally ensures our unit post-call
         -- is registered after Raider.IO's own tooltip renderer.
+        Schedule(0, RegisterRaiderIOScoreHook)
         Schedule(UNIT_HOOK_DELAY_SECONDS, RegisterUnitTooltipHook)
         Schedule(0, HookVisibleRows)
         return
