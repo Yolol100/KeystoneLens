@@ -110,7 +110,7 @@ for token, label in (
     ("tonumber(entry.specID) ~= specID", "spec guard"),
     ('metric ~= "DPS" and metric ~= "HPS"', "DPS/HPS metric guard"),
     ("RegisterRaiderIOScoreHook", "Raider.IO score-line integration"),
-    ('plain:find("Raider.IO", 1, true)', "Raider.IO score-label detection"),
+    ('plain == "Raider.IO M+ Score" or plain == "Current M+ Score"', "Raider.IO current-score detection"),
     ("AppendCurrentTooltipContext", "shared LFG/unit tooltip context"),
     ("TooltipDataProcessor.AddTooltipPostCall", "normal player tooltip integration"),
     ("TooltipUtil.GetDisplayedUnit", "taint-safe displayed-unit lookup"),
