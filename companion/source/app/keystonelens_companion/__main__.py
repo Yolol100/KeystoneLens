@@ -9,12 +9,13 @@ import threading
 import time
 import traceback
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 from . import __version__
 from .addon_sync import TooltipCacheSync
 from .config import Config, VALID_REGIONS, load_config, log_path, save_config
 from .engine import ApplicantEngine
+from .metrics import applicant_board_rows
 from .models import EngineState
 from .preload_refresh import PreloadRefresher, REFRESH_INTERVAL_SECONDS
 from .watcher import ScreenshotWatcher
@@ -52,8 +53,33 @@ class App:
 
         frame = tk.Frame(self.root, padx=16, pady=16)
         frame.pack(fill="both", expand=True)
-        tk.Label(frame, text="Warcraft Logs M+ Tooltip", font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(frame, textvariable=self.status_var, justify="left", wraplength=450).pack(anchor="w", pady=(8, 14))
+        tk.Label(frame, text="Warcraft Logs M+ Applicants", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(frame, textvariable=self.status_var, justify="left", wraplength=540).pack(anchor="w", pady=(8, 12))
+
+        self.applicants_frame = tk.Frame(frame)
+        self.applicants_frame.pack(fill="x", pady=(0, 14))
+        self.applicant_table = ttk.Treeview(
+            self.applicants_frame,
+            columns=("player", "wcl", "rank"),
+            show="headings",
+            height=10,
+            selectmode="none",
+        )
+        self.applicant_table.heading("player", text="Speler")
+        self.applicant_table.heading("wcl", text="Warcraft Logs")
+        self.applicant_table.heading("rank", text="Rank")
+        self.applicant_table.column("player", width=260, minwidth=180, anchor="w", stretch=True)
+        self.applicant_table.column("wcl", width=150, minwidth=120, anchor="w", stretch=False)
+        self.applicant_table.column("rank", width=60, minwidth=55, anchor="center", stretch=False)
+        applicant_scroll = ttk.Scrollbar(
+            self.applicants_frame,
+            orient="vertical",
+            command=self.applicant_table.yview,
+        )
+        self.applicant_table.configure(yscrollcommand=applicant_scroll.set)
+        self.applicant_table.pack(side="left", fill="x", expand=True)
+        applicant_scroll.pack(side="right", fill="y")
+        self.applicant_table.insert("", "end", values=("Nog geen applicants", "—", "—"))
 
         self.settings_frame = tk.LabelFrame(frame, text="Instellingen", padx=10, pady=10)
         tk.Label(self.settings_frame, text="Warcraft Logs Client ID").grid(row=0, column=0, sticky="w")
@@ -308,6 +334,7 @@ class App:
                 kind, data = self.q.get_nowait()
                 if kind == "state":
                     state: EngineState = data
+                    self._render_applicants(state)
                     if not self.tooltip_sync.write(list(state.rows)):
                         self.status_var.set(f"Tooltip-cache fout: {self.tooltip_sync.last_error}")
                         continue
@@ -334,6 +361,17 @@ class App:
             pass
         if not self._shutdown_started:
             self.root.after(120, self._poll)
+
+    def _render_applicants(self, state: EngineState) -> None:
+        rows = applicant_board_rows(state.rows)
+        children = self.applicant_table.get_children()
+        if children:
+            self.applicant_table.delete(*children)
+        if not rows:
+            self.applicant_table.insert("", "end", values=("Nog geen applicants", "—", "—"))
+            return
+        for name, metric_text, grade in rows:
+            self.applicant_table.insert("", "end", values=(name, metric_text, grade))
 
     def _tk_exception(self, exc_type, exc_value, exc_traceback) -> None:
         _write_crash_log(exc_type, exc_value, exc_traceback)
