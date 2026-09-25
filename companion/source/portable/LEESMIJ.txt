@@ -9,10 +9,11 @@ Gebruik
 1. Pak de HELE ZIP uit, bijvoorbeeld naar C:\KeystoneLens.
 2. Dubbelklik START-COMPANION.cmd, bij voorkeur VOOR je World of Warcraft start.
 3. Vul een Warcraft Logs Client ID en Client Secret in.
-4. Kies je World of Warcraft _retail_\Screenshots-map.
-5. Laat de Companion de lokale preload-database onderhouden.
-6. Open je Mythic+ Group Finder listing.
-7. Staat een applicant al in de geladen database, dan verschijnt de WCL-regel direct onder Raider.IO. Geen per-applicant /reload.
+4. Kies je WoW-regio (EU/US/KR/TW/CN).
+5. Kies je World of Warcraft _retail_\Screenshots-map.
+6. Laat de Companion de lokale preload-database onderhouden.
+7. Open je Mythic+ Group Finder listing.
+8. Staat een applicant al in de geladen database, dan verschijnt de WCL-regel direct onder Raider.IO. Geen per-applicant /reload.
 
 Cache miss
 Staat een applicant nog niet in de database die WoW bij het starten heeft geladen, dan toont KeystoneLens voor die speler geen WCL-regel. De Companion kan die speler leren en opslaan voor een volgende WoW-start. Een bestand dat tijdens een draaiende WoW-sessie wordt bijgewerkt, wordt niet als live IPC behandeld.
