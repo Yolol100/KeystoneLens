@@ -225,8 +225,13 @@ jobs:
             throw "Complete package source parity verification failed."
           }
 
+          & $verifyPython -B "companion/source/scripts/test_end_to_end_applicant_flow.py" $verifyRoot
+          if ($LASTEXITCODE -ne 0) {
+            throw "Target-runtime applicant end-to-end verification failed."
+          }
+
           "COMPLETE_ARTIFACT=$completeZip" >> $env:GITHUB_ENV
-          "CI_STAGE=complete-zip-parity-verified" >> $env:GITHUB_ENV
+          "CI_STAGE=complete-zip-e2e-verified" >> $env:GITHUB_ENV
 
       - name: Upload verified portable ZIP
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
