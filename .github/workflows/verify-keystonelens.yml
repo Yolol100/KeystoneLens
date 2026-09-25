@@ -25,7 +25,7 @@ permissions:
 jobs:
   source:
     name: Source contract
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,13 +91,13 @@ jobs:
         run: |
           state="failure"
           if [ "$JOB_STATUS" = "success" ]; then state="success"; fi
-          curl -fsS -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/statuses/$SHA"             -d "{\"state\":\"$state\",\"context\":\"keystonelens/source\",\"description\":\"Source, preload and tooltip contracts\"}"
+          curl -fsS -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/statuses/$SHA"             -d "{\"state\":\"$state\",\"context\":\"keystonelens/source\",\"description\":\"Source, preload and tooltip contracts\",\"target_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
   portable-windows:
     name: Build Windows portable
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: source
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -229,4 +229,4 @@ jobs:
             state="success"
             description="Portable and complete ZIP verified"
           fi
-          curl -fsS -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/statuses/$SHA"             -d "{\"state\":\"$state\",\"context\":\"keystonelens/portable-windows\",\"description\":\"$description\"}"
+          curl -fsS -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/statuses/$SHA"             -d "{\"state\":\"$state\",\"context\":\"keystonelens/portable-windows\",\"description\":\"$description\",\"target_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
