@@ -40,6 +40,7 @@ Windows-lijst
 - Live applicant-cache ouder dan 1 uur wordt opnieuw bij WCL gevalideerd, binnen quota/backoff.
 
 Credentials blijven alleen in de Companion/config en worden nooit naar WoW-addonbestanden geschreven.
+"Warcraft Logs API verbonden" verschijnt pas nadat zowel OAuth als de echte publieke GraphQL API een geldige rateLimitData-response heeft gegeven.
 
 De portable map bevat een eigen lokale Python-runtime. Laat runtime, app, packages,
 RUNTIME.json en START-COMPANION.cmd bij elkaar staan.
