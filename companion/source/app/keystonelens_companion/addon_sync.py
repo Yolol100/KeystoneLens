@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-import math
 from pathlib import Path
 import time
 
 from . import __version__
-from .constants import HEALER_SPECS
+from .metrics import role_metric
 from .models import ApplicantView
 
 DATA_ADDON_NAME = "KeystoneLensCompanionData"
@@ -57,38 +56,6 @@ def _lua_string(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\r", " ").replace("\n", " ") + '"'
 
 
-def _safe_percentile(value: float | int | None) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(number):
-        return None
-    return max(0.0, min(100.0, number))
-
-
-def _role_metric(view: ApplicantView):
-    wcl = view.wcl
-    if not wcl or wcl.error or wcl.not_found:
-        return None
-
-    metric_key = "hps" if view.applicant.spec_id in HEALER_SPECS else "dps"
-    bracket = wcl.metric_brackets.get(metric_key)
-    if bracket is None:
-        return None
-
-    percentile = (
-        bracket.average_percentile
-        if bracket.run_count >= 2
-        else bracket.best_percentile
-    )
-    percentile = _safe_percentile(percentile)
-    if percentile is None:
-        return None
-
-    return ("HPS" if metric_key == "hps" else "DPS"), percentile
-
-
 def render_tooltip_cache(rows: list[ApplicantView], now: float | None = None) -> str:
     generated = int(now if now is not None else time.time())
     entries: list[str] = []
@@ -100,7 +67,7 @@ def render_tooltip_cache(rows: list[ApplicantView], now: float | None = None) ->
         if view.wcl_status in {"queued", "loading", "disabled", "error", "none"}:
             continue
 
-        metric = _role_metric(view)
+        metric = role_metric(view)
         if metric is None:
             continue
 
