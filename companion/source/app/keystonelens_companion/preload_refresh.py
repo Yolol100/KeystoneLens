@@ -15,8 +15,9 @@ from .wcl import WCLClient
 
 CURSOR_PATH = local_app_dir() / "wcl-preload-cursor-v1.json"
 MAX_SLICES_PER_RUN = 4
-SEEDS_PER_SLICE = 20
+SEEDS_PER_SLICE = 50
 QUOTA_STOP_FRACTION = 0.80
+REFRESH_INTERVAL_SECONDS = 60 * 60
 
 
 class PreloadRefresher:
