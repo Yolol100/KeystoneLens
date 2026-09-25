@@ -89,7 +89,7 @@ for token, label in (
     ('metric ~= "DPS" and metric ~= "HPS"', "DPS/HPS metric guard"),
 ):
     require(token in tooltip, f"tooltip contract changed: {label}")
-for unwanted in ("KL Score", "confidence", "rioComponent", "wclRuns"):
+for unwanted in ("KL Score", "KL evidence", "KL bronnen", "rioComponent", "wclRuns"):
     require(unwanted not in tooltip, f"tooltip is no longer minimal: {unwanted}")
 
 for rel in (
