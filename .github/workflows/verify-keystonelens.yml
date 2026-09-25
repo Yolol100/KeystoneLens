@@ -65,6 +65,9 @@ jobs:
       - name: Verify preload refresh contract
         run: python companion/source/scripts/test_preload_refresh_contract.py
 
+      - name: Verify preload performance
+        run: python companion/source/scripts/test_preload_performance.py
+
       - name: Verify minimal architecture
         run: python companion/source/scripts/verify_minimal_architecture.py
 
