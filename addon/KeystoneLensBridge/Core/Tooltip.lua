@@ -36,17 +36,19 @@ local function NormalizeRealm(realm)
     return realm:gsub("%s+", "")
 end
 
+local function CurrentRealm()
+    if type(GetNormalizedRealmName) ~= "function" then return nil end
+    local ok, realm = pcall(GetNormalizedRealmName)
+    if not ok then return nil end
+    return NormalizeRealm(realm)
+end
+
 local function BuildFullName(name, realm)
     if IsSecretValue(name) or type(name) ~= "string" or name == "" then
         return nil
     end
 
-    realm = NormalizeRealm(realm)
-    if not realm and type(GetNormalizedRealmName) == "function" then
-        local ok, currentRealm = pcall(GetNormalizedRealmName)
-        if ok then realm = NormalizeRealm(currentRealm) end
-    end
-
+    realm = NormalizeRealm(realm) or CurrentRealm()
     if realm then return name .. "-" .. realm end
     return name
 end
@@ -98,17 +100,6 @@ local function FindEntry(fullName)
         return entry, lowerKey, cache
     end
 
-    -- UnitFullName can include the local realm while some LFG payloads are short names.
-    -- The generated cache is intentionally tiny (current applicants only), so this
-    -- bounded fallback is safe and avoids silently missing same-realm players.
-    local shortName = key:match("^([^-]+)")
-    if shortName and shortName ~= key then
-        entry = cache.entries[shortName] or cache.entries[string.lower(shortName)]
-        if type(entry) == "table" then
-            return entry, shortName, cache
-        end
-    end
-
     return nil
 end
 
@@ -158,8 +149,19 @@ local function GetFreshEntry(fullName, specID)
 end
 
 local function GetFreshEntryForUnit(name, realm)
-    local fullName = BuildFullName(name, realm)
+    local normalizedRealm = NormalizeRealm(realm)
+    local localRealm = CurrentRealm()
+    local fullName = BuildFullName(name, normalizedRealm)
     local entry, key, cache = FindEntry(fullName)
+
+    -- LFG may store a same-realm player as a short name. Only use that fallback
+    -- when the displayed unit is definitely on the local realm; never let a
+    -- cross-realm player collide with a same-name local applicant.
+    if not entry
+       and (not normalizedRealm
+            or (localRealm and string.lower(normalizedRealm) == string.lower(localRealm))) then
+        entry, key, cache = FindEntry(name)
+    end
     if not entry then return nil end
 
     local activityID = CurrentListingActivityID()
