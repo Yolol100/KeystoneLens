@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import subprocess
 import sys
 import tempfile
@@ -44,7 +45,7 @@ def main() -> int:
         probe = r'''
 local before = collectgarbage("count")
 local started = os.clock()
-dofile(arg[1])
+dofile(os.getenv("KL_DATA"))
 local loaded = os.clock() - started
 collectgarbage("collect")
 local after = collectgarbage("count")
@@ -58,11 +59,14 @@ local lookup = os.clock() - lookupStarted
 if not found then error("worst-case preload lookup key missing") end
 print(string.format("%.6f %.3f %.6f", loaded, after - before, lookup))
 '''
+        env = dict(os.environ)
+        env["KL_DATA"] = str(path)
         run = subprocess.run(
-            ["lua5.1", "-e", probe, str(path)],
+            ["lua5.1", "-e", probe],
             check=True,
             text=True,
             capture_output=True,
+            env=env,
         )
         loaded_s, memory_kib, lookup_s = map(float, run.stdout.strip().split())
         assert loaded_s < 10.0, f"Lua preload load too slow: {loaded_s:.3f}s"
