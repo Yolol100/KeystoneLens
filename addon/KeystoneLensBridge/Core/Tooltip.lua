@@ -151,13 +151,13 @@ local function ApplicantKey(fullName, specID, dungeonKey)
     local normalized = NormalizeFullName(fullName)
     specID = IsSecretValue(specID) and nil or tonumber(specID)
     if not normalized or not specID or specID <= 0 or not dungeonKey then return nil end
-    return string.lower(normalized) .. "|" .. tostring(specID) .. "|" .. dungeonKey
+    return normalized .. "|" .. tostring(specID) .. "|" .. dungeonKey
 end
 
 local function UnitKey(fullName, dungeonKey)
     local normalized = NormalizeFullName(fullName)
     if not normalized or not dungeonKey then return nil end
-    return string.lower(normalized) .. "|" .. dungeonKey
+    return normalized .. "|" .. dungeonKey
 end
 
 local function GetFreshEntry(fullName, specID)
