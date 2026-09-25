@@ -104,6 +104,7 @@ require("def request_stop" in engine, "engine must support immediate shutdown si
 require((SOURCE / "scripts" / "test_shutdown_contract.py").is_file(), "shutdown regression test is missing")
 require((SOURCE / "scripts" / "test_window_visibility_contract.py").is_file(), "window restore regression test is missing")
 require((SOURCE / "scripts" / "test_live_applicant_board.py").is_file(), "live applicant board regression test is missing")
+require((SOURCE / "scripts" / "verify_complete_package_parity.py").is_file(), "complete package parity gate is missing")
 require("class SettingsDialog" not in main_app, "modal SettingsDialog must not return")
 require("grab_set()" not in main_app, "modal Tk grab must not return")
 require('self.root.bind("<Map>", self._on_root_mapped' in main_app, "taskbar restore Map binding is missing")
@@ -186,6 +187,7 @@ require("def verify_companion_window" in launcher, "portable launcher must const
 require('("Speler", "Warcraft Logs", "Rank")' in launcher, "portable live board headings are not verified")
 require("--verify-ui" in start_cmd, "START-COMPANION must run the GUI smoke before pythonw")
 require("--verify-ui" in builder, "portable build must verify the extracted GUI runtime")
+require("verify_complete_package_parity.py" in read(ROOT / ".github" / "workflows" / "verify-keystonelens.yml"), "Windows CI must verify exact package source parity")
 require("def restore_existing_window" in launcher, "portable launcher must restore an existing window")
 require("if restore_existing_window():" in launcher, "second start must foreground the existing Companion")
 
