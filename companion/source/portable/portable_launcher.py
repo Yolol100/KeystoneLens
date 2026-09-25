@@ -11,6 +11,7 @@ import time
 import runpy
 import sys
 import traceback
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parent
@@ -172,6 +173,44 @@ def verify_ui_runtime() -> None:
         root.destroy()
 
 
+def verify_companion_window() -> None:
+    """Construct the real Companion UI in an isolated config directory."""
+    from keystonelens_companion.__main__ import App
+
+    previous_local = os.environ.get("LOCALAPPDATA")
+    previous_watchdog = os.environ.get("KEYSTONELENS_DISABLE_FORCE_EXIT_WATCHDOG")
+    try:
+        with tempfile.TemporaryDirectory(prefix="KeystoneLens-UI-Verify-") as tmp:
+            os.environ["LOCALAPPDATA"] = tmp
+            os.environ["KEYSTONELENS_DISABLE_FORCE_EXIT_WATCHDOG"] = "1"
+            app = App()
+            try:
+                app.root.withdraw()
+                app.root.update_idletasks()
+                columns = tuple(app.applicant_table["columns"])
+                if columns != ("player", "wcl", "rank"):
+                    raise RuntimeError(f"Unexpected live applicant columns: {columns!r}")
+                headings = (
+                    app.applicant_table.heading("player", "text"),
+                    app.applicant_table.heading("wcl", "text"),
+                    app.applicant_table.heading("rank", "text"),
+                )
+                if headings != ("Speler", "Warcraft Logs", "Rank"):
+                    raise RuntimeError(f"Unexpected live applicant headings: {headings!r}")
+            finally:
+                app.quit()
+                app._cleanup_after_ui()
+    finally:
+        if previous_local is None:
+            os.environ.pop("LOCALAPPDATA", None)
+        else:
+            os.environ["LOCALAPPDATA"] = previous_local
+        if previous_watchdog is None:
+            os.environ.pop("KEYSTONELENS_DISABLE_FORCE_EXIT_WATCHDOG", None)
+        else:
+            os.environ["KEYSTONELENS_DISABLE_FORCE_EXIT_WATCHDOG"] = previous_watchdog
+
+
 def show_message(text: str, flags: int) -> None:
     try:
         ctypes.windll.user32.MessageBoxW(None, text, "KeystoneLens", flags)
@@ -262,6 +301,7 @@ def main() -> int:
         verify_runtime(import_full_app=verification)
         if args.verify_ui:
             verify_ui_runtime()
+            verify_companion_window()
             print("KeystoneLens portable GUI runtime verification passed.")
             return 0
         if args.verify:
