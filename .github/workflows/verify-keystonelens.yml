@@ -66,6 +66,9 @@ jobs:
       - name: Verify preload refresh contract
         run: python companion/source/scripts/test_preload_refresh_contract.py
 
+      - name: Verify WCL provider readiness
+        run: python companion/source/scripts/test_wcl_provider_readiness.py
+
       - name: Verify live applicant board
         run: python companion/source/scripts/test_live_applicant_board.py
 
