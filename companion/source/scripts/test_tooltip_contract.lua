@@ -188,11 +188,21 @@ assertEq(GameTooltip.lines[1].left, "Raider.IO M+ Score", "Raider.IO score line 
 assertTrue(GameTooltip.lines[2].left:find("Warcraft Logs M+", 1, true) ~= nil, "WCL label missing")
 assertEq(GameTooltip.lines[2].right, "DPS 97%", "DPS percentile formatting changed")
 
--- 2. Fallback OnEnter must not duplicate the line already injected by the score hook.
-member.OnEnter(member)
-assertEq(#GameTooltip.lines, 2, "fallback LFG hook duplicated the WCL line")
+-- 2. Best Season / Best Run modes: ignore a previous-season headline and
+-- insert directly after Raider.IO's explicit current-season score.
+clearTooltip()
+GameTooltip:AddDoubleLine("Raider.IO M+ Score (S1)", "±3200")
+assertEq(#GameTooltip.lines, 1, "WCL was attached to a previous-season Raider.IO headline")
+GameTooltip:AddDoubleLine("Current M+ Score", "3000")
+assertEq(#GameTooltip.lines, 3, "WCL was not attached below Current M+ Score")
+assertEq(GameTooltip.lines[2].left, "Current M+ Score", "current Raider.IO score line moved")
+assertTrue(GameTooltip.lines[3].left:find("Warcraft Logs M+", 1, true) ~= nil, "WCL line missing after current score")
 
--- 3. Healing role uses the same compact line with Healing label.
+-- 3. Fallback OnEnter must not duplicate the line already injected by the score hook.
+member.OnEnter(member)
+assertEq(#GameTooltip.lines, 3, "fallback LFG hook duplicated the WCL line")
+
+-- 4. Healing role uses the same compact line with Healing label.
 clearTooltip()
 currentSpec = 65
 setCache(65, "HPS", 94.2, now)
@@ -200,14 +210,14 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3010")
 assertEq(#GameTooltip.lines, 2, "healing WCL line missing")
 assertEq(GameTooltip.lines[2].right, "Healing 94%", "healing percentile formatting changed")
 
--- 4. Wrong spec fails closed.
+-- 5. Wrong spec fails closed.
 clearTooltip()
 currentSpec = 62
 setCache(63, "DPS", 88.0, now)
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3020")
 assertEq(#GameTooltip.lines, 1, "wrong specialization leaked WCL data")
 
--- 5. Wrong active dungeon fails closed.
+-- 6. Wrong active dungeon fails closed.
 clearTooltip()
 currentSpec = 62
 setCache(62, "DPS", 97.0, now)
@@ -216,7 +226,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3030")
 assertEq(#GameTooltip.lines, 1, "wrong activity leaked WCL data")
 activeActivity = 777
 
--- 6. Stale data fails closed.
+-- 7. Stale data fails closed.
 clearTooltip()
 setCache(62, "DPS", 97.0, 1)
 now = 50000
@@ -224,7 +234,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3040")
 assertEq(#GameTooltip.lines, 1, "stale WCL data was rendered")
 now = 2000
 
--- 7. Normal player tooltip path also appends after Raider.IO while an LFG activity is active.
+-- 8. Normal player tooltip path also appends after Raider.IO while an LFG activity is active.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
@@ -233,7 +243,7 @@ GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3050")
 assertEq(#GameTooltip.lines, 2, "unit tooltip did not inject WCL under Raider.IO score")
 assertEq(GameTooltip.lines[2].right, "DPS 92%", "unit tooltip percentile formatting changed")
 
--- 8. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
+-- 9. If Raider.IO is absent/changes label, the LFG OnEnter fallback still renders.
 clearTooltip()
 currentOwner = member
 displayedUnit = nil
@@ -242,7 +252,7 @@ member.OnEnter(member)
 assertEq(#GameTooltip.lines, 1, "standalone/fallback WCL line missing")
 assertTrue(GameTooltip.lines[1].left:find("Warcraft Logs M+", 1, true) ~= nil, "fallback WCL label missing")
 
--- 9. The unit post-call fallback works independently of the Raider.IO score hook.
+-- 10. The unit post-call fallback works independently of the Raider.IO score hook.
 clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
