@@ -14,10 +14,10 @@ import zlib
 from pathlib import Path
 from typing import Iterable
 
-from .models import Applicant, Listing, LiveHover, PartyMember, Snapshot, VersionInfo
+from .models import Applicant, Listing, PartyMember, Snapshot, VersionInfo
 
 MAGIC = b"APS1"
-SUPPORTED = set(range(1, 15))
+SUPPORTED = set(range(1, 14))
 FRAGMENT_VERSION = 10
 FRAGMENT_CHUNK_BYTES = 320
 FLAG_TERMINAL_CLEAR = 0x01
@@ -287,37 +287,6 @@ def parse_snapshot(raw: bytes) -> Snapshot:
                     rio_dungeon_count=rio_dungeon_count,
                 ))
 
-    live_hover = None
-    if version >= 14:
-        if r.boolean():
-            generation = r.u16()
-            applicant_id = r.u32()
-            member_idx = r.u8()
-            spec_id = r.u16()
-            activity_id = r.u32()
-            name = r.text()
-            coords = [r.u16() for _ in range(8)]
-            if generation <= 0:
-                raise APS1Error("invalid live hover generation")
-            if applicant_id <= 0 or member_idx <= 0 or not name:
-                raise APS1Error("invalid live hover identity")
-            live_hover = LiveHover(
-                generation=generation,
-                applicant_id=applicant_id,
-                member_idx=member_idx,
-                name=name,
-                spec_id=spec_id,
-                activity_id=activity_id,
-                value_x=coords[0],
-                value_y=coords[1],
-                value_w=coords[2],
-                value_h=coords[3],
-                owner_x=coords[4],
-                owner_y=coords[5],
-                owner_w=coords[6],
-                owner_h=coords[7],
-            )
-
     if r.pos != len(body):
         raise APS1Error(f"trailing APS1 bytes ({len(body) - r.pos})")
 
@@ -331,7 +300,6 @@ def parse_snapshot(raw: bytes) -> Snapshot:
         lfg_unavailable=bool(flags & FLAG_LFG_UNAVAILABLE),
         roster_unavailable=bool(flags & FLAG_ROSTER_UNAVAILABLE),
         applicants_unavailable=bool(flags & FLAG_APPLICANTS_UNAVAILABLE),
-        live_hover=live_hover,
     )
 
 
