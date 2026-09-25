@@ -60,13 +60,20 @@ class ScreenshotWatcher:
         )
         self.thread.start()
 
-    def stop(self) -> None:
+    def request_stop(self) -> None:
+        """Signal shutdown without waiting for filesystem/decoder work."""
         self.stop_event.set()
+
+    def stop(self, timeout: float = 1.0) -> bool:
+        """Stop with a hard caller-controlled wait bound."""
+        self.request_stop()
         thread = self.thread
         if thread and thread is not threading.current_thread():
-            thread.join(timeout=3.0)
-        if thread is None or not thread.is_alive():
+            thread.join(timeout=max(0.0, float(timeout)))
+        stopped = thread is None or not thread.is_alive()
+        if stopped:
             self.thread = None
+        return stopped
 
     def _list_candidates(self) -> tuple[list[Path], bool]:
         # A screenshot can disappear between iterdir(), is_file() and stat()
