@@ -1,9 +1,7 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .rio import RIOResult
+from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -53,10 +51,6 @@ class Applicant:
     def identity(self) -> str:
         return f"{self.applicant_id}:{self.member_idx}"
 
-    @property
-    def application_identity(self) -> str:
-        return str(self.applicant_id)
-
 
 @dataclass(frozen=True)
 class PartyMember:
@@ -83,10 +77,6 @@ class PartyMember:
     def is_self(self) -> bool:
         return bool(self.flags & 0x01)
 
-    @property
-    def identity(self) -> str:
-        return self.name.casefold()
-
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -94,9 +84,6 @@ class Snapshot:
     version: Optional[VersionInfo]
     applicants: tuple[Applicant, ...]
     party: tuple[PartyMember, ...] = ()
-    # 1..255 listing-instance marker emitted by the Bridge. 0 means an older
-    # Bridge that predates this marker. The marker lets the Companion separate
-    # two consecutive LFG listings even when dungeon/key/title are identical.
     listing_generation: int = 0
     terminal_clear: bool = False
     lfg_unavailable: bool = False
@@ -131,25 +118,6 @@ class WCLResult:
     source_season: str = ""
 
 
-@dataclass(frozen=True)
-class ScoreBreakdown:
-    score: int
-    label: str
-    rio_score: float
-    wcl_score: float | None
-    wcl_weight: float
-    confidence: str
-    reason: str
-    rio_effective: int
-    target_key: int
-    same_dungeon_key: int
-    best_key: int
-    wcl_bracket: Optional[WCLBracket] = None
-    rio_weight: float = 0.0
-    dungeon_score: float | None = None
-    dungeon_weight: float = 0.0
-
-
 @dataclass
 class ApplicantView:
     applicant: Applicant
@@ -157,11 +125,8 @@ class ApplicantView:
     region: str
     wcl: Optional[WCLResult] = None
     wcl_status: str = "queued"
-    score: Optional[ScoreBreakdown] = None
     updated_at: float = 0.0
     revision: int = 0
-    rio: Optional["RIOResult"] = None
-    rio_status: str = "queued"
 
 
 @dataclass(frozen=True)
