@@ -12,6 +12,9 @@ from .util import realm_slug, split_name_realm
 from .wcl import WCLClient
 
 
+LIVE_APPLICANT_CACHE_MAX_AGE_SECONDS = 60 * 60
+
+
 class ApplicantEngine:
     """Small WCL-only mirror of the current Mythic+ applicant list."""
 
@@ -289,7 +292,10 @@ class ApplicantEngine:
                     for _identity, _revision, name, realm, spec_id, dungeon, target, region in batch
                 ]
                 try:
-                    results = list(client.fetch_batch_current_dungeon(jobs))
+                    results = list(client.fetch_batch_current_dungeon(
+                        jobs,
+                        max_cache_age_seconds=LIVE_APPLICANT_CACHE_MAX_AGE_SECONDS,
+                    ))
                 except Exception as exc:
                     results = [
                         WCLResult(
