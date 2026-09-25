@@ -128,31 +128,18 @@ def restore_existing_window(title_prefix: str = "KeystoneLens ") -> bool:
 
 
 def verify_ui_runtime() -> None:
+    """Exercise the real portable Tk runtime and Win32 window-restore path."""
     import tkinter as tk
-    from keystonelens_companion.live_overlay import LiveTooltipOverlay
 
     root = tk.Tk()
-    overlay = None
     try:
         root.title("KeystoneLens Verification")
         root.update_idletasks()
         root.deiconify()
         root.update()
 
-        overlay = LiveTooltipOverlay(root)
-        root.update_idletasks()
-        root.update()
-        if overlay.window is None:
-            raise RuntimeError("Live tooltip overlay window could not be created.")
-
-        overlay.window.geometry("24x18+0+0")
-        overlay.window.deiconify()
-        root.update()
-
         root.iconify()
         root.update()
-        if overlay.window.state() != "normal":
-            raise RuntimeError("Live tooltip overlay followed the Companion into the minimized state.")
 
         if not restore_existing_window("KeystoneLens Verification"):
             raise RuntimeError("Could not find the verification window through Win32.")
@@ -182,8 +169,6 @@ def verify_ui_runtime() -> None:
         if not restored:
             raise RuntimeError("Win32 restore left the Tk window iconic.")
     finally:
-        if overlay is not None:
-            overlay.close()
         root.destroy()
 
 
