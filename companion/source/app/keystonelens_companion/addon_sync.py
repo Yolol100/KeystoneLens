@@ -114,7 +114,7 @@ def render_tooltip_cache(rows: list[ApplicantView], now: float | None = None) ->
 
 
 class TooltipCacheSync:
-    """Write the small WCL tooltip cache into a separate generated WoW addon."""
+    """Write a warm-start WCL cache; live LFG values use the Companion overlay."""
 
     def __init__(self, screenshots_path: str):
         self.path = addon_cache_path(screenshots_path)
