@@ -107,6 +107,14 @@ class LiveTooltipOverlay:
             style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
             set_long(hwnd, GWL_EXSTYLE, style)
 
+            set_long_ptr = getattr(user32, "SetWindowLongPtrW", None)
+            if set_long_ptr is not None:
+                set_long_ptr.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+                set_long_ptr.restype = ctypes.c_void_p
+                set_long_ptr(hwnd, GWLP_HWNDPARENT, None)
+            else:
+                set_long(hwnd, GWLP_HWNDPARENT, 0)
+
             user32.SetWindowPos.argtypes = [
                 wintypes.HWND,
                 wintypes.HWND,
@@ -226,9 +234,12 @@ class LiveTooltipOverlay:
     def _cursor_watch(self) -> None:
         try:
             if self.visible and self.owner_rect is not None:
-                point = _cursor_position()
-                if point is None or not _point_in_rect(point, self.owner_rect, CURSOR_MARGIN_PX):
+                if _wow_client_rect() is None:
                     self.hide()
+                else:
+                    point = _cursor_position()
+                    if point is None or not _point_in_rect(point, self.owner_rect, CURSOR_MARGIN_PX):
+                        self.hide()
             self._schedule_cursor_watch()
         except tk.TclError:
             return
@@ -251,30 +262,20 @@ def _window_title(user32, hwnd) -> str:
 
 
 def _wow_window() -> int | None:
+    """Return WoW only while it is the foreground application.
+
+    The live value must never float over a browser/desktop after Alt-Tab.
+    """
     if os.name != "nt":
         return None
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         user32.GetForegroundWindow.restype = wintypes.HWND
         foreground = user32.GetForegroundWindow()
-        if foreground and "world of warcraft" in _window_title(user32, foreground).casefold():
-            return int(foreground)
-
-        found: list[int] = []
-        enum_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-        @enum_type
-        def callback(hwnd, _lparam):
-            title = _window_title(user32, hwnd)
-            if "world of warcraft" in title.casefold():
-                found.append(int(hwnd))
-                return False
-            return True
-
-        user32.EnumWindows.argtypes = [enum_type, wintypes.LPARAM]
-        user32.EnumWindows.restype = wintypes.BOOL
-        user32.EnumWindows(callback, 0)
-        return found[0] if found else None
+        if not foreground:
+            return None
+        title = _window_title(user32, foreground).casefold()
+        return int(foreground) if "world of warcraft" in title else None
     except (AttributeError, OSError):
         return None
 
