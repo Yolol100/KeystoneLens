@@ -106,7 +106,6 @@ class Snapshot:
     terminal_clear: bool = False
     lfg_unavailable: bool = False
     roster_unavailable: bool = False
-    live_hover: Optional[LiveHover] = None
     applicants_unavailable: bool = False
     live_hover: Optional[LiveHover] = None
 
@@ -159,3 +158,4 @@ class EngineState:
     lfg_unavailable: bool = False
     applicants_unavailable: bool = False
     roster_unavailable: bool = False
+    live_hover: Optional[LiveHover] = None
