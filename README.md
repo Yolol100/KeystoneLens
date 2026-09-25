@@ -4,12 +4,14 @@ KeystoneLens is a small Warcraft Logs Mythic+ tooltip for World of Warcraft Reta
 
 ## In game
 
-Hover a player in your Mythic+ Group Finder applicant list:
+KeystoneLens adds one compact Warcraft Logs line to the same player tooltip that Raider.IO uses. When Raider.IO is installed, the WCL line is inserted immediately below the Raider.IO M+ score whenever matching cached data exists:
 
 - DPS / tank: `Warcraft Logs M+ — DPS 97%`
 - healer: `Warcraft Logs M+ — Healing 94%`
 
-That is all the tooltip shows. There is no Raider.IO score, Blizzard score, custom KeystoneLens score, confidence label, run count or recruitment overlay.
+This works for Mythic+ Group Finder applicants and for normal player/unit tooltips while the current hosted Mythic+ listing matches the cached WCL context. Raider.IO remains untouched and optional; without Raider.IO, KeystoneLens still renders the same compact WCL line through its fallback tooltip hooks.
+
+That is all KeystoneLens adds. There is no Blizzard score, custom KeystoneLens score, confidence label, run count or recruitment overlay.
 
 ## How it works
 
@@ -29,7 +31,7 @@ The build verifies the staged package, creates a deterministic ZIP, extracts tha
 
 ## Verification
 
-GitHub Actions now checks the minimal architecture contract and Python syntax. On pushes to `main`, it also builds and verifies the Windows portable ZIP and stores the verified ZIP as a short-lived workflow artifact.
+GitHub Actions checks Python syntax, WoW Lua 5.1 syntax, the minimal architecture contract, Companion lifecycle/window regressions, and an executable Raider.IO tooltip contract that proves ordering, DPS/healing formatting, stale-data rejection, activity/spec rejection, duplicate prevention, LFG fallback, and normal unit-tooltip fallback. On pushes to `main`, it also builds and verifies the Windows portable ZIP and stores the verified ZIP as a short-lived workflow artifact.
 
 ## Repository
 
