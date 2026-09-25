@@ -164,6 +164,7 @@ def test_identity_and_activity_fail_closed() -> None:
 
 def test_stale_generation_is_ignored() -> None:
     overlay, shown, hidden = fake_overlay()
+    overlay.current_listing_generation = 7
     overlay.current_generation = 10
     overlay.update_from_state(state(generation=9))
     assert not shown
