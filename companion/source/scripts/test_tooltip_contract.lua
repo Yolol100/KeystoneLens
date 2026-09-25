@@ -29,6 +29,7 @@ local unitPostCall = nil
 _G.issecretvalue = function() return false end
 _G.time = function() return now end
 _G.GetNormalizedRealmName = function() return "Draenor" end
+_G.GetCurrentRegion = function() return 3 end
 _G.UnitIsPlayer = function(unit) return unit == "unit-player" end
 _G.UnitFullName = function(unit)
     if unit == "unit-player" then return "Alice", displayedRealm end
@@ -120,6 +121,11 @@ _G.C_LFGList = {
     GetActiveEntryInfo = function()
         return { activityIDs = { activeActivity } }
     end,
+    GetActivityInfoTable = function(activityID)
+        if activityID == 777 then return { fullName = "Altar of Fangs" } end
+        if activityID == 778 then return { fullName = "Murder Row" } end
+        return nil
+    end,
     GetApplicantMemberInfo = function(applicantID, memberIdx)
         if applicantID ~= 42 or memberIdx ~= 1 then return nil end
         return "Alice-Draenor",
@@ -144,17 +150,22 @@ _G.CreateFrame = function()
 end
 
 local function setCache(spec, metric, percentile, fetchedAt)
-    _G.KeystoneLensTooltipCacheV3 = {
-        version = 3,
-        generatedAt = fetchedAt or now,
-        maxAge = 43200,
+    local code = metric == "HPS" and "H" or "D"
+    local stamp = fetchedAt or now
+    _G.KeystoneLensPreloadV4 = {
+        version = 4,
+        generatedAt = stamp,
+        maxAge = 7 * 24 * 60 * 60,
+        region = 3,
+        season = "midnight-s2",
         entries = {
-            ["Alice-Draenor"] = {
-                activityID = 777,
-                specID = spec,
-                metric = metric,
-                percentile = percentile,
-                fetchedAt = fetchedAt or now,
+            ["alice-draenor|" .. tostring(spec) .. "|altaroffangs"] = {
+                code, percentile, stamp,
+            },
+        },
+        unitEntries = {
+            ["alice-draenor|altaroffangs"] = {
+                code, percentile, stamp,
             },
         },
     }
@@ -249,14 +260,11 @@ clearTooltip()
 currentOwner = {}
 displayedUnit = "unit-player"
 displayedRealm = "Kazzak"
-_G.KeystoneLensTooltipCacheV3.entries = {
-    ["Alice"] = {
-        activityID = 777,
-        specID = 62,
-        metric = "DPS",
-        percentile = 99,
-        fetchedAt = now,
-    },
+_G.KeystoneLensPreloadV4.entries = {
+    ["alice-draenor|62|altaroffangs"] = { "D", 99, now },
+}
+_G.KeystoneLensPreloadV4.unitEntries = {
+    ["alice-draenor|altaroffangs"] = { "D", 99, now },
 }
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3060")
 assertEq(#GameTooltip.lines, 1, "cross-realm player matched a same-realm short cache key")
