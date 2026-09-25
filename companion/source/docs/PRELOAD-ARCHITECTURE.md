@@ -16,14 +16,13 @@ WoW memory.
 
 Applicant lookup key:
 
-`lower(name-realm) | specID | normalized-current-dungeon`
+`canonical name-realm | specID | normalized-current-dungeon`
 
 Unit tooltip lookup key:
 
-`lower(name-realm) | normalized-current-dungeon`
+`canonical name-realm | normalized-current-dungeon`
 
-The generated tables are direct-key indexes. No tooltip hover scans the full
-preload database.
+The generated tables are direct-key indexes. Character/realm casing is preserved exactly so Python and Lua do not depend on different Unicode lowercase rules. No tooltip hover scans the full preload database.
 
 Every lookup fails closed when any of these are wrong or unavailable:
 
@@ -63,7 +62,7 @@ Credentials are never serialized to the WoW data addon.
 
 ## Coverage strategy
 
-The persistent store is capped at 25,000 fresh records.
+The persistent store is capped at 25,000 fresh records. The configured WoW region (EU/US/KR/TW/CN) is part of the dataset boundary; switching region clears incompatible preload records before new regional coverage is built.
 
 Coverage grows from two sources:
 
