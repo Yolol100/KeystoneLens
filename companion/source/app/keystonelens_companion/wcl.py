@@ -722,14 +722,17 @@ class WCLClient:
 
     def _resolve_encounter_id(self, dungeon: str) -> int | None:
         dungeon = canonical_dungeon_name(dungeon)
-        known = DUNGEONS.get(dungeon)
-        if known:
-            return int(known)
         zone_id = wcl_zone_for_dungeon(dungeon)
-        if not zone_id:
-            return None
-        mapping = self._fetch_zone_encounters(zone_id)
-        return mapping.get(self._encounter_key(dungeon))
+        if zone_id:
+            mapping = self._fetch_zone_encounters(zone_id)
+            live_id = mapping.get(self._encounter_key(dungeon))
+            if live_id:
+                return int(live_id)
+
+        # Keep verified IDs only as a bounded fallback when WCL's live zone
+        # catalog is temporarily unavailable. Live catalog data is authoritative.
+        known = DUNGEONS.get(dungeon)
+        return int(known) if known else None
 
     def _fetch_group(
         self,
@@ -916,8 +919,6 @@ class WCLClient:
             name, _slug, realm, _region, spec_id, _dungeon, target = job
             char = cdata.get(alias)
             local_errors = alias_errors.get(alias, [])
-            run = None
-            ranks: object = []
             if char is None:
                 if local_errors or global_errors:
                     detail = (local_errors or global_errors)[0]
