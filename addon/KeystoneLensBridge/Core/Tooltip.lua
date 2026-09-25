@@ -328,20 +328,25 @@ local function ClampNorm16(value)
     return math.floor(value * 65535 + 0.5)
 end
 
-local function NormalizedFrameRect(frame)
-    if not frame or not UIParent
-       or type(frame.GetLeft) ~= "function"
-       or type(frame.GetBottom) ~= "function"
-       or type(frame.GetWidth) ~= "function"
-       or type(frame.GetHeight) ~= "function"
-       or type(UIParent.GetWidth) ~= "function"
-       or type(UIParent.GetHeight) ~= "function" then
-        return nil
-    end
+local function ReadLayoutNumber(object, methodName)
+    if not object or type(object[methodName]) ~= "function" then return nil end
+    local ok, value = pcall(object[methodName], object)
+    if not ok or IsSecretValue(value) then return nil end
+    value = tonumber(value)
+    if not value then return nil end
+    return value
+end
 
-    local parentW, parentH = UIParent:GetWidth(), UIParent:GetHeight()
-    local left, bottom = frame:GetLeft(), frame:GetBottom()
-    local width, height = frame:GetWidth(), frame:GetHeight()
+local function NormalizedFrameRect(frame)
+    if not frame or not UIParent then return nil end
+
+    local parentW = ReadLayoutNumber(UIParent, "GetWidth")
+    local parentH = ReadLayoutNumber(UIParent, "GetHeight")
+    local left = ReadLayoutNumber(frame, "GetLeft")
+    local bottom = ReadLayoutNumber(frame, "GetBottom")
+    local width = ReadLayoutNumber(frame, "GetWidth")
+    local height = ReadLayoutNumber(frame, "GetHeight")
+
     if not parentW or not parentH or parentW <= 0 or parentH <= 0
        or not left or not bottom or not width or not height
        or width <= 0 or height <= 0 then
