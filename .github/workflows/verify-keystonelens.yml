@@ -1,0 +1,66 @@
+name: Verify KeystoneLens
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "addon/**"
+      - "companion/source/**"
+      - ".github/workflows/verify-keystonelens.yml"
+  pull_request:
+    paths:
+      - "addon/**"
+      - "companion/source/**"
+      - ".github/workflows/verify-keystonelens.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    name: Source contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Compile Python sources
+        run: >-
+          python -m compileall -q
+          companion/source/app/keystonelens_companion
+          companion/source/portable
+          companion/source/scripts
+
+      - name: Verify minimal architecture
+        run: python companion/source/scripts/verify_minimal_architecture.py
+
+  portable-windows:
+    name: Build Windows portable
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: source
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and verify portable ZIP
+        shell: powershell
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "keystonelens-release"
+          ./companion/source/portable/build-portable.ps1 -OutputDir $out
+          Get-ChildItem -LiteralPath $out -Filter "KeystoneLens-Portable-*-Windows-x64.zip" |
+            ForEach-Object { "PORTABLE_ARTIFACT=$($_.FullName)" >> $env:GITHUB_ENV }
+
+      - name: Upload verified portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeystoneLens-Windows-x64
+          path: ${{ env.PORTABLE_ARTIFACT }}
+          if-no-files-found: error
+          retention-days: 7
