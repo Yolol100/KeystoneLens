@@ -70,13 +70,72 @@ def verify_runtime(*, import_full_app: bool) -> None:
         importlib.import_module("keystonelens_companion.__main__")
 
 
+def restore_existing_window(title_prefix: str = "KeystoneLens ") -> bool:
+    """Restore and foreground an existing KeystoneLens top-level window."""
+    if os.name != "nt":
+        return False
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    enum_proc_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    user32.EnumWindows.argtypes = [enum_proc_type, wintypes.LPARAM]
+    user32.EnumWindows.restype = wintypes.BOOL
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.BringWindowToTop.restype = wintypes.BOOL
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
+
+    found: list[int] = []
+
+    @enum_proc_type
+    def callback(hwnd, _lparam):
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length <= 0:
+            return True
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buffer, length + 1)
+        if buffer.value.startswith(title_prefix):
+            found.append(int(hwnd))
+            return False
+        return True
+
+    try:
+        user32.EnumWindows(callback, 0)
+    except OSError:
+        return False
+
+    if not found:
+        return False
+
+    hwnd = wintypes.HWND(found[0])
+    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    user32.BringWindowToTop(hwnd)
+    user32.SetForegroundWindow(hwnd)
+    return True
+
+
 def verify_ui_runtime() -> None:
     import tkinter as tk
 
     root = tk.Tk()
     try:
-        root.withdraw()
+        root.title("KeystoneLens Verification")
         root.update_idletasks()
+        root.deiconify()
+        root.update()
+        root.iconify()
+        root.update()
+        if not restore_existing_window("KeystoneLens Verification"):
+            raise RuntimeError("Could not find the verification window through Win32.")
+        root.update()
+        if root.state() == "iconic":
+            raise RuntimeError("Win32 restore did not restore the Tk window.")
     finally:
         root.destroy()
 
@@ -179,7 +238,13 @@ def main() -> int:
 
         mutex = acquire_single_instance_mutex()
         if mutex is None:
-            show_message("KeystoneLens is already running.", 0x40)
+            if restore_existing_window():
+                return 0
+            show_message(
+                "KeystoneLens is already running, but its window could not be restored. "
+                "Close the old pythonw.exe process in Task Manager and start KeystoneLens again.",
+                0x30,
+            )
             return 0
 
         sys.argv = [str(APP_DIR / "keystonelens_companion" / "__main__.py"), *passthrough]
