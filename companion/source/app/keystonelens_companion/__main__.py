@@ -352,7 +352,9 @@ class App:
         self._shutdown_started = True
         self._arm_force_exit_watchdog()
 
-        self.live_overlay.close()
+        live_overlay = getattr(self, "live_overlay", None)
+        if live_overlay is not None:
+            live_overlay.close()
 
         watcher = self.watcher
         self.watcher = None
@@ -396,7 +398,9 @@ class App:
         if self.watcher:
             self.watcher.request_stop()
         self.engine.request_stop()
-        self.live_overlay.close()
+        live_overlay = getattr(self, "live_overlay", None)
+        if live_overlay is not None:
+            live_overlay.close()
 
         try:
             self.root.destroy()
