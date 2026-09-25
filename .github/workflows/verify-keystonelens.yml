@@ -128,7 +128,7 @@ jobs:
             "3. Vul je Warcraft Logs Client ID en Client Secret in.",
             "4. Kies je World of Warcraft _retail_\Screenshots map.",
             "5. Open Mythic+ Group Finder.",
-            "6. Gebruik /reload nadat nieuwe tooltipdata is opgehaald.",
+            "6. Hover een applicant; de WCL waarde verschijnt live zonder WoW-reload.",
             "",
             "Tooltip:",
             "- DPS/tank: Warcraft Logs M+ - DPS percentile",
