@@ -143,6 +143,7 @@ class LiveTooltipOverlay:
 
         hover = state.live_hover
         if hover is None:
+            self.hide()
             return
         if self.current_generation and not _generation16_is_newer(
             hover.generation, self.current_generation
@@ -157,6 +158,16 @@ class LiveTooltipOverlay:
         if not state.listing or int(state.listing.activity_id or 0) != int(hover.activity_id or 0):
             self.hide()
             return
+        if (
+            not view.snapshot_listing
+            or int(view.snapshot_listing.activity_id or 0) != int(hover.activity_id or 0)
+        ):
+            self.hide()
+            return
+
+        if int(hover.generation) != self.current_generation:
+            self.current_generation = int(hover.generation)
+            self.hide()
 
         metric = role_metric(view)
         if metric is None:
