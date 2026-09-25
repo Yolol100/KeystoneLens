@@ -39,6 +39,56 @@ def role_metric(view: ApplicantView) -> tuple[str, float] | None:
     return ("HPS" if metric_key == "hps" else "DPS"), percentile
 
 
+def percentile_grade(percentile: float | int | None) -> str:
+    """Compact display-only tier derived directly from the WCL percentile."""
+    value = safe_percentile(percentile)
+    if value is None:
+        return "—"
+    if value >= 95:
+        return "S"
+    if value >= 85:
+        return "A"
+    if value >= 75:
+        return "B"
+    if value >= 50:
+        return "C"
+    if value >= 25:
+        return "D"
+    if value >= 10:
+        return "E"
+    return "F"
+
+
+def applicant_board_rows(rows) -> list[tuple[str, str, str]]:
+    """Return current applicants sorted by live WCL percentile, highest first."""
+    prepared: list[tuple[float, str, str, str]] = []
+    for view in rows:
+        name = str(view.applicant.name or "").strip() or "Onbekend"
+        metric = role_metric(view)
+        if metric is not None:
+            metric_name, percentile = metric
+            label = "Healing" if metric_name == "HPS" else "DPS"
+            prepared.append((
+                float(percentile),
+                name,
+                f"{label} {percentile:.0f}%",
+                percentile_grade(percentile),
+            ))
+            continue
+
+        status = {
+            "queued": "Wachten…",
+            "loading": "Laden…",
+            "none": "Geen WCL-data",
+            "error": "WCL fout",
+            "disabled": "Niet verbonden",
+        }.get(str(view.wcl_status or ""), "—")
+        prepared.append((-1.0, name, status, "—"))
+
+    prepared.sort(key=lambda item: (item[0] < 0, -item[0], item[1].casefold()))
+    return [(name, metric_text, grade) for _percentile, name, metric_text, grade in prepared]
+
+
 def percentile_hex(percentile: float) -> str:
     value = safe_percentile(percentile) or 0.0
     if value >= 100:
