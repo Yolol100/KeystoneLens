@@ -11,7 +11,7 @@ from typing import Any
 import requests
 
 from .config import cache_path
-from .constants import DUNGEONS, HEALER_SPECS, SPEC_NAMES
+from .constants import DUNGEONS, HEALER_SPECS, SPEC_CLASS_NAMES, SPEC_NAMES
 from .models import WCLBracket, WCLResult
 from .registries import canonical_dungeon_name, season_for_dungeon, wcl_zone_for_dungeon
 
@@ -612,6 +612,135 @@ class WCLClient:
                 for index, _job in misses
             )
         return finalized
+
+    @staticmethod
+    def _ranking_rows(blob: object) -> list[dict[str, object]]:
+        """Extract provider ranking rows without trusting undocumented JSON shape."""
+        if isinstance(blob, list):
+            return [row for row in blob if isinstance(row, dict)]
+        if not isinstance(blob, dict):
+            return []
+        for key in ("rankings", "data", "rows"):
+            value = blob.get(key)
+            if isinstance(value, list):
+                return [row for row in value if isinstance(row, dict)]
+        return []
+
+    @staticmethod
+    def _ranking_identity(row: dict[str, object]) -> tuple[str, str] | None:
+        character = row.get("character")
+        character = character if isinstance(character, dict) else {}
+        name = row.get("name") or character.get("name")
+
+        server = row.get("server") or character.get("server")
+        realm = row.get("serverName") or row.get("serverSlug")
+        if isinstance(server, dict):
+            realm = realm or server.get("name") or server.get("normalizedName") or server.get("slug")
+        elif isinstance(server, str):
+            realm = realm or server
+
+        if not isinstance(name, str) or not name.strip():
+            return None
+        if not isinstance(realm, str) or not realm.strip():
+            return None
+        return name.strip(), realm.strip()
+
+    def quota_fraction(self) -> float:
+        quota = self.last_quota
+        if not quota:
+            return 0.0
+        spent, limit, _reset = quota
+        if not math.isfinite(spent) or not math.isfinite(limit) or limit <= 0:
+            return 1.0
+        return max(0.0, spent / limit)
+
+    def discover_ranked_characters(
+        self,
+        region: str,
+        dungeon: str,
+        spec_id: int,
+        *,
+        page: int = 1,
+        limit: int = 20,
+    ) -> list[tuple[str, str]]:
+        """Return a small ranked-character seed set for preload discovery.
+
+        Encounter.characterRankings is used only to discover public character
+        identities. Percentiles are fetched separately through the validated
+        character encounterRankings path before anything is written to WoW.
+        """
+        if self._closed.is_set() or time.monotonic() < self._blocked_until:
+            return []
+        if self.quota_fraction() >= 0.80:
+            return []
+
+        dungeon = canonical_dungeon_name(dungeon)
+        encounter = self._resolve_encounter_id(dungeon)
+        class_name = SPEC_CLASS_NAMES.get(int(spec_id or 0), "")
+        spec_name = SPEC_NAMES.get(int(spec_id or 0), "")
+        metric = "hps" if int(spec_id or 0) in HEALER_SPECS else "dps"
+        if not encounter or not class_name or not spec_name:
+            return []
+
+        query = (
+            "query KLPreloadDiscovery($region:String!,$page:Int!,$className:String!,$specName:String!) {\n"
+            "  rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn }\n"
+            "  worldData {\n"
+            f"    encounter(id:{int(encounter)}) {{\n"
+            f"      characterRankings(serverRegion:$region,page:$page,metric:{metric},"
+            "className:$className,specName:$specName)\n"
+            "    }\n"
+            "  }\n"
+            "}"
+        )
+        body = {
+            "query": query,
+            "variables": {
+                "region": str(region).upper(),
+                "page": max(1, int(page)),
+                "className": class_name,
+                "specName": spec_name,
+            },
+        }
+        try:
+            response = self._post_graphql(body)
+        except WCLError:
+            return []
+        if response.status_code == 429:
+            self._blocked_until = time.monotonic() + self._retry_after_seconds(response)
+            return []
+        if response.status_code != 200:
+            return []
+        try:
+            payload = response.json()
+        except ValueError:
+            return []
+        if not isinstance(payload, dict) or payload.get("errors"):
+            return []
+        root = payload.get("data")
+        if not isinstance(root, dict):
+            return []
+        self._apply_quota(root)
+
+        world = root.get("worldData")
+        encounter_data = world.get("encounter") if isinstance(world, dict) else None
+        rankings = encounter_data.get("characterRankings") if isinstance(encounter_data, dict) else None
+        rows = self._ranking_rows(rankings)
+
+        output: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            identity = self._ranking_identity(row)
+            if identity is None:
+                continue
+            normalized = (identity[0].casefold(), identity[1].casefold())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            output.append(identity)
+            if len(output) >= max(1, min(int(limit), 50)):
+                break
+        return output
 
     def _post_graphql(self, body: dict[str, object]):
         if self._closed.is_set():
