@@ -71,6 +71,8 @@ for stale_id in ("62993", "62813", "62825", "62859", "62923"):
     require(stale_id not in constants, f"stale PTR-like fallback ID returned: {stale_id}")
 
 engine = read(APP / "engine.py")
+main_app = read(APP / "__main__.py")
+watcher = read(APP / "watcher.py")
 for token, label in (
     ("def _clear_wcl_queue_locked", "WCL queue invalidation"),
     ("self._listing_closed = False", "listing closed generation guard"),
@@ -79,6 +81,20 @@ for token, label in (
     ("canonical_dungeon_name", "dungeon canonicalization"),
 ):
     require(token in engine, f"missing lifecycle protection: {label}")
+
+for token, label in (
+    ('self.root.protocol("WM_DELETE_WINDOW", self.quit)', "window X shutdown route"),
+    ('text="Afsluiten", command=self.quit', "Afsluiten button shutdown route"),
+    ("def _cleanup_after_ui", "central shutdown cleanup"),
+    ("def _bounded_cleanup", "bounded shutdown cleanup"),
+    ("def _arm_force_exit_watchdog", "shutdown watchdog"),
+    ("self.root.destroy()", "immediate UI destruction"),
+    ("finally:\n            self._cleanup_after_ui()", "cleanup after Tk mainloop"),
+):
+    require(token in main_app, f"missing shutdown protection: {label}")
+require("def request_stop" in watcher, "watcher must support immediate shutdown signaling")
+require("def request_stop" in engine, "engine must support immediate shutdown signaling")
+require((SOURCE / "scripts" / "test_shutdown_contract.py").is_file(), "shutdown regression test is missing")
 
 tooltip = read(BRIDGE / "Core" / "Tooltip.lua")
 for token, label in (
