@@ -7,17 +7,29 @@ KeystoneLens toont in de Mythic+ Group Finder-tooltip alleen Warcraft Logs-data:
 
 Gebruik
 1. Pak de HELE ZIP uit, bijvoorbeeld naar C:\KeystoneLens.
-2. Dubbelklik START-COMPANION.cmd.
+2. Dubbelklik START-COMPANION.cmd, bij voorkeur VOOR je World of Warcraft start.
 3. Vul een Warcraft Logs Client ID en Client Secret in.
 4. Kies je World of Warcraft _retail_\Screenshots-map.
-5. Open je Mythic+ Group Finder listing.
-6. Zodra de Companion data heeft bijgewerkt: gebruik /reload in WoW.
+5. Laat de Companion de lokale preload-database onderhouden.
+6. Open je Mythic+ Group Finder listing.
+7. Staat een applicant al in de geladen database, dan verschijnt de WCL-regel direct onder Raider.IO. Geen per-applicant /reload.
 
-Niet meer aanwezig
+Cache miss
+Staat een applicant nog niet in de database die WoW bij het starten heeft geladen, dan toont KeystoneLens voor die speler geen WCL-regel. De Companion kan die speler leren en opslaan voor een volgende WoW-start. Een bestand dat tijdens een draaiende WoW-sessie wordt bijgewerkt, wordt niet als live IPC behandeld.
+
+Niet aanwezig
 - Geen Raider.IO-client in de Companion.
 - Geen eigen KeystoneLens score.
 - Geen recruitment-overlay.
 - Geen scorefilters, rankingvensters of extra WCL-metrics.
+- Geen DLL/process injection of andere ToS-riskante runtimekoppeling.
+
+Preload
+De Companion bewaart een begrensde, actuele Season 2 database en breidt die incrementeel uit via:
+- applicants die via de bestaande QR/screenshottransport worden ontdekt;
+- kleine WCL ranking-discovery slices, waarna de normale character-WCL-query de percentile valideert.
+
+Credentials blijven alleen in de Companion/config en worden nooit naar WoW-addonbestanden geschreven.
 
 De portable map bevat een eigen lokale Python-runtime. Laat runtime, app, packages,
 RUNTIME.json en START-COMPANION.cmd bij elkaar staan.
@@ -34,4 +46,4 @@ Venster herstellen
 Als KeystoneLens geminimaliseerd is, herstelt een klik op het taakbalkicoon het hoofdvenster. Start je START-COMPANION.cmd nogmaals terwijl KeystoneLens al draait, dan wordt de bestaande instantie naar voren gehaald in plaats van een tweede instantie te starten.
 
 Raider.IO integratie
-Als Raider.IO is geinstalleerd, voegt KeystoneLens zijn ene Warcraft Logs M+ regel direct onder de Raider.IO M+ score toe. Raider.IO is optioneel en wordt niet aangepast; zonder Raider.IO blijft de compacte KeystoneLens tooltip werken.
+Als Raider.IO is geinstalleerd, voegt KeystoneLens zijn ene Warcraft Logs M+ regel direct onder de huidige Raider.IO M+ score toe. Raider.IO is optioneel en wordt niet aangepast; zonder Raider.IO blijft de compacte KeystoneLens tooltip werken.
