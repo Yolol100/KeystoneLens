@@ -23,6 +23,8 @@ The Companion also shows the current Group Finder applicants as a simple live ta
 
 Rows with valid WCL data are sorted highest percentile first. Loading, missing and error states stay below valid rows so the list remains readable while lookups are still running.
 
+The Companion now reports Warcraft Logs as connected only after both OAuth and the real public GraphQL endpoint succeed. Startup performs a minimal `rateLimitData` readiness query, so a token-only success cannot be mistaken for an available provider API.
+
 Rank is not a separate KeystoneLens score. It is only a compact band for the WCL percentile: `S >=95`, `A >=85`, `B >=75`, `C >=50`, `D >=25`, `E >=10`, otherwise `F`.
 
 The existing screenshot/QR discovery path supplies the current applicant identities. The Windows Companion then queries Warcraft Logs directly for those players. Live applicant evidence older than one hour is refreshed from WCL, subject to the existing quota/backoff rules. This means a player can appear immediately in the Windows list without waiting for an in-game addon reload.
@@ -89,6 +91,7 @@ GitHub Actions checks:
 - recycled rows and 30+ rapid applicant identities;
 - live Windows applicant sorting/ranking and rendering;
 - one-hour live applicant cache freshness;
+- OAuth + live Warcraft Logs GraphQL provider readiness, including malformed, auth, GraphQL and rate-limit failure paths;
 - Companion shutdown and window restore;
 - portable Windows build;
 - complete ZIP contents after extraction;
