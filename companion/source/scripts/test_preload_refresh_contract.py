@@ -21,7 +21,7 @@ sys.modules.setdefault("requests", requests_stub)
 
 from keystonelens_companion.models import WCLBracket, WCLResult  # noqa: E402
 from keystonelens_companion.preload_refresh import PreloadRefresher  # noqa: E402
-from keystonelens_companion.wcl import WCLClient  # noqa: E402
+from keystonelens_companion.wcl import WCLCache, WCLClient  # noqa: E402
 
 
 class FakeSync:
@@ -175,6 +175,36 @@ def test_wcl_quota_snapshot_expires_after_provider_reset():
         assert client.last_quota is None
 
 
+def test_live_cache_freshness_miss_keeps_longer_cached_evidence():
+    with tempfile.TemporaryDirectory() as tmp:
+        cache = WCLCache(Path(tmp) / "wcl.json", ttl=12 * 60 * 60)
+        bracket = WCLBracket(
+            key_level=0,
+            best_percentile=91.0,
+            median_percentile=90.0,
+            run_count=2,
+            average_percentile=90.5,
+        )
+        cached = WCLResult(
+            name="Alice",
+            realm="Draenor",
+            dungeon_name="Altar of Fangs",
+            spec_id=62,
+            bracket=None,
+            fetched_at=time.time() - (2 * 60 * 60),
+            metric_brackets={"dps": bracket},
+        )
+        cache.put("EU", cached)
+
+        assert cache.get(
+            "EU", "Draenor", "Alice", 62, "Altar of Fangs", 0,
+            max_age_seconds=60 * 60,
+        ) is None
+        assert cache.get(
+            "EU", "Draenor", "Alice", 62, "Altar of Fangs", 0
+        ) is not None
+
+
 def test_quota_exhaustion_and_offline_are_safe():
     with tempfile.TemporaryDirectory() as tmp:
         sync = FakeSync()
@@ -196,5 +226,6 @@ if __name__ == "__main__":
     test_incremental_refresh_and_role_metric()
     test_discovery_cursor_advances_to_next_ranking_page()
     test_wcl_quota_snapshot_expires_after_provider_reset()
+    test_live_cache_freshness_miss_keeps_longer_cached_evidence()
     test_quota_exhaustion_and_offline_are_safe()
     print("KeystoneLens preload refresh contract passed.")
