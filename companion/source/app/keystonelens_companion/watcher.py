@@ -64,7 +64,7 @@ class ScreenshotWatcher:
         """Signal shutdown without waiting for filesystem/decoder work."""
         self.stop_event.set()
 
-    def stop(self, timeout: float = 1.0) -> bool:
+    def stop(self, timeout: float = 3.0) -> bool:
         """Stop with a hard caller-controlled wait bound."""
         self.request_stop()
         thread = self.thread
