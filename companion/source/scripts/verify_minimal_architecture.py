@@ -135,8 +135,12 @@ for token, label in (
 ):
     require(token in preload, f"preload architecture changed: {label}")
 require("WoW reads Data.lua only while loading addons" in addon_sync, "file-load boundary must stay explicit")
+launcher = read(SOURCE / "portable" / "portable_launcher.py")
 for forbidden in ("LiveHover", "LiveTooltipOverlay", "live_overlay", "valueX", "valueY"):
-    require(forbidden not in app_text and forbidden not in tooltip, f"obsolete live-overlay path returned: {forbidden}")
+    require(
+        forbidden not in app_text and forbidden not in tooltip and forbidden not in launcher,
+        f"obsolete live-overlay path returned: {forbidden}",
+    )
 for unwanted in ("KL Score", "KL evidence", "KL bronnen", "rioComponent", "wclRuns"):
     require(unwanted not in tooltip, f"tooltip is no longer minimal: {unwanted}")
 
@@ -149,7 +153,6 @@ for rel in (
 ):
     require((SOURCE / rel).is_file(), f"required portable component missing: {rel}")
 
-launcher = read(SOURCE / "portable" / "portable_launcher.py")
 start_cmd = read(SOURCE / "portable" / "START-COMPANION.cmd")
 builder = read(SOURCE / "portable" / "build-portable.ps1")
 require('os.environ["TCL_LIBRARY"]' in launcher, "portable launcher must bind bundled Tcl")
