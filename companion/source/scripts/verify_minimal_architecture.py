@@ -73,6 +73,11 @@ for stale_id in ("62993", "62813", "62825", "62859", "62923"):
 engine = read(APP / "engine.py")
 main_app = read(APP / "__main__.py")
 watcher = read(APP / "watcher.py")
+models = read(APP / "models.py")
+aps1 = read(APP / "aps1.py")
+overlay = read(APP / "live_overlay.py")
+metrics = read(APP / "metrics.py")
+transport = read(BRIDGE / "Core" / "Transport.lua")
 for token, label in (
     ("def _clear_wcl_queue_locked", "WCL queue invalidation"),
     ("self._listing_closed = False", "listing closed generation guard"),
@@ -96,6 +101,8 @@ require("def request_stop" in watcher, "watcher must support immediate shutdown 
 require("def request_stop" in engine, "engine must support immediate shutdown signaling")
 require((SOURCE / "scripts" / "test_shutdown_contract.py").is_file(), "shutdown regression test is missing")
 require((SOURCE / "scripts" / "test_window_visibility_contract.py").is_file(), "window restore regression test is missing")
+require((SOURCE / "scripts" / "test_live_transport_contract.py").is_file(), "live transport regression test is missing")
+require((SOURCE / "scripts" / "test_live_overlay_contract.py").is_file(), "live overlay regression test is missing")
 require("class SettingsDialog" not in main_app, "modal SettingsDialog must not return")
 require("grab_set()" not in main_app, "modal Tk grab must not return")
 require('self.root.bind("<Map>", self._on_root_mapped' in main_app, "taskbar restore Map binding is missing")
@@ -115,10 +122,48 @@ for token, label in (
     ("TooltipDataProcessor.AddTooltipPostCall", "normal player tooltip integration"),
     ("TooltipUtil.GetDisplayedUnit", "taint-safe displayed-unit lookup"),
     ("ScrollBoxUtil.OnViewFramesChanged", "current LFG recycled-frame hook"),
+    ("RequestLiveHoverValue", "live LFG hover transport"),
+    ('tooltip:AddDoubleLine(\n                KL_ICON .. " Warcraft Logs M+"', "no-reload placeholder row"),
 ):
     require(token in tooltip, f"tooltip contract changed: {label}")
 require("RaiderIO" in bridge_toc, "RaiderIO must remain an OptionalDep for deterministic tooltip order")
 require((SOURCE / "scripts" / "test_tooltip_contract.lua").is_file(), "Raider.IO tooltip regression suite is missing")
+
+for token, label in (
+    ("class LiveHover", "live hover model"),
+    ("live_hover: Optional[LiveHover]", "live hover snapshot/state field"),
+):
+    require(token in models, f"live update contract changed: {label}")
+
+for token, label in (
+    ("SUPPORTED = set(range(1, 15))", "APS1 v14 decoder support"),
+    ("if version >= 14:", "APS1 v14 live-hover block"),
+    ("live_hover=live_hover", "decoded live-hover publication"),
+):
+    require(token in aps1, f"live transport contract changed: {label}")
+
+for token, label in (
+    ("KL.RequestLiveHover = function", "WoW live-hover request API"),
+    ("string.char(0x0E)", "APS1 v14 encoder"),
+    ('MarkDirty("live-hover")', "immediate live-hover transport trigger"),
+):
+    require(token in transport, f"live transport contract changed: {label}")
+
+for token, label in (
+    ("class LiveTooltipOverlay", "Windows live overlay"),
+    ("WS_EX_TRANSPARENT", "mouse-through overlay"),
+    ("WS_EX_NOACTIVATE", "no-activate overlay"),
+    ("GWLP_HWNDPARENT", "detached overlay owner"),
+    ('"world of warcraft" in title', "foreground WoW gate"),
+    ("role_metric(view)", "shared DPS/HPS metric policy"),
+):
+    require(token in overlay, f"live overlay contract changed: {label}")
+
+require("def role_metric" in metrics, "shared role metric helper is missing")
+require("LiveTooltipOverlay(self.root)" in main_app, "Companion does not create the live overlay")
+require("self.live_overlay.update_from_state(state)" in main_app, "Companion does not publish engine state to live overlay")
+require("/reload in WoW om nieuwe tooltipdata te laden" not in main_app, "live UI regressed to a reload requirement")
+
 for unwanted in ("KL Score", "KL evidence", "KL bronnen", "rioComponent", "wclRuns"):
     require(unwanted not in tooltip, f"tooltip is no longer minimal: {unwanted}")
 
@@ -141,6 +186,17 @@ require("--verify-ui" in start_cmd, "START-COMPANION must run the GUI smoke befo
 require("--verify-ui" in builder, "portable build must verify the extracted GUI runtime")
 require("def restore_existing_window" in launcher, "portable launcher must restore an existing window")
 require("if restore_existing_window():" in launcher, "second start must foreground the existing Companion")
+require("LiveTooltipOverlay" in launcher, "portable GUI smoke must create the live overlay")
+
+
+readme = read(ROOT / "README.md")
+portable_readme = read(SOURCE / "portable" / "LEESMIJ.txt")
+workflow = read(ROOT / ".github" / "workflows" / "verify-keystonelens.yml")
+require("does **not** require `/reload`" in readme, "README must state the no-reload contract")
+require("geen WoW-reload nodig" in portable_readme, "portable instructions must state the no-reload contract")
+require("Gebruik /reload nadat nieuwe tooltipdata is opgehaald." not in workflow, "complete package instructions regressed to /reload")
+require("test_live_transport_contract.py" in workflow, "CI does not execute live transport tests")
+require("test_live_overlay_contract.py" in workflow, "CI does not execute live overlay tests")
 
 requirements = read(SOURCE / "runtime" / "requirements-runtime.txt").casefold()
 for package in ("requests", "pillow", "zxing-cpp"):
