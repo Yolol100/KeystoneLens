@@ -45,6 +45,7 @@ removed_modules = [
     "ui_recruitment_patch.py",
     "ui_recruitment_persistence_patch.py",
 ]
+removed_modules += ["live_overlay.py"]
 for name in removed_modules:
     require(not (APP / name).exists(), f"obsolete module returned: {name}")
 
@@ -104,11 +105,13 @@ require("def _show_main_window" in main_app, "main-window restore helper is miss
 tooltip = read(BRIDGE / "Core" / "Tooltip.lua")
 bridge_toc = read(BRIDGE / "KeystoneLensBridge.toc")
 for token, label in (
-    ("REQUIRED_CACHE_VERSION = 3", "cache v3"),
+    ("REQUIRED_DATASET_VERSION = 4", "preload v4"),
+    ('REQUIRED_SEASON = "midnight-s2"', "current-season preload guard"),
     ("local specID = results[17]", "current applicant spec extraction"),
-    ("tonumber(entry.activityID) ~= activityID", "activity guard"),
-    ("tonumber(entry.specID) ~= specID", "spec guard"),
-    ('metric ~= "DPS" and metric ~= "HPS"', "DPS/HPS metric guard"),
+    ("GetActivityInfoTable", "current dungeon identity lookup"),
+    ("ApplicantKey", "O(1) applicant preload key"),
+    ("UnitKey", "O(1) unit preload key"),
+    ("ValidateTuple", "compact preload record guard"),
     ("RegisterRaiderIOScoreHook", "Raider.IO score-line integration"),
     ('plain == "Raider.IO M+ Score" or plain == "Current M+ Score"', "Raider.IO current-score detection"),
     ("AppendCurrentTooltipContext", "shared LFG/unit tooltip context"),
@@ -119,6 +122,21 @@ for token, label in (
     require(token in tooltip, f"tooltip contract changed: {label}")
 require("RaiderIO" in bridge_toc, "RaiderIO must remain an OptionalDep for deterministic tooltip order")
 require((SOURCE / "scripts" / "test_tooltip_contract.lua").is_file(), "Raider.IO tooltip regression suite is missing")
+require((SOURCE / "scripts" / "test_preload_contract.py").is_file(), "preload database regression suite is missing")
+preload = read(APP / "preload.py")
+addon_sync = read(APP / "addon_sync.py")
+for token, label in (
+    ("DATASET_VERSION = 4", "preload dataset version"),
+    ("MAX_RECORDS = 25000", "bounded preload record count"),
+    ("tmp.replace(self.path)", "atomic preload store write"),
+    ("backup_path", "last-known-good preload backup"),
+    ("render_lua_dataset", "generated Lua preload database"),
+    ("unitEntries", "O(1) unit lookup index"),
+):
+    require(token in preload, f"preload architecture changed: {label}")
+require("WoW reads Data.lua only while loading addons" in addon_sync, "file-load boundary must stay explicit")
+for forbidden in ("LiveHover", "LiveTooltipOverlay", "live_overlay", "valueX", "valueY"):
+    require(forbidden not in app_text and forbidden not in tooltip, f"obsolete live-overlay path returned: {forbidden}")
 for unwanted in ("KL Score", "KL evidence", "KL bronnen", "rioComponent", "wclRuns"):
     require(unwanted not in tooltip, f"tooltip is no longer minimal: {unwanted}")
 
