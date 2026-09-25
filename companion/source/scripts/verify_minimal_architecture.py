@@ -133,6 +133,7 @@ require((SOURCE / "scripts" / "test_tooltip_contract.lua").is_file(), "Raider.IO
 for token, label in (
     ("class LiveHover", "live hover model"),
     ("live_hover: Optional[LiveHover]", "live hover snapshot/state field"),
+    ("listing_generation: int = 0", "listing generation in engine state"),
 ):
     require(token in models, f"live update contract changed: {label}")
 
@@ -157,12 +158,14 @@ for token, label in (
     ("GWLP_HWNDPARENT", "detached overlay owner"),
     ('"world of warcraft" in title', "foreground WoW gate"),
     ("role_metric(view)", "shared DPS/HPS metric policy"),
+    ("current_listing_generation", "listing-bound hover ordering"),
 ):
     require(token in overlay, f"live overlay contract changed: {label}")
 
 require("def role_metric" in metrics, "shared role metric helper is missing")
 require("LiveTooltipOverlay(self.root)" in main_app, "Companion does not create the live overlay")
 require("self.live_overlay.update_from_state(state)" in main_app, "Companion does not publish engine state to live overlay")
+require("listing_generation=self._listing_generation" in engine, "engine state does not publish listing generation")
 require("/reload in WoW om nieuwe tooltipdata te laden" not in main_app, "live UI regressed to a reload requirement")
 
 for unwanted in ("KL Score", "KL evidence", "KL bronnen", "rioComponent", "wclRuns"):
