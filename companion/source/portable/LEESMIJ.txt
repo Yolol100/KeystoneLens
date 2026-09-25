@@ -29,3 +29,6 @@ Afsluiten
 Gebruik de X rechtsboven of de knop Afsluiten. Beide stoppen de Companion,
 de screenshot-watcher en de WCL-worker. Een shutdown-watchdog voorkomt dat een
 achtergrondproces blijft hangen.
+
+Venster herstellen
+Als KeystoneLens geminimaliseerd is, herstelt een klik op het taakbalkicoon het hoofdvenster. Start je START-COMPANION.cmd nogmaals terwijl KeystoneLens al draait, dan wordt de bestaande instantie naar voren gehaald in plaats van een tweede instantie te starten.
