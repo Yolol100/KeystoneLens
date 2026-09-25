@@ -244,18 +244,31 @@ def _write_crash_log(exc_type, exc_value, exc_traceback) -> None:
         pass
 
 
-def main() -> None:
+def _safe_stderr(message: str) -> None:
+    stream = sys.stderr
+    if stream is None:
+        return
+    try:
+        stream.write(message + "\n")
+        stream.flush()
+    except Exception:
+        pass
+
+
+def main() -> int:
     _enable_dpi_awareness()
     try:
         App().run()
+        return 0
     except tk.TclError as exc:
         _write_crash_log(type(exc), exc, exc.__traceback__)
-        print(f"KeystoneLens UI could not start: {exc}", file=sys.stderr)
-        raise SystemExit(2)
+        _safe_stderr(f"KeystoneLens UI could not start: {exc}")
+        return 2
     except Exception as exc:
         _write_crash_log(type(exc), exc, exc.__traceback__)
-        raise SystemExit(1)
+        _safe_stderr(f"KeystoneLens could not start: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
