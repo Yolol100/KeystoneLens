@@ -78,11 +78,12 @@ validated result of that query is eligible for the preload database.
 The refresher:
 
 - processes at most four dungeon/spec slices per run;
-- samples at most 20 identities per slice;
+- samples at most 50 identities per slice;
 - reuses WCL batching of at most 10 characters;
 - stops discovery at 80% observed hourly quota use;
 - retains existing WCL 429 backoff and cache behavior;
-- advances a persistent cursor so later starts cover different slices.
+- advances a persistent cursor so later refreshes cover different slices;
+- refreshes at most once per hour while the authenticated Companion remains open.
 
 This intentionally does not attempt to download every WoW character.
 
