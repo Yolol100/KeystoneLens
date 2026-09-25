@@ -202,8 +202,14 @@ jobs:
             }
           }
 
+          $verifyPython = Join-Path $verifyRoot "Windows-Companion\runtime\python.exe"
+          & $verifyPython -B "companion/source/scripts/verify_complete_package_parity.py" $verifyRoot
+          if ($LASTEXITCODE -ne 0) {
+            throw "Complete package source parity verification failed."
+          }
+
           "COMPLETE_ARTIFACT=$completeZip" >> $env:GITHUB_ENV
-          "CI_STAGE=complete-zip-verified" >> $env:GITHUB_ENV
+          "CI_STAGE=complete-zip-parity-verified" >> $env:GITHUB_ENV
 
       - name: Upload verified portable ZIP
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
