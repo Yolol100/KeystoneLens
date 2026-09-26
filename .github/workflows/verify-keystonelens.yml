@@ -60,6 +60,9 @@ jobs:
       - name: Verify Raider.IO tooltip integration
         run: lua5.1 companion/source/scripts/test_tooltip_contract.lua
 
+      - name: Verify transport secret safety
+        run: lua5.1 companion/source/scripts/test_transport_secret_safety.lua
+
       - name: Verify preload database contract
         run: python companion/source/scripts/test_preload_contract.py
 

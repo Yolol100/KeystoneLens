@@ -314,6 +314,13 @@ local function SafeEnumKey(v, default)
     return default
 end
 
+entryCreationKeyState.CleanGroupMemberCount = function()
+    if type(GetNumGroupMembers) ~= "function" then return nil end
+    local ok, value = pcall(GetNumGroupMembers)
+    if not ok or value == nil or IsSecretValue(value) then return nil end
+    return math.floor(SafeNumber(value, 0))
+end
+
 local function IsChatMessagingLockdown()
     return C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
            and C_ChatInfo.InChatMessagingLockdown() or false
@@ -1479,7 +1486,9 @@ local function _GetOwnedKeystoneListingInfo()
 end
 
 entryCreationKeyState.CanUseOwnedKeystoneForListingFallback = function()
-    if not (IsInGroup and IsInGroup()) then return true end
+    local grouped = entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup)
+    if grouped == false then return true end
+    if grouped ~= true then return false end
     if entryCreationKeyState.CleanUnitIsGroupLeader("player") == true then return true end
     return false
 end
@@ -4624,9 +4633,7 @@ entryCreationKeyState.ClearAutoResumeState = function()
 end
 
 entryCreationKeyState.CaptureAutoPauseReason = function()
-    local groupCount = math.floor(SafeNumber(
-        GetNumGroupMembers and GetNumGroupMembers(), 0
-    ))
+    local groupCount = entryCreationKeyState.CleanGroupMemberCount()
     local inRaid = false
     if IsInRaid then
         local ok, value = pcall(IsInRaid)
