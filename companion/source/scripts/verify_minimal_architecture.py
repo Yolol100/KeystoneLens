@@ -150,6 +150,7 @@ require("qrFramePosition" not in transport_state, "legacy qrFramePosition state 
 require("debug = false" not in transport_state, "legacy debug state default returned")
 require("debugDefaultMigrated" not in transport_state, "legacy debug migration sentinel returned")
 require('SLASH_KEYSTONELENSBRIDGE1 = "/kl"' in transport, "public /kl command route changed")
+require('MarkDirty("' not in transport, "obsolete MarkDirty reason arguments returned")
 for token, label in (
     ("REQUIRED_DATASET_VERSION = 4", "preload v4"),
     ('REQUIRED_SEASON = "midnight-s2"', "current-season preload guard"),

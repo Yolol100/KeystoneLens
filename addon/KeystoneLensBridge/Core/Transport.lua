@@ -1906,7 +1906,7 @@ entryCreationKeyState.MarkRosterCompositionChanged = function()
             if not (KeystoneLensBridgeDB and KeystoneLensBridgeDB.enabled) then return end
             if not isSessionActive then return end
             pendingShotDirty = true
-            MarkDirty("rosterdeadline")
+            MarkDirty()
         end)
     end
 end
@@ -1946,7 +1946,7 @@ entryCreationKeyState.ScheduleRosterInspectBatchRetry = function(delay)
         if not isSessionActive then return end
         if entryCreationKeyState.rosterInspectBatchDirtyPending
            and not entryCreationKeyState.FlushOrContinueRosterInspectBatch() then
-            MarkDirty("inspect")
+            MarkDirty()
         end
     end)
     return true
@@ -1996,7 +1996,7 @@ entryCreationKeyState.ScheduleRosterLoadRetry = function()
         if not (KeystoneLensBridgeDB and KeystoneLensBridgeDB.enabled) then return end
         if not isSessionActive then return end
         pendingShotDirty = true
-        MarkDirty("rosterload")
+        MarkDirty()
     end)
     return true
 end
@@ -2136,7 +2136,7 @@ local function _OnRosterInspectReady(guid)
             if entryCreationKeyState.FlushOrContinueRosterInspectBatch() then
                 return false
             end
-            MarkDirty("inspect")
+            MarkDirty()
         end
         return false
     end
@@ -2169,7 +2169,7 @@ local function _OnRosterInspectReady(guid)
         if entryCreationKeyState.FlushOrContinueRosterInspectBatch() then
             return true
         end
-        MarkDirty("inspect")
+        MarkDirty()
     end
     return resolved
 end
@@ -2608,7 +2608,7 @@ entryCreationKeyState.OnLeaderKeystoneData = function(keyLevel, challengeMapID, 
     local rawChallengeMapID = SafeNumber(challengeMapID, -1)
     if rawKeyLevel == 0 and rawChallengeMapID == 0 then
         entryCreationKeyState.ClearLeaderKeystone()
-        MarkDirty("leaderkey")
+        MarkDirty()
         return
     end
     keyLevel = _NormalizeKeystoneLevel(rawKeyLevel)
@@ -2629,7 +2629,7 @@ entryCreationKeyState.OnLeaderKeystoneData = function(keyLevel, challengeMapID, 
         at = GetTime and GetTime() or 0,
     }
     entryCreationKeyState.leaderKeystoneContextCombatDeferred = false
-    MarkDirty("leaderkey")
+    MarkDirty()
 end
 
 entryCreationKeyState.RegisterLeaderKeystoneCallback = function()
@@ -3904,7 +3904,7 @@ entryCreationKeyState.RecoverStalledQRTransport = function(now)
             entryCreationKeyState.terminalClearSessionGen
         )
     else
-        MarkDirty("qrwatchdog")
+        MarkDirty()
     end
     return true
 end
@@ -4340,7 +4340,7 @@ MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllow
                 if not entryCreationKeyState.DispatchPendingForcedScreenshot()
                    and isSessionActive then
                     pendingShotDirty = true
-                    MarkDirty("screenshotsuperseded")
+                    MarkDirty()
                 end
                 return true
             end
@@ -4604,7 +4604,7 @@ _SetupLFGEntryCreationHooks = function()
                 entryCreationKeyState.listingCreatePending = true
                 lastSnapshotHash = nil
                 entryCreationKeyState.ClearQROverflowTransport("listing-create")
-                MarkDirty("listing-create")
+                MarkDirty()
             end)
         end
     end)
@@ -4708,7 +4708,7 @@ entryCreationKeyState.MaybeAutoResumeForListing = function(reason)
        or reopenedApplicantViewer then
         entryCreationKeyState.ClearAutoResumeState()
         _SetEnabled(true)
-        MarkDirty("auto-resume:" .. tostring(reason or "listing"))
+        MarkDirty()
         APSPrint("nieuwe LFG-listing gedetecteerd — automatisch weer ingeschakeld")
         return true
     end
@@ -4743,7 +4743,7 @@ local EVENT_HANDLERS = {
     PLAYER_LOGIN                     = function()
         InitDB()
         entryCreationKeyState.RefreshInteractionTypeMappings()
-        MarkDirty("login")
+        MarkDirty()
         -- KeystoneLens is transport-only: no chat greetings, listing-form
         -- mutation, settings chrome, or Blizzard-frame movement.
         _SetupLFGEntryCreationHooks() -- read/capture-only host-key fallback
@@ -4761,7 +4761,7 @@ local EVENT_HANDLERS = {
         -- Recover a lease interrupted by /reload. The next actual capture
         -- reacquires lossless PNG immediately before Screenshot().
         entryCreationKeyState.screenshotController:RestoreScreenshotCVars(false)
-        MarkDirty("pew")
+        MarkDirty()
         C_Timer.After(1.0, function()
             entryCreationKeyState.MaybeAutoResumeForListing("world")
         end)
@@ -4798,12 +4798,12 @@ local EVENT_HANDLERS = {
     PARTY_LEADER_CHANGED             = function()
         entryCreationKeyState.ClearLeaderKeystone()
         entryCreationKeyState.RequestLeaderKeystone(true)
-        MarkDirty("ldrchg")
+        MarkDirty()
     end,
     GROUP_ROSTER_UPDATE              = function()
         entryCreationKeyState.ReconcileRosterInspectMembership()
         entryCreationKeyState.MarkRosterCompositionChanged()
-        MarkDirty("roster")
+        MarkDirty()
         entryCreationKeyState.RequestLeaderKeystone(false)
     end,
     -- Blizzard's own Group Finder UI listens to these events. KeystoneLens uses
@@ -4811,15 +4811,15 @@ local EVENT_HANDLERS = {
     -- and reads one fresh authoritative snapshot on the scheduler tick.
     LFG_LIST_ACTIVE_ENTRY_UPDATE       = function()
         entryCreationKeyState.MaybeAutoResumeForListing("listing-event")
-        MarkDirty("listing")
+        MarkDirty()
     end,
-    LFG_LIST_APPLICANT_LIST_UPDATED    = function() MarkDirty("apps") end,
-    LFG_LIST_APPLICANT_UPDATED         = function() MarkDirty("app") end,
+    LFG_LIST_APPLICANT_LIST_UPDATED    = function() MarkDirty() end,
+    LFG_LIST_APPLICANT_UPDATED         = function() MarkDirty() end,
     GROUP_LEFT                       = function()
         entryCreationKeyState.AdvanceGroupTransportGeneration()
         entryCreationKeyState.ClearLeaderKeystone()
         entryCreationKeyState.MarkRosterCompositionChanged()
-        MarkDirty("groupleft")
+        MarkDirty()
     end,
     CHAT_MSG_ADDON                  = function(_, prefix, msg, channel, sender)
         entryCreationKeyState.LibKeystoneShimHandleAddonMessage(prefix, msg, channel, sender)
@@ -4827,14 +4827,14 @@ local EVENT_HANDLERS = {
     PLAYER_SPECIALIZATION_CHANGED      = function(_, unit)
         _InvalidateRosterSpecCacheForUnit(unit)
         entryCreationKeyState.ClearRosterLoadRetryState()
-        MarkDirty("spec")
+        MarkDirty()
     end,
     PLAYER_REGEN_ENABLED              = function()
         if entryCreationKeyState.leaderKeystoneContextCombatDeferred then
             entryCreationKeyState.leaderKeystoneContextCombatDeferred = false
             if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) == true then
                 entryCreationKeyState.RequestLeaderKeystone(true)
-                MarkDirty("leaderkey")
+                MarkDirty()
             end
         end
         if entryCreationKeyState.rosterInspectBatchCombatDeferred then
@@ -4842,7 +4842,7 @@ local EVENT_HANDLERS = {
             entryCreationKeyState.rosterInspectBatchCombatDeferred = false
             entryCreationKeyState.rosterInspectBatchLastBlockReason = nil
             if not entryCreationKeyState.FlushOrContinueRosterInspectBatch() then
-                MarkDirty("inspect")
+                MarkDirty()
             end
         end
     end,
