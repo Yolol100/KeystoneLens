@@ -314,9 +314,17 @@ local function SafeEnumKey(v, default)
     return default
 end
 
+entryCreationKeyState.CleanGroupMemberCount = function()
+    if type(GetNumGroupMembers) ~= "function" then return nil end
+    local ok, value = pcall(GetNumGroupMembers)
+    if not ok or value == nil or IsSecretValue(value) then return nil end
+    return math.floor(SafeNumber(value, 0))
+end
+
 local function IsChatMessagingLockdown()
-    return C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
-           and C_ChatInfo.InChatMessagingLockdown() or false
+    local api = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+    if type(api) ~= "function" then return false end
+    return entryCreationKeyState.CleanUnitAPIBoolean(api) ~= false
 end
 
 -- Return a prefix no longer than maxBytes that never ends inside a UTF-8
@@ -573,7 +581,8 @@ EndSession = function(emitTerminalClear)
 end
 
 local function _HasGroupRosterForTransport()
-    return math.floor(SafeNumber(GetNumGroupMembers and GetNumGroupMembers(), 0)) > 0
+    local groupCount = entryCreationKeyState.CleanGroupMemberCount()
+    return groupCount ~= nil and groupCount > 0
 end
 
 CheckSessionTransition = function(lfgReadsAllowed)
@@ -1479,7 +1488,9 @@ local function _GetOwnedKeystoneListingInfo()
 end
 
 entryCreationKeyState.CanUseOwnedKeystoneForListingFallback = function()
-    if not (IsInGroup and IsInGroup()) then return true end
+    local grouped = entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup)
+    if grouped == false then return true end
+    if grouped ~= true then return false end
     if entryCreationKeyState.CleanUnitIsGroupLeader("player") == true then return true end
     return false
 end
@@ -1601,10 +1612,12 @@ end
 
 local function _ForEachRosterUnit(callback)
     if type(callback) ~= "function" then return end
-    local groupCount = math.floor(SafeNumber(GetNumGroupMembers and GetNumGroupMembers(), 0))
-    if groupCount <= 0 then return end
+    local groupCount = entryCreationKeyState.CleanGroupMemberCount()
+    if groupCount == nil or groupCount <= 0 then return end
 
-    if IsInRaid and IsInRaid() then
+    local inRaid = entryCreationKeyState.CleanUnitAPIBoolean(IsInRaid)
+    if inRaid == nil then return end
+    if inRaid == true then
         if groupCount > 40 then groupCount = 40 end
         for i = 1, groupCount do
             if callback("raid" .. i) then return end
@@ -2090,9 +2103,9 @@ entryCreationKeyState.FlushOrContinueRosterInspectBatch = function()
 end
 
 entryCreationKeyState.EnsureRosterInspectBatchBeforeSnapshot = function()
-    local groupCount = math.floor(SafeNumber(GetNumGroupMembers and GetNumGroupMembers(), 0))
-    if groupCount <= 0 or groupCount > 5 then return false end
-    if IsInRaid and IsInRaid() then return false end
+    local groupCount = entryCreationKeyState.CleanGroupMemberCount()
+    if groupCount == nil or groupCount <= 0 or groupCount > 5 then return false end
+    if entryCreationKeyState.CleanUnitAPIBoolean(IsInRaid) ~= false then return false end
     if not entryCreationKeyState.rosterInspectBatchDirtyPending then
         local seeded = false
         local now = GetTime and GetTime() or 0
@@ -2315,7 +2328,7 @@ entryCreationKeyState.SendLibKeystoneAddonMessage = function(payload, channel)
         return false, "disabled"
     end
     if channel ~= "PARTY" then return false, "bad-channel" end
-    if not (IsInGroup and IsInGroup()) then return false, "not-grouped" end
+    if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return false, "not-grouped" end
     if IsChatMessagingLockdown() then return false, "lockdown" end
     if not entryCreationKeyState.RegisterLibKeystonePrefix() then
         return false, "prefix-unavailable"
@@ -2393,7 +2406,7 @@ entryCreationKeyState.ScheduleLibKeystoneResponseRetry = function(channel, reaso
         return false
     end
     if not (C_Timer and C_Timer.After) then return false end
-    if not (IsInGroup and IsInGroup()) then return false end
+    if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return false end
 
     local now = GetTime and GetTime() or 0
     local delay = entryCreationKeyState.LIB_KEYSTONE_RESPONSE_RETRY_DELAY_S
@@ -2418,7 +2431,7 @@ entryCreationKeyState.ScheduleLibKeystoneResponseRetry = function(channel, reaso
         entryCreationKeyState.libKeystoneResponseRetryDeadline = nil
         entryCreationKeyState.libKeystoneResponseRetryGeneration = nil
         if retryGroupGen ~= entryCreationKeyState.groupTransportGen then return end
-        if not (IsInGroup and IsInGroup()) then return end
+        if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return end
         if not entryCreationKeyState.IsLibKeystoneTransportEnabled() then return end
         if not entryCreationKeyState.IsLibKeystoneShimResponderOwner() then return end
         local ok, retryReason = entryCreationKeyState.SendLibKeystoneShimInfo(channel)
@@ -2450,7 +2463,7 @@ end
 entryCreationKeyState.ScheduleLeaderKeystoneRefresh = function()
     if not entryCreationKeyState.IsLibKeystoneTransportEnabled() then return false end
     if not (C_Timer and C_Timer.After) then return false end
-    if not (IsInGroup and IsInGroup()) then return false end
+    if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return false end
 
     local refreshGroupGen = entryCreationKeyState.groupTransportGen
     if entryCreationKeyState.leaderKeystoneRefreshDeadline ~= nil
@@ -2469,7 +2482,7 @@ entryCreationKeyState.ScheduleLeaderKeystoneRefresh = function()
         entryCreationKeyState.leaderKeystoneRefreshDeadline = nil
         entryCreationKeyState.leaderKeystoneRefreshGeneration = nil
         if refreshGroupGen ~= entryCreationKeyState.groupTransportGen then return end
-        if not (IsInGroup and IsInGroup()) then return end
+        if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return end
         if not entryCreationKeyState.IsLibKeystoneTransportEnabled() then return end
         entryCreationKeyState.RequestLeaderKeystone(false)
     end)
@@ -2600,7 +2613,7 @@ end
 entryCreationKeyState.OnLeaderKeystoneData = function(keyLevel, challengeMapID, _rating, playerName, channel)
     if not entryCreationKeyState.IsLibKeystoneTransportEnabled() then return end
     if channel ~= "PARTY" then return end
-    if not (IsInGroup and IsInGroup()) then return end
+    if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return end
     local leaderName = entryCreationKeyState.CurrentPartyLeaderName()
     if not leaderName or leaderName == "" then return end
     if not entryCreationKeyState.PlayerNamesMatch(playerName, leaderName) then return end
@@ -2674,7 +2687,7 @@ entryCreationKeyState.ScheduleLeaderKeystoneRequestRetry = function(attempt, rea
         return false
     end
     if not (C_Timer and C_Timer.After) then return false end
-    if not (IsInGroup and IsInGroup()) then return false end
+    if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return false end
 
     local now = GetTime and GetTime() or 0
     local delay = entryCreationKeyState.LEADER_KEY_REQUEST_RETRY_DELAY_S
@@ -2701,7 +2714,7 @@ entryCreationKeyState.ScheduleLeaderKeystoneRequestRetry = function(attempt, rea
         entryCreationKeyState.leaderKeystoneRequestRetryDeadline = nil
         entryCreationKeyState.leaderKeystoneRequestRetryGeneration = nil
         if retryGroupGen ~= entryCreationKeyState.groupTransportGen then return end
-        if not (IsInGroup and IsInGroup()) then return end
+        if entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then return end
         if not entryCreationKeyState.IsLibKeystoneTransportEnabled() then return end
         entryCreationKeyState.RequestLeaderKeystone(true, attempt + 1)
     end)
@@ -2713,7 +2726,7 @@ entryCreationKeyState.RequestLeaderKeystone = function(force, attempt)
         return
     end
     if not entryCreationKeyState.RegisterLeaderKeystoneCallback()
-       or not (IsInGroup and IsInGroup()) then
+       or entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup) ~= true then
         return
     end
     local now = GetTime and GetTime() or 0
@@ -2793,9 +2806,12 @@ local function BuildRosterPayloadRows(listingActivityIDForContext, listingKeyLev
     local emittedCount = 0
     local rows = {}
     local rosterQuietHasUnknownSpec = false
-    local groupCount = math.floor(SafeNumber(GetNumGroupMembers and GetNumGroupMembers(), 0))
-    local inRaid = IsInRaid and IsInRaid() or false
+    local groupCount = entryCreationKeyState.CleanGroupMemberCount()
+    local inRaid = entryCreationKeyState.CleanUnitAPIBoolean(IsInRaid)
     local expectedRosterCount = 0
+    if groupCount == nil or inRaid == nil then
+        return "", 0, "", false, false, true
+    end
     if groupCount <= 0 then
         if includeSoloPlayer then
             local playerRow = _BuildRosterRow("player", 1, 1, false)
@@ -4624,14 +4640,8 @@ entryCreationKeyState.ClearAutoResumeState = function()
 end
 
 entryCreationKeyState.CaptureAutoPauseReason = function()
-    local groupCount = math.floor(SafeNumber(
-        GetNumGroupMembers and GetNumGroupMembers(), 0
-    ))
-    local inRaid = false
-    if IsInRaid then
-        local ok, value = pcall(IsInRaid)
-        inRaid = ok and value and true or false
-    end
+    local groupCount = entryCreationKeyState.CleanGroupMemberCount()
+    local inRaid = entryCreationKeyState.CleanUnitAPIBoolean(IsInRaid) == true
 
     local challengeActive = false
     if C_ChallengeMode and type(C_ChallengeMode.IsChallengeModeActive) == "function" then
