@@ -379,6 +379,10 @@ local function OnMemberEnter(self)
            or not GameTooltip or not GameTooltip:IsShown() then
             return
         end
+        if type(GameTooltip.IsOwned) == "function" then
+            local okOwned, isOwned = pcall(GameTooltip.IsOwned, GameTooltip, self)
+            if not okOwned or not isOwned then return end
+        end
 
         local entry, key, specID = GetApplicantEntry(self)
         if entry and AppendEntryLine(GameTooltip, entry, key, specID) then
