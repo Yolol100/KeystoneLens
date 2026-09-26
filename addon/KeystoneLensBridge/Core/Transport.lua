@@ -1,7 +1,7 @@
 -- KeystoneLens transport (forked from ApplicantScout) — encodes Mythic+ applicant
 -- snapshots as QR frames and triggers Screenshot() for the external companion.
 -- Warcraft Logs enrichment happens only in the companion. Historical score
--- slots in APS1 v12/v13 stay zero for backwards-compatible decoding. The QR is normally transient and can be moved for support.
+-- slots in APS1 v12/v13 stay zero for backwards-compatible decoding. The QR is transient and pinned to the top-left capture position.
 --
 -- WHY raw frame, not Ace3: Ace3 shares CallbackHandler-1.0 with other addons
 -- (BetterBags, AlterEgo, ...); their taint contaminates our handler stack and
@@ -89,12 +89,11 @@ local QR_EC_LEVEL = 2                  -- error correction: 1=L 2=M 3=Q 4=H. M=1
 -- _G.MaybeTriggerScreenshot (= nil) and call fails with "attempt to call a nil value".
 local SafeStr, APSPrint, InitDB, StartSession, EndSession, CheckSessionTransition,
       MarkDirty, MaybeTriggerScreenshot,
-      _SetEnabled, _SetDebug, _PauseUntilNextListing,
+      _SetEnabled, _PauseUntilNextListing,
       -- Visibility coordinator + interaction-frame tracking. Replaces direct
-      -- entryCreationKeyState.qrFrame:Show/Hide calls so a single function decides visibility from
-      -- three orthogonal axes: isSessionActive (auto), _qrSuppressedByInteraction
-      -- (auto, see below), qrAlwaysVisible (manual debug override).
-      _RefreshQRVisibility, _RefreshQRMouse, _RecomputeInteractionSuppression,
+      -- entryCreationKeyState.qrFrame:Show/Hide calls so one function owns the
+      -- transient screenshot visibility lease.
+      _RefreshQRVisibility, _RecomputeInteractionSuppression,
       _TryHookInfoPanels, _OnInteractionEvent,
       -- Group Finder entry hooks only capture the host key level. They never
       -- prefill or submit Blizzard's listing form.
@@ -103,11 +102,6 @@ local SafeStr, APSPrint, InitDB, StartSession, EndSession, CheckSessionTransitio
 -- functions assign via bare `x = ...`; without forward-decl, the `local` keyword
 -- on declarations later in this file would shadow them and the bare assignments
 -- silently target globals.
--- qrAlwaysVisible is forward-decl'd here so EndSession (above the slash handler
--- that owns the toggle) can preserve the user's debug visibility setting when
--- session ends.
--- qrMoveMode is opt-in mouse/drag mode. Normal visible QR must not capture
--- mouse input because it sits over gameplay HUD while hosting.
 -- _qrSuppressedByInteraction: orthogonal to session/debug — true while any
 -- tracked Blizzard interaction frame (vendor, NPC, quest, mail, bank, taxi,
 -- character, map, etc.) is open. Hides QR so user can read those windows
@@ -116,8 +110,7 @@ local SafeStr, APSPrint, InitDB, StartSession, EndSession, CheckSessionTransitio
 -- qrForceVisibleForShot is a transport-only visibility lease for force shots
 -- such as EndSession's final clear while an interaction frame has hidden QR.
 local lastSnapshotHash, lastShotTime, pendingShotDirty,
-      qrAlwaysVisible, qrMoveMode, suppressShotsUntil,
-      _qrSuppressedByInteraction, qrForceVisibleForShot,
+      suppressShotsUntil, _qrSuppressedByInteraction, qrForceVisibleForShot,
       qrForceVisibleShotGen, lastQREncodeMode, lastQREncodeBytes,
       lastQREncodeError
 
@@ -281,12 +274,6 @@ SafeStr = function(v, secretFallback)
     return s
 end
 
-local function SafeDiag(v)
-    if IsSecretValue(v) then return "<secret>" end
-    if v == nil then return "nil" end
-    return tostring(v)
-end
-
 local function SafeNumber(v, default)
     if IsSecretValue(v) then return default or 0 end
     if v == nil then return default or 0 end
@@ -418,10 +405,6 @@ InitDB = function()
     end
     listingGeneration = savedListingGeneration
     KeystoneLensBridgeDB.listingGeneration = listingGeneration
-    -- Never resurrect a visible QR debug mode from a prior session. The
-    -- `/klbridge qrvisible` support toggle is deliberately runtime-only.
-    KeystoneLensBridgeDB.qrAlwaysVisible = false
-    entryCreationKeyState.SetQRAlwaysVisible(false)
     KeystoneLensBridgeDB.debugDefaultMigrated =
         entryCreationKeyState.NormalizeSavedBoolean(
             KeystoneLensBridgeDB.debugDefaultMigrated
@@ -438,6 +421,10 @@ InitDB = function()
     KeystoneLensBridgeDB.autoHiMessage = nil
     KeystoneLensBridgeDB.autoHiGreetNewPartyMembers = nil
     KeystoneLensBridgeDB.pveFramePosition = nil
+    -- Remove unreachable pre-release QR support state. Current transport is
+    -- fixed to the top-left capture position and has no qrmove/qrvisible route.
+    KeystoneLensBridgeDB.qrAlwaysVisible = nil
+    KeystoneLensBridgeDB.qrFramePosition = nil
 end
 
 APSPrint = function(msg)
@@ -507,8 +494,7 @@ StartSession = function()
 
     -- QR is no longer shown for the entire session. The first changed snapshot
     -- will paint the QR, take a short visibility lease, wait QR_RENDER_SETTLE_S,
-    -- capture, and hide it again. Manual debug/move modes still flow through
-    -- the same visibility coordinator.
+    -- capture, and hide it again.
     suppressShotsUntil = 0
     _RefreshQRVisibility()
 end
@@ -577,16 +563,15 @@ EndSession = function(emitTerminalClear)
     -- synchronously here would make the screenshot capture an empty screen (no QR),
     -- companion never sees the clear signal, overlay stuck showing pre-end
     -- applicants.
-    -- All gating (qrAlwaysVisible, new-session-started) re-checked at fire
-    -- time so the deferred Hide respects the latest toggle state — important
-    -- for /kl off which resets qrAlwaysVisible right after EndSession.
+    -- Re-check session generation/state at fire time so a fast new listing
+    -- cannot be hidden by the prior session's deferred cleanup.
     if entryCreationKeyState.qrFrame then
         local genAtSchedule = sessionGen
         C_Timer.After(QR_RENDER_SETTLE_S, function()
             -- Re-enter the visibility coordinator only if we're still in the
             -- same gen AND the session has actually ended. _RefreshQRVisibility
-            -- handles qrAlwaysVisible (debug override stays visible across
-            -- session boundaries). Without the gen check a fast Start→End→Start
+            -- owns the transient capture lease. Without the gen check a fast
+            -- Start→End→Start
             -- sequence would apply this old End's "hide" decision atop a fresh
             -- session's StartSession-driven Show.
             if sessionGen == genAtSchedule and not isSessionActive then
@@ -679,114 +664,6 @@ end
 -- One containing frame, sized to whatever QR version we just generated
 -- (adaptive). White background covers the entire frame; row-RLE pool of
 -- black-rectangle textures draws the QR data.
-local function _IsFinitePositionNumber(v)
-    local POSITION_LIMIT = 100000
-    return type(v) == "number" and v == v
-           and v > -POSITION_LIMIT and v < POSITION_LIMIT
-end
-
-local function _NormalizeQRPosition(pos)
-    if type(pos) ~= "table" then return 0, 0, false end
-    local x, y = pos.x, pos.y
-    if not (_IsFinitePositionNumber(x) and _IsFinitePositionNumber(y)) then
-        return 0, 0, false
-    end
-    return x, y, true
-end
-
-local function _ClampQRPosition(x, y, frameSize)
-    frameSize = _IsFinitePositionNumber(frameSize) and frameSize or 64
-    local parentW = UIParent and UIParent:GetWidth() or 0
-    local parentH = UIParent and UIParent:GetHeight() or 0
-    if not _IsFinitePositionNumber(parentW) or parentW <= 0 then parentW = frameSize end
-    if not _IsFinitePositionNumber(parentH) or parentH <= 0 then parentH = frameSize end
-
-    local maxX = parentW - frameSize
-    local minY = frameSize - parentH
-    if maxX < 0 then maxX = 0 end
-    if minY > 0 then minY = 0 end
-
-    if x < 0 then x = 0 elseif x > maxX then x = maxX end
-    if y > 0 then y = 0 elseif y < minY then y = minY end
-    return x, y
-end
-
-local function _GetQRFrameSize()
-    if entryCreationKeyState.qrFrame then
-        local w = entryCreationKeyState.qrFrame:GetWidth()
-        if _IsFinitePositionNumber(w) and w > 0 then return w end
-    end
-    return entryCreationKeyState.qrCurrentSize > 0 and entryCreationKeyState.qrCurrentSize or 64
-end
-
-local function _ApplyQRFramePosition()
-    if not entryCreationKeyState.qrFrame then return end
-    -- Normal transport is deliberately pinned to the extreme top-left because
-    -- the Companion decodes a small top-left crop and this is the least
-    -- intrusive location. A saved position is only honored in explicit move
-    -- mode for support/debugging.
-    local x, y = 0, 0
-    if qrMoveMode then
-        x, y = _NormalizeQRPosition(
-            KeystoneLensBridgeDB and KeystoneLensBridgeDB.qrFramePosition
-        )
-    end
-    x, y = _ClampQRPosition(x, y, _GetQRFrameSize())
-    entryCreationKeyState.qrFrame:ClearAllPoints()
-    entryCreationKeyState.qrFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
-end
-
-local function _SaveQRFramePositionFromFrame()
-    if not (entryCreationKeyState.qrFrame and KeystoneLensBridgeDB) then return false end
-    local frameLeft, frameTop = entryCreationKeyState.qrFrame:GetLeft(), entryCreationKeyState.qrFrame:GetTop()
-    local parentLeft = UIParent and UIParent:GetLeft() or 0
-    local parentTop = UIParent and UIParent:GetTop() or (UIParent and UIParent:GetHeight() or 0)
-    if not (_IsFinitePositionNumber(frameLeft) and _IsFinitePositionNumber(frameTop)
-            and _IsFinitePositionNumber(parentLeft) and _IsFinitePositionNumber(parentTop)) then
-        return false
-    end
-    local x = frameLeft - parentLeft
-    local y = frameTop - parentTop
-    x, y = _ClampQRPosition(x, y, _GetQRFrameSize())
-    if x == 0 and y == 0 then
-        KeystoneLensBridgeDB.qrFramePosition = nil
-    else
-        KeystoneLensBridgeDB.qrFramePosition = { x = x, y = y }
-    end
-    _ApplyQRFramePosition()
-    return true
-end
-
-local function _ResetQRFramePosition()
-    if KeystoneLensBridgeDB then KeystoneLensBridgeDB.qrFramePosition = nil end
-    _ApplyQRFramePosition()
-end
-
-local function _CurrentQRPositionText()
-    if not entryCreationKeyState.qrFrame then return "(frame missing)" end
-    local x, y, valid = _NormalizeQRPosition(KeystoneLensBridgeDB and KeystoneLensBridgeDB.qrFramePosition)
-    x, y = _ClampQRPosition(x, y, _GetQRFrameSize())
-    local saved = valid and "saved" or "default"
-    return string.format("%s @ (%.0f, %.0f)", saved, x, y)
-end
-
-local function _OnQRFrameDragStart(self)
-    if not qrMoveMode or not IsAltKeyDown() then return end
-    local ok = pcall(self.StartMoving, self)
-    if ok then self.apsMoving = true end
-end
-
-local function _OnQRFrameDragStop(self)
-    if not self.apsMoving then return end
-    pcall(self.StopMovingOrSizing, self)
-    self.apsMoving = false
-    if _SaveQRFramePositionFromFrame() then
-        APSPrint("QR position saved: " .. _CurrentQRPositionText())
-    else
-        APSPrint("QR position not saved — frame anchor unavailable")
-    end
-end
-
 local function CreateQRFrame()
     if entryCreationKeyState.qrFrameCreated then return end
     entryCreationKeyState.qrFrame = CreateFrame("Frame", "KeystoneLensBridgeQRFrame", UIParent)
@@ -796,12 +673,8 @@ local function CreateQRFrame()
     -- empirically observed to interfere with input chain on heavy renders.
     entryCreationKeyState.qrFrame:SetFrameStrata("DIALOG")
     entryCreationKeyState.qrFrame:SetSize(64, 64)  -- placeholder; PaintQR resizes per-snapshot
-    entryCreationKeyState.qrFrame:SetMovable(true)
-    entryCreationKeyState.qrFrame:SetClampedToScreen(true)
-    entryCreationKeyState.qrFrame:RegisterForDrag("LeftButton")
-    entryCreationKeyState.qrFrame:SetScript("OnDragStart", _OnQRFrameDragStart)
-    entryCreationKeyState.qrFrame:SetScript("OnDragStop", _OnQRFrameDragStop)
-    _ApplyQRFramePosition()
+    entryCreationKeyState.qrFrame:ClearAllPoints()
+    entryCreationKeyState.qrFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
 
     -- White background — single texture covering the whole frame, BACKGROUND
     -- layer. Black module textures (BORDER layer above) overlay it. ZXing's
@@ -812,28 +685,10 @@ local function CreateQRFrame()
     qrBackground:SetAllPoints(entryCreationKeyState.qrFrame)
 
     entryCreationKeyState.qrFrameCreated = true
-    -- Hidden by default unless the current-session support override is enabled.
-    -- Screenshot dispatch otherwise takes a temporary visibility lease only
-    -- after a changed payload has been painted.
-    if _RefreshQRMouse then _RefreshQRMouse() end
+    -- Hidden by default. Screenshot dispatch takes a temporary visibility
+    -- lease only after a changed payload has been painted.
     entryCreationKeyState.qrFrame:Hide()
     if _RefreshQRVisibility then _RefreshQRVisibility() end
-end
-
--- /klbridge qrvisible state — forces frame to stay visible regardless of session
--- state (debug aid for visual inspection). Forward-declared at top so EndSession
--- can respect the toggle when hiding the frame.
-qrAlwaysVisible = false
-qrMoveMode = false
-
--- Support-only visibility is session-local. Persisting this state made a
--- diagnostic command leak into the next play session and left the QR visible,
--- which is the opposite of the normal transport contract.
-entryCreationKeyState.SetQRAlwaysVisible = function(flag)
-    local enabled = flag == true
-    qrAlwaysVisible = enabled
-    if KeystoneLensBridgeDB then KeystoneLensBridgeDB.qrAlwaysVisible = false end
-    return enabled
 end
 
 -- ───────────────────────────────────────────────────────────
@@ -968,24 +823,13 @@ entryCreationKeyState.ResetInteractionSlotsForWorldTransition = function()
     _RecomputeInteractionSuppression()
 end
 
--- Single visibility decision. Three axes:
---   qrForceVisibleForShot       — auto: changed snapshot is being captured
---   qrAlwaysVisible             — manual: /klbridge qrvisible debug override
---   qrMoveMode                  — manual: /klbridge qrmove drag/debug mode
--- Debug override/move mode wins over normal hidden state (user explicitly said
--- "show me"). Interaction suppression gates non-force dispatch before a lease
--- is acquired.
-_RefreshQRMouse = function()
-    if not entryCreationKeyState.qrFrame then return end
-    entryCreationKeyState.qrFrame:EnableMouse(qrMoveMode and true or false)
-end
-
+-- Single visibility decision. The QR exists only for the transient screenshot
+-- capture lease; interaction suppression gates non-force dispatch before the
+-- lease is acquired.
 _RefreshQRVisibility = function()
     if not entryCreationKeyState.qrFrame then return end
     local wasShown = entryCreationKeyState.qrFrame:IsShown()
-    local shouldShow = qrAlwaysVisible
-                       or qrMoveMode
-                       or qrForceVisibleForShot
+    local shouldShow = qrForceVisibleForShot
     if shouldShow and not wasShown then
         entryCreationKeyState.qrFrame:SetAlpha(1)
         entryCreationKeyState.qrFrame:Show()
@@ -1478,37 +1322,6 @@ local function _ClearEntryCreationKeystoneLevelCache(activityID, questID)
     end
 end
 
-entryCreationKeyState.PrintDiagnostics = function()
-    print("  entry creation hooks: " .. tostring(entryCreationKeyState.lfgEntryCreationHookState.hooksSetup)
-          .. (entryCreationKeyState.lfgEntryCreationHookState.hookError
-              and (" (error: " .. entryCreationKeyState.lfgEntryCreationHookState.hookError .. ")")
-              or ""))
-    local pendingCache = SafeTable(entryCreationKeyState.pendingEntryCreationKeyLevelCache)
-    local publishedCache = SafeTable(entryCreationKeyState.entryCreationKeyLevelCache)
-    print("  pendingEntryCreationCache.keyLevel: "
-          .. tostring(pendingCache and pendingCache.keyLevel or 0))
-    print("  pendingEntryCreationCache.activityID: "
-          .. tostring(pendingCache and pendingCache.activityID or 0))
-    print("  pendingEntryCreationCache.questID: "
-          .. tostring(pendingCache and pendingCache.questID or 0))
-    print("  publishedEntryCreationCache.keyLevel: "
-          .. tostring(publishedCache and publishedCache.keyLevel or 0))
-    print("  publishedEntryCreationCache.activityID: "
-          .. tostring(publishedCache and publishedCache.activityID or 0))
-    print("  publishedEntryCreationCache.questID: "
-          .. tostring(publishedCache and publishedCache.questID or 0))
-    print("  activeListingCache.generation: "
-          .. tostring(entryCreationKeyState.activeListingGeneration))
-    print("  activeListingCache.activityID: "
-          .. tostring(entryCreationKeyState.activeListingCacheContext
-                     and entryCreationKeyState.activeListingCacheContext.activityID or 0))
-    print("  activeListingCache.questID: "
-          .. tostring(entryCreationKeyState.activeListingCacheContext
-                     and entryCreationKeyState.activeListingCacheContext.questID or 0))
-    print("  listing cache decision: "
-          .. tostring(entryCreationKeyState.entryCreationKeyLevelCacheDecision))
-end
-
 entryCreationKeyState.ReconcileEntryCreationKeyCache = function(listingContext)
     listingContext = SafeTable(listingContext)
     if not listingContext then
@@ -1648,42 +1461,6 @@ local function _GetVisibleApplicationViewerKeystoneLevel()
         end
     end
     return 0
-end
-
-local function _GetVisibleApplicationViewerKeystoneDiagnostics()
-    local lines = {}
-    local lfgFrame = _G.LFGListFrame
-    local viewer = lfgFrame and lfgFrame.ApplicationViewer
-    lines[#lines + 1] = "  visibleFrame.viewer: " .. tostring(viewer ~= nil)
-    if not viewer then return lines end
-
-    local shown = "n/a"
-    if type(viewer.IsShown) == "function" then
-        local ok, result = pcall(viewer.IsShown, viewer)
-        shown = ok and tostring(result) or "<error>"
-    end
-    lines[#lines + 1] = "  visibleFrame.viewerShown: " .. shown
-
-    for _, candidate in ipairs(_ApplicationViewerTextCandidates(viewer)) do
-        local label = candidate.label
-        local fontString = candidate.fontString
-        if fontString and type(fontString.GetText) == "function" then
-            local ok, text = pcall(fontString.GetText, fontString)
-            if ok then
-                local isSecret = IsSecretValue(text)
-                local keyLevel = isSecret and 0 or _ExtractKeystoneLevelFromShortKeyText(text)
-                lines[#lines + 1] = "  visibleFrame." .. label
-                    .. ": " .. SafeDiag(text)
-                    .. " secret=" .. tostring(isSecret)
-                    .. " key=" .. tostring(keyLevel)
-            else
-                lines[#lines + 1] = "  visibleFrame." .. label .. ": <error>"
-            end
-        else
-            lines[#lines + 1] = "  visibleFrame." .. label .. ": nil"
-        end
-    end
-    return lines
 end
 
 local function _GetActivityInfoForListing(activityID, questID)
@@ -2165,66 +1942,6 @@ entryCreationKeyState.ShouldDeferRosterChangeForPreflight = function()
     if not deadline then return false end
     local now = GetTime and GetTime() or 0
     return now < deadline
-end
-entryCreationKeyState.PrintRosterInspectBatchDiagnostics = function()
-    local skippedInspectCount = 0
-    local inspectCooldownCount = 0
-    local exhaustedInspectCount = 0
-    if entryCreationKeyState.rosterInspectBatchSkippedGUIDs then
-        for _ in pairs(entryCreationKeyState.rosterInspectBatchSkippedGUIDs) do
-            skippedInspectCount = skippedInspectCount + 1
-        end
-    end
-    for _, retryAfter in pairs(entryCreationKeyState.rosterInspectRetryAfterByGUID) do
-        if SafeNumber(retryAfter, 0) > GetTime() then
-            inspectCooldownCount = inspectCooldownCount + 1
-        end
-    end
-    for _ in pairs(entryCreationKeyState.rosterInspectExhaustedGUIDs) do
-        exhaustedInspectCount = exhaustedInspectCount + 1
-    end
-    local pendingInspectAge = "n/a"
-    if rosterInspectPendingGUID and rosterInspectLastRequestTime > 0 then
-        pendingInspectAge = string.format("%.1fs", GetTime() - rosterInspectLastRequestTime)
-    end
-    local retryText = "no"
-    if entryCreationKeyState.rosterInspectBatchRetryDeadline then
-        retryText = string.format(
-            "yes (%.2fs)",
-            math.max(0, entryCreationKeyState.rosterInspectBatchRetryDeadline - GetTime())
-        )
-    end
-    local loadRetryText = "no"
-    if entryCreationKeyState.rosterLoadRetryDeadline then
-        loadRetryText = string.format(
-            "yes (%.2fs)",
-            math.max(0, entryCreationKeyState.rosterLoadRetryDeadline - GetTime())
-        )
-    end
-    print("  roster inspect batch:")
-    print("    batch pending: "
-          .. tostring(entryCreationKeyState.rosterInspectBatchDirtyPending))
-    print("    pending inspect: " .. tostring(rosterInspectPendingGUID ~= nil)
-          .. " (age: " .. pendingInspectAge .. ")")
-    print("    retry scheduled: " .. retryText)
-    print("    combat deferred: "
-          .. tostring(entryCreationKeyState.rosterInspectBatchCombatDeferred))
-    print("    last block reason: "
-          .. tostring(entryCreationKeyState.rosterInspectBatchLastBlockReason or "none"))
-    print("    skipped count: " .. tostring(skippedInspectCount))
-    print("    retry cooldown count: " .. tostring(inspectCooldownCount))
-    print("    exhausted count: " .. tostring(exhaustedInspectCount))
-    print("    quiet full-party suppression: cached="
-          .. tostring(entryCreationKeyState.lastQuietFullPartySignature ~= nil)
-          .. ", payload="
-          .. tostring(entryCreationKeyState.lastPayloadQuietFullPartySignature ~= nil))
-    print("  roster load retry: " .. loadRetryText
-          .. ", attempt: "
-          .. tostring(entryCreationKeyState.rosterLoadRetryAttempt or 0)
-          .. ", exhausted: "
-          .. tostring(entryCreationKeyState.rosterLoadRetryExhausted == true)
-          .. ", incomplete payload: "
-          .. tostring(entryCreationKeyState.lastPayloadRosterIncomplete))
 end
 entryCreationKeyState.ScheduleRosterInspectBatchRetry = function(delay)
     if not (C_Timer and C_Timer.After) then return false end
@@ -4130,9 +3847,7 @@ local function _AcquireQRShotLease()
     -- corrupt payload bytes from an old-new texture mix.
     qrForceVisibleShotGen = (qrForceVisibleShotGen or 0) + 1
     local forceVisibleShotGen = qrForceVisibleShotGen
-    if not qrAlwaysVisible and not qrMoveMode then
-        qrForceVisibleForShot = true
-    end
+    qrForceVisibleForShot = true
     -- The capture lease is brief and non-interactive. TOOLTIP prevents chat
     -- replacements and other DIALOG-strata UI from covering QR pixels without
     -- leaving a permanently topmost frame after the capture finishes.
@@ -5310,9 +5025,6 @@ local function _RunDisabledCleanup(emitTerminalClear)
         end
     end
 
-    entryCreationKeyState.SetQRAlwaysVisible(false)
-    qrMoveMode = false
-    _RefreshQRMouse()
     _RefreshQRVisibility()
     entryCreationKeyState.RestoreScreenshotCVarsWhenSafe(
         wasSessionActive
@@ -5357,260 +5069,9 @@ _PauseUntilNextListing = function(reason, emitTerminalClear)
     end
 end
 
-_SetDebug = function(flag)
-    flag = not not flag
-    KeystoneLensBridgeDB.debug = flag
-    APSPrint("debug " .. (flag and "ON — every scan/emit will print" or "OFF"))
-end
-
-entryCreationKeyState.ToggleQRMoveMode = function()
-    qrMoveMode = not qrMoveMode
-    _RefreshQRMouse()
-    _RefreshQRVisibility()
-    APSPrint("QR move mode: " .. tostring(qrMoveMode) ..
-             (qrMoveMode and " — Alt+drag the QR frame to reposition" or ""))
-    return qrMoveMode
-end
-
-entryCreationKeyState.ResetQRPositionForSupport = function()
-    _ResetQRFramePosition()
-    local position = _CurrentQRPositionText()
-    APSPrint("QR position reset: " .. position)
-    return position
-end
-
-entryCreationKeyState.RequestForcedSnapshot = function()
-    if not (KeystoneLensBridgeDB and KeystoneLensBridgeDB.enabled) then
-        APSPrint("forced snapshot skipped — enable KeystoneLens Bridge first")
-        return false, "disabled"
-    end
-    if not entryCreationKeyState.qrFrameCreated then
-        APSPrint("forced snapshot skipped — QR frame unavailable; /reload and retry")
-        return false, "qr-frame-unavailable"
-    end
-    local lfgReadsAllowed = not IsChatMessagingLockdown()
-    local entry = CheckSessionTransition(lfgReadsAllowed)
-    MaybeTriggerScreenshot(true, entry, nil, lfgReadsAllowed)
-    APSPrint("forced snapshot requested — check Screenshots/ folder")
-    return true, "requested"
-end
 
 -- ───────────────────────────────────────────────────────────
 -- slash commands
-
-entryCreationKeyState.PrintTroubleshootingStatus = function()
-    print("|cff5da8ffKeystoneLens Bridge|r status:")
-    print("  enabled: " .. tostring(KeystoneLensBridgeDB.enabled))
-    print("  session active: " .. tostring(isSessionActive))
-    print("  session gen: " .. tostring(sessionGen))
-    print("  scanDirty: " .. tostring(scanDirty))
-    print("  group members: "
-          .. tostring(math.floor(SafeNumber(GetNumGroupMembers and GetNumGroupMembers(), 0))))
-    print("  transport poll age: "
-          .. (lastTransportPollTime > 0
-               and string.format("%.1fs", GetTime() - lastTransportPollTime)
-               or "never"))
-    print("  shot suppressed: " .. (suppressShotsUntil and suppressShotsUntil > 0
-          and (GetTime() < suppressShotsUntil
-               and string.format("yes (%.2fs left)", suppressShotsUntil - GetTime())
-               or "no (window expired)")
-          or "no"))
-    local lfgReadsAllowed = not IsChatMessagingLockdown()
-    print("  ChatMessagingLockdown: " .. tostring(not lfgReadsAllowed))
-    print("  leader key request: "
-          .. tostring(entryCreationKeyState.leaderKeystoneLastRequestStatus or "never"))
-    print("  LibKS send: "
-          .. tostring(entryCreationKeyState.libKeystoneLastSendStatus or "never"))
-    -- QR transport diagnostics
-    print("|cff00ff7f---|r QR transport:")
-    print("  QR library loaded: " .. tostring(_qrencode ~= nil))
-    print("  QR frame created: " .. tostring(entryCreationKeyState.qrFrameCreated))
-    if entryCreationKeyState.qrFrame then
-        print("  QR frame visible: " .. tostring(entryCreationKeyState.qrFrame:IsShown()) ..
-              " (always-visible mode: " .. tostring(qrAlwaysVisible) ..
-              ", move mode: " .. tostring(qrMoveMode) .. ")")
-        print(string.format(
-            "  QR frame size: %.2f×%.2f UI units (modules are physical-pixel snapped)",
-            entryCreationKeyState.qrCurrentSize,
-            entryCreationKeyState.qrCurrentSize
-        ))
-        print("  QR frame position: " .. _CurrentQRPositionText())
-        print("  QR mouse enabled: " .. tostring(qrMoveMode and true or false))
-    end
-    print("  QR force-visible shot lease: " .. tostring(qrForceVisibleForShot or false))
-    print("  QR transport phase: " .. tostring(entryCreationKeyState.screenshotController:GetPhase()))
-    print("  QR build/paint active: " .. tostring(entryCreationKeyState.qrPaintInProgress))
-    print("  QR capture settle active: " .. tostring(entryCreationKeyState.qrCaptureInProgress))
-    print("  screenshot result pending: "
-          .. tostring(entryCreationKeyState.screenshotAwaitingResult))
-    print("  last screenshot result: "
-          .. tostring(entryCreationKeyState.screenshotLastResult or "never"))
-    print("  screenshot failure attempts: "
-          .. tostring(entryCreationKeyState.screenshotFailureAttemptCount or 0)
-          .. "/" .. tostring(entryCreationKeyState.SCREENSHOT_FAILURE_MAX_ATTEMPTS))
-    print("  QR job generation: " .. tostring(entryCreationKeyState.qrPaintJobGen or 0))
-    print("  QR job age: " .. (entryCreationKeyState.qrTransportJobStartedAt
-          and string.format("%.1fs", GetTime() - entryCreationKeyState.qrTransportJobStartedAt)
-          or "idle"))
-    print("  QR dirty during job: " .. tostring(entryCreationKeyState.qrPaintDirtyDuringPaint))
-    print("  QR watchdog recoveries: "
-          .. tostring(entryCreationKeyState.qrTransportRecoveryCount or 0)
-          .. " (last: "
-          .. tostring(entryCreationKeyState.qrTransportLastRecoveryReason or "never")
-          .. ")")
-    print("  texture pool: " .. #entryCreationKeyState.qrTexturePool
-          .. " (used last paint: " .. entryCreationKeyState.qrTextureUsed
-          .. ", visible high-water: "
-          .. tostring(entryCreationKeyState.qrTextureVisibleHighWater or 0) .. ")")
-    print("  last snapshot hash: " .. tostring(lastSnapshotHash))
-    print("  last delivery snapshot hash: "
-          .. tostring(entryCreationKeyState.lastDeliverySnapshotHash))
-    print("  last delivery snapshot sends: "
-          .. tostring(entryCreationKeyState.lastDeliverySnapshotSendCount or 0)
-          .. "/" .. tostring(entryCreationKeyState.NONTERMINAL_SNAPSHOT_MIN_SENDS))
-    local overflowState = entryCreationKeyState.qrOverflowState
-    if overflowState then
-        print(string.format(
-            "  overflow transport: fragmented stream=%u generation=%u frame=%d/%d pass=%d/%d queued-newer=%s bytes=%d",
-            overflowState.streamID,
-            overflowState.generation,
-            overflowState.chunkIndex + 1,
-            overflowState.chunkCount,
-            overflowState.pass,
-            entryCreationKeyState.QR_OVERFLOW_MIN_SENDS,
-            tostring(overflowState.queuedNewer == true),
-            overflowState.logicalBytes
-        ))
-    else
-        print("  overflow transport: idle")
-    end
-    print("  overflow superseded generations: "
-          .. tostring(entryCreationKeyState.qrOverflowSupersededCount or 0))
-    print("  overflow last failure: "
-          .. tostring(entryCreationKeyState.qrOverflowLastFailure or "none"))
-    print("  last logical payload: "
-          .. tostring(entryCreationKeyState.lastPayloadTotalBytes or 0)
-          .. " bytes (error: "
-          .. tostring(entryCreationKeyState.lastPayloadBuildError or "none") .. ")")
-    print("  last shot time: " .. (lastShotTime > 0
-          and string.format("%.1fs ago", GetTime() - lastShotTime) or "never"))
-    print("  pending throttled shot: " .. tostring(pendingShotDirty))
-    entryCreationKeyState.PrintRosterInspectBatchDiagnostics()
-    print("  last QR encode: " .. tostring(lastQREncodeMode)
-          .. " (" .. tostring(lastQREncodeBytes) .. " bytes)")
-    print("  last QR error: " .. tostring(lastQREncodeError or "none"))
-    print("  screenshotQuality: " .. tostring(GetCVar("screenshotQuality")))
-    print("  screenshotFormat: " .. tostring(GetCVar("screenshotFormat")))
-    print("  prior screenshotQuality stash: " ..
-          tostring(KeystoneLensBridgeDB.priorScreenshotQuality))
-    print("  prior screenshotFormat stash: " ..
-          tostring(KeystoneLensBridgeDB.priorScreenshotFormat))
-    -- raw API diagnostics
-    print("|cff00ff7f---|r raw API:")
-    if lfgReadsAllowed then
-    print("  HasActiveEntryInfo: " .. tostring(C_LFGList.HasActiveEntryInfo()))
-    local entry = SafeTable(C_LFGList.GetActiveEntryInfo())
-    if entry then
-        local activityIDs = SafeTable(entry.activityIDs)
-        local cleanActivityID = math.floor(SafeNumber(activityIDs and activityIDs[1], 0))
-        if cleanActivityID <= 0 then
-            cleanActivityID = math.floor(SafeNumber(entry.activityID, 0))
-        end
-        local cleanQuestID = math.floor(SafeNumber(entry.questID, 0))
-        local statusActivityInfo =
-            _GetActivityInfoForListing(cleanActivityID, cleanQuestID)
-        local statusDungeonName = _ActivityInfoListingName(statusActivityInfo)
-        print("  entry.activityIDs[1]: " .. SafeDiag(activityIDs and activityIDs[1]))
-        print("  entry.activityID: " .. SafeDiag(entry.activityID))
-        print("  entry.questID: " .. SafeDiag(entry.questID))
-        if cleanActivityID > 0 then
-            if statusActivityInfo then
-                print("  activity.name: " .. statusDungeonName)
-                print("  activity.shortName: " .. SafeDiag(statusActivityInfo.shortName))
-                print("  activity.fullName: " .. SafeDiag(statusActivityInfo.fullName))
-                print("  activity.categoryID: " .. SafeDiag(statusActivityInfo.categoryID))
-                print("  activity.difficultyID: " .. SafeDiag(statusActivityInfo.difficultyID))
-            end
-            if C_LFGList.GetKeystoneForActivity then
-                print("  activity.keystoneLevel: "
-                      .. SafeDiag(C_LFGList.GetKeystoneForActivity(cleanActivityID)))
-            else
-                print("  activity.keystoneLevel: n/a")
-            end
-        end
-        print("  entry.name: " .. SafeDiag(entry.name))
-        print("  entry.comment: " .. SafeDiag(entry.comment))
-        print("  visibleFrame.keyLevel: "
-              .. tostring(_GetVisibleApplicationViewerKeystoneLevel()))
-        local visibleDiagnostics = _GetVisibleApplicationViewerKeystoneDiagnostics()
-        for _, line in ipairs(visibleDiagnostics) do
-            print(line)
-        end
-        local cachedKeyLevel =
-            entryCreationKeyState.PeekCachedEntryCreationKeystoneLevel(
-                cleanActivityID, cleanQuestID)
-        print("  entryCreationCache.keyLevel: " .. tostring(cachedKeyLevel))
-        local statusListingName = SafeStr(entry.name, "?")
-        local statusListingComment = SafeStr(entry.comment, "?")
-        local ownedActivityID, ownedGroupID, ownedLevel, ownedInfo =
-            _GetOwnedKeystoneListingInfo()
-        print("  ownedKeystone.activityID: " .. tostring(ownedActivityID))
-        print("  ownedKeystone.groupID: " .. tostring(ownedGroupID))
-        print("  ownedKeystone.level: " .. tostring(ownedLevel))
-        print("  ownedKeystone.activityName: " .. _ActivityInfoListingName(ownedInfo))
-        local statusUseOwned = ownedLevel > 0
-            and ownedActivityID > 0
-            and ownedInfo
-            and entryCreationKeyState.CanUseOwnedKeystoneForListingFallback()
-            and (ownedActivityID == cleanActivityID
-                or statusDungeonName == "Mythic+"
-                or statusDungeonName == "?")
-        print("  ownedKeystone.usedForListing: " .. tostring(statusUseOwned))
-        local statusDerivedKeyLevel = _GetListingKeystoneLevel(
-            cleanActivityID,
-            cleanQuestID,
-            statusListingName,
-            statusListingComment,
-            statusActivityInfo)
-        if statusDerivedKeyLevel == 0 and statusUseOwned then
-            statusDerivedKeyLevel = ownedLevel
-        end
-        print("  derived keyLevel: "
-              .. tostring(statusDerivedKeyLevel))
-    else
-        print("  entry: nil")
-    end
-    local applicants = SafeTable(C_LFGList.GetApplicants()) or {}
-    print("  GetApplicants count: " .. #applicants)
-    for i = 1, math.min(3, #applicants) do
-        local rawID = applicants[i]
-        local id, info = entryCreationKeyState.GetApplicantInfoForTransport(rawID)
-        if info then
-            print(string.format("    #%d id=%s status=%s numMembers=%s",
-                  i, SafeDiag(id), SafeDiag(_GetApplicantApplicationStatus(info)),
-                  SafeDiag(info.numMembers)))
-        else
-            print(string.format("    #%d id=%s status=n/a numMembers=n/a",
-                  i, SafeDiag(rawID)))
-        end
-    end
-    else
-        print("  raw API skipped during ChatMessagingLockdown")
-    end
-    print("|cff00ff7f---|r host key capture:")
-    entryCreationKeyState.PrintDiagnostics()
-    print("|cff00ff7f---|r visibility:")
-    print("  QR suppressed by interaction: " .. tostring(_qrSuppressedByInteraction or false))
-    local activeKinds = {}
-    for kind, active in pairs(_interactionSlots) do
-        if active then activeKinds[#activeKinds + 1] = tostring(kind) end
-    end
-    print("  active interaction slots: " .. (#activeKinds > 0
-          and table.concat(activeKinds, ", ") or "(none)"))
-    local trackedCount = 0
-    for _ in pairs(_trackedInfoPanels) do trackedCount = trackedCount + 1 end
-    print("  info panels tracked: " .. trackedCount .. "/" .. #INFO_PANEL_FRAMES)
-end
 
 local function PrintPublicStatus()
     local pending = KeystoneLensBridgeDB.autoResumePending and not KeystoneLensBridgeDB.enabled

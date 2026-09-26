@@ -120,7 +120,29 @@ require("applicant_board_rows" in main_app, "live applicant board data adapter i
 require("LIVE_APPLICANT_CACHE_MAX_AGE_SECONDS = 60 * 60" in engine, "live applicant WCL freshness contract changed")
 
 tooltip = read(BRIDGE / "Core" / "Tooltip.lua")
+transport = read(BRIDGE / "Core" / "Transport.lua")
+transport_state = read(BRIDGE / "Core" / "TransportState.lua")
 bridge_toc = read(BRIDGE / "KeystoneLensBridge.toc")
+
+for token in (
+    "ToggleQRMoveMode",
+    "ResetQRPositionForSupport",
+    "RequestForcedSnapshot",
+    "PrintTroubleshootingStatus",
+    "_RefreshQRMouse",
+    "qrMoveMode",
+    "SetQRAlwaysVisible",
+    "_SetDebug = function",
+    "SafeDiag(",
+    "_GetVisibleApplicationViewerKeystoneDiagnostics",
+    "PrintRosterInspectBatchDiagnostics",
+):
+    require(token not in transport, f"obsolete QR/debug support path returned: {token}")
+require("KeystoneLensBridgeDB.qrAlwaysVisible = nil" in transport, "legacy qrAlwaysVisible SavedVariable cleanup is missing")
+require("KeystoneLensBridgeDB.qrFramePosition = nil" in transport, "legacy qrFramePosition SavedVariable cleanup is missing")
+require("qrAlwaysVisible" not in transport_state, "legacy qrAlwaysVisible state default returned")
+require("qrFramePosition" not in transport_state, "legacy qrFramePosition state default returned")
+require('SLASH_KEYSTONELENSBRIDGE1 = "/kl"' in transport, "public /kl command route changed")
 for token, label in (
     ("REQUIRED_DATASET_VERSION = 4", "preload v4"),
     ('REQUIRED_SEASON = "midnight-s2"', "current-season preload guard"),

@@ -10,10 +10,6 @@ local State = {}
 State.DB_DEFAULTS = {
     enabled = true,
     debug = false,
-    -- Legacy key kept only so old SavedVariables can be normalized away.
-    -- Visual QR support mode is session-only in 0.9.3: an old debug toggle
-    -- must never make the transport stay visible after a reload.
-    qrAlwaysVisible = false,
     -- One-shot migration sentinel. Existing installs may have `debug=true`
     -- stuck from a prior `/klbridge debug on` (default flipped from "on-stuck"
     -- to "off after explicit toggle" in this version). When the key is
@@ -26,9 +22,6 @@ State.DB_DEFAULTS = {
     -- nil = no value currently owned by KeystoneLens.
     priorScreenshotQuality = nil,
     priorScreenshotFormat = nil,
-    -- QR frame position. nil = default TOPLEFT. Stored as canonical top-left
-    -- offsets relative to UIParent: {x=number, y=number}. y is normally <= 0.
-    qrFramePosition = nil,
     -- `/kl off` pauses all applicant capture/lookups for the current hosting
     -- session, but arms an automatic resume when a later NEW LFG listing is
     -- detected. Persist this across /reload so pause semantics stay predictable.
