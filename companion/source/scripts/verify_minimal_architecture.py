@@ -137,12 +137,18 @@ for token in (
     "_GetVisibleApplicationViewerKeystoneDiagnostics",
     "PrintRosterInspectBatchDiagnostics",
     "PeekCachedEntryCreationKeystoneLevel",
+    "NormalizeSavedBoolean(KeystoneLensBridgeDB.debug)",
+    "KeystoneLensBridgeDB.debug then",
+    "APS-debug",
+    "KL-debug",
 ):
     require(token not in transport, f"obsolete QR/debug support path returned: {token}")
 require("KeystoneLensBridgeDB.qrAlwaysVisible = nil" in transport, "legacy qrAlwaysVisible SavedVariable cleanup is missing")
 require("KeystoneLensBridgeDB.qrFramePosition = nil" in transport, "legacy qrFramePosition SavedVariable cleanup is missing")
 require("qrAlwaysVisible" not in transport_state, "legacy qrAlwaysVisible state default returned")
 require("qrFramePosition" not in transport_state, "legacy qrFramePosition state default returned")
+require("debug = false" not in transport_state, "legacy debug state default returned")
+require("debugDefaultMigrated" not in transport_state, "legacy debug migration sentinel returned")
 require('SLASH_KEYSTONELENSBRIDGE1 = "/kl"' in transport, "public /kl command route changed")
 for token, label in (
     ("REQUIRED_DATASET_VERSION = 4", "preload v4"),

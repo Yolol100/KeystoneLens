@@ -9,13 +9,6 @@ local State = {}
 
 State.DB_DEFAULTS = {
     enabled = true,
-    debug = false,
-    -- One-shot migration sentinel. Existing installs may have `debug=true`
-    -- stuck from a prior `/klbridge debug on` (default flipped from "on-stuck"
-    -- to "off after explicit toggle" in this version). When the key is
-    -- absent we force `debug=false` exactly once, then mark migrated so
-    -- subsequent user toggles persist normally.
-    debugDefaultMigrated = false,
     -- Pre-capture screenshot CVar values. Each QR screenshot takes a short
     -- lossless-PNG lease and restores the user's prior value afterwards;
     -- persistence lets the next load recover if a reload interrupts a lease.

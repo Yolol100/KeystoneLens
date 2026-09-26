@@ -102,7 +102,7 @@ local SafeStr, APSPrint, InitDB, StartSession, EndSession, CheckSessionTransitio
 -- functions assign via bare `x = ...`; without forward-decl, the `local` keyword
 -- on declarations later in this file would shadow them and the bare assignments
 -- silently target globals.
--- _qrSuppressedByInteraction: orthogonal to session/debug — true while any
+-- _qrSuppressedByInteraction: true while any
 -- tracked Blizzard interaction frame (vendor, NPC, quest, mail, bank, taxi,
 -- character, map, etc.) is open. Hides QR so user can read those windows
 -- without the QR overlay obscuring text. Companion misses ~10-30s of emits
@@ -387,8 +387,6 @@ InitDB = function()
     end
     KeystoneLensBridgeDB.enabled =
         entryCreationKeyState.NormalizeSavedBoolean(KeystoneLensBridgeDB.enabled)
-    KeystoneLensBridgeDB.debug =
-        entryCreationKeyState.NormalizeSavedBoolean(KeystoneLensBridgeDB.debug)
     KeystoneLensBridgeDB.autoResumePending =
         entryCreationKeyState.NormalizeSavedBoolean(KeystoneLensBridgeDB.autoResumePending)
     KeystoneLensBridgeDB.pausedSawNoListing =
@@ -405,15 +403,6 @@ InitDB = function()
     end
     listingGeneration = savedListingGeneration
     KeystoneLensBridgeDB.listingGeneration = listingGeneration
-    KeystoneLensBridgeDB.debugDefaultMigrated =
-        entryCreationKeyState.NormalizeSavedBoolean(
-            KeystoneLensBridgeDB.debugDefaultMigrated
-        )
-    if not KeystoneLensBridgeDB.debugDefaultMigrated then
-        KeystoneLensBridgeDB.debug = false
-        KeystoneLensBridgeDB.debugDefaultMigrated = true
-    end
-
     -- Remove beta-only features from old SavedVariables. They are deliberately
     -- unsupported in the release bridge so transport has no chat/form/UI side effects.
     KeystoneLensBridgeDB.autoCompetitivePlaystyle = nil
@@ -421,6 +410,8 @@ InitDB = function()
     KeystoneLensBridgeDB.autoHiMessage = nil
     KeystoneLensBridgeDB.autoHiGreetNewPartyMembers = nil
     KeystoneLensBridgeDB.pveFramePosition = nil
+    KeystoneLensBridgeDB.debug = nil
+    KeystoneLensBridgeDB.debugDefaultMigrated = nil
     -- Remove unreachable pre-release QR support state. Current transport is
     -- fixed to the top-left capture position and has no qrmove/qrvisible route.
     KeystoneLensBridgeDB.qrAlwaysVisible = nil
@@ -644,18 +635,12 @@ end
 -- ───────────────────────────────────────────────────────────
 -- event dispatch (raw frame; rationale at top)
 
--- Single transition logger: clean→dirty fires the debug print once per
--- scan cycle (avoids spam during applicant bursts where 30+ events fire <1s
--- apart). All events funnel here; behavior decisions live in ScanAndEmit /
+-- All events funnel here; behavior decisions live in ScanAndEmit /
 -- CheckSessionTransition — DRY-locked.
-MarkDirty = function(reason)
-    local wasClean = not scanDirty
+MarkDirty = function()
     scanDirty = true
     entryCreationKeyState.transportDirtyGeneration =
         (entryCreationKeyState.transportDirtyGeneration or 0) + 1
-    if wasClean and KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
-        print("|cff999999[APS-debug]|r DIRTY reason=" .. tostring(reason))
-    end
 end
 
 -- ───────────────────────────────────────────────────────────
@@ -1358,7 +1343,7 @@ entryCreationKeyState.ReconcileEntryCreationKeyCache = function(listingContext)
     entryCreationKeyState.activeListingMaybeChanged = false
 end
 
-local function _RememberEntryCreationKeystoneLevel(panel, reason)
+local function _RememberEntryCreationKeystoneLevel(panel)
     if not panel then return false end
 
     local activityID = panel.selectedActivity
@@ -1399,11 +1384,6 @@ local function _RememberEntryCreationKeystoneLevel(panel, reason)
         keyLevel = keyLevel,
         at = GetTime and GetTime() or 0,
     }
-    if KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
-        print("|cff999999[APS-debug]|r LFG posted key cached: +"
-              .. tostring(keyLevel)
-              .. (reason and (" (" .. reason .. ")") or ""))
-    end
     return true
 end
 
@@ -1414,14 +1394,14 @@ local function _HookEntryCreationKeyCapture(panel)
     local button = panel.ListGroupButton
     if button and type(button.HookScript) == "function" then
         button:HookScript("OnClick", function()
-            _RememberEntryCreationKeystoneLevel(panel, "button")
+            _RememberEntryCreationKeystoneLevel(panel)
         end)
     end
 
     local nameBox = panel.Name
     if nameBox and type(nameBox.HookScript) == "function" then
         nameBox:HookScript("OnEnterPressed", function()
-            _RememberEntryCreationKeystoneLevel(panel, "enter")
+            _RememberEntryCreationKeystoneLevel(panel)
         end)
     end
 end
@@ -3797,11 +3777,6 @@ local function BuildQRMatrix(
                     end
 
                     _SetLastQREncodeDiag(label, #payload, nil)
-                    if APSPrint and KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug and label ~= first_label then
-                        APSPrint(string.format(
-                            "[APS-debug] QR fallback %s (%d %s) -> %s (%d bytes payload, %d textures)",
-                            first_label, first_size, first_unit, label, #payload, renderRuns))
-                    end
                     onComplete(matrix, runs, renderRuns, module_ui_size)
                 end
             )
@@ -3940,7 +3915,7 @@ end
 -- the scan-tick caller — avoids a second API call per scan. nil falls back
 -- to fetching here (force-shot from EndSession / /kl sync).
 -- QR paints for a short visibility lease, then Screenshot runs after the render
--- settle window; manual debug/move modes can keep the frame visible outside it.
+-- settle window; the frame is hidden again after the capture lease ends.
 MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllowed)
     if lfgReadsAllowed == nil then lfgReadsAllowed = true end
     -- "Can't fire" early-returns clear pendingShotDirty so the scan-ticker drain
@@ -4403,8 +4378,6 @@ MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllow
                     APSPrint("WARN: screenshot capture failed during forced capture")
                 elseif not retryBudgetRemaining then
                     APSPrint("WARN: screenshot capture failed repeatedly; snapshot paused until data changes or /kl sync")
-                elseif KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
-                    print("|cff999999[APS-debug]|r screenshot capture failed; snapshot remains pending")
                 end
                 return true
             end
@@ -4473,17 +4446,6 @@ MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllow
                 -- first completed pass retires this generation and rebuilds it.
                 pendingShotDirty = true
             end
-            if KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
-                local overflowProgress = overflowInUse and overflowState
-                    and string.format(
-                        " fragment=%d/%d pass=%d",
-                        math.min(overflowState.chunkIndex + 1, overflowState.chunkCount),
-                        overflowState.chunkCount,
-                        overflowState.pass
-                    ) or ""
-                print(string.format("|cff999999[APS-debug]|r CAP qr_size=%.2fui hash=%x t=%.2f%s",
-                      entryCreationKeyState.qrCurrentSize, h, GetTime(), overflowProgress))
-            end
             entryCreationKeyState.ClearQRTransportJob(jobGen)
             if terminalClearSessionGen then
                 entryCreationKeyState.TakePendingForcedScreenshot()
@@ -4516,12 +4478,6 @@ MaybeTriggerScreenshot = function(force, entryHint, terminalClear, lfgReadsAllow
             end
         end)
 
-        if KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
-            local applicantCount = applicantIDs and tostring(#applicantIDs)
-                or "unavailable"
-            print(string.format("|cff999999[APS-debug]|r SHOT bytes=%d apps=%s hash=%x",
-                  #payload, applicantCount, h))
-        end
     end
 
     local OnQRBuildComplete
@@ -4654,10 +4610,6 @@ _SetupLFGEntryCreationHooks = function()
     end)
     if not ok then
         entryCreationKeyState.lfgEntryCreationHookState.hookError = tostring(err)
-        if KeystoneLensBridgeDB and KeystoneLensBridgeDB.debug then
-            print("|cff999999[KL-debug]|r LFG key capture hook failed: "
-                  .. entryCreationKeyState.lfgEntryCreationHookState.hookError)
-        end
         return false
     end
 
