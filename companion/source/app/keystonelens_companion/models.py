@@ -73,10 +73,6 @@ class PartyMember:
     rio_completed_at_or_above_minus1: int = 0
     rio_dungeon_count: int = 0
 
-    @property
-    def is_self(self) -> bool:
-        return bool(self.flags & 0x01)
-
 
 @dataclass(frozen=True)
 class Snapshot:
