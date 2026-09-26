@@ -1486,7 +1486,9 @@ local function _GetOwnedKeystoneListingInfo()
 end
 
 entryCreationKeyState.CanUseOwnedKeystoneForListingFallback = function()
-    if not (IsInGroup and IsInGroup()) then return true end
+    local grouped = entryCreationKeyState.CleanUnitAPIBoolean(IsInGroup)
+    if grouped == false then return true end
+    if grouped ~= true then return false end
     if entryCreationKeyState.CleanUnitIsGroupLeader("player") == true then return true end
     return false
 end
