@@ -70,6 +70,7 @@ _G.GameTooltip = {
     Show = function(self) self.shown = true end,
     IsShown = function(self) return self.shown end,
     GetOwner = function() return currentOwner end,
+    IsOwned = function(_, owner) return currentOwner == owner end,
     GetUnit = function() return nil, displayedUnit end,
     GetPrimaryTooltipData = function()
         return displayedGuid and { guid = displayedGuid } or nil
@@ -90,10 +91,11 @@ _G.hooksecurefunc = function(target, methodName, hook)
 end
 
 local timers = {}
+local deferTimers = false
 _G.C_Timer = {
     After = function(delay, callback)
         timers[#timers + 1] = { delay = delay, callback = callback }
-        callback()
+        if not deferTimers then callback() end
     end,
 }
 
@@ -386,5 +388,21 @@ unitPostCall(GameTooltip)
 assertEq(#GameTooltip.lines, 1, "group member GUID fallback did not resolve unit tooltip")
 assertEq(GameTooltip.lines[1].right, "DPS 92%", "group member GUID fallback value changed")
 displayedGuid = nil
+
+-- 20. A next-frame applicant fallback must not append into a tooltip that has
+-- been re-owned by another frame before the deferred callback runs.
+clearTooltip()
+currentOwner = member
+displayedUnit = nil
+currentFullName = "Alice-Draenor"
+setCache(62, "DPS", 91.6, now, currentFullName)
+timers = {}
+deferTimers = true
+member.OnEnter(member)
+assertTrue(#timers >= 1, "applicant fallback did not schedule deferred callback")
+currentOwner = {}
+for _, timer in ipairs(timers) do timer.callback() end
+deferTimers = false
+assertEq(#GameTooltip.lines, 0, "stale applicant callback wrote into a re-owned tooltip")
 
 print("KeystoneLens tooltip integration contract passed.")
