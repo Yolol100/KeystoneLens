@@ -2,7 +2,7 @@ name: Verify KeystoneLens
 
 on:
   push:
-    branches: [main]
+    branches: [main, benchmark/existing-behavior-hardening-20260926]
     paths:
       - "addon/**"
       - "companion/source/**"
@@ -101,7 +101,7 @@ jobs:
 
   portable-windows:
     name: Build Windows portable
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/benchmark/existing-behavior-hardening-20260926')
     needs: source
     runs-on: windows-2022
     steps:
