@@ -41,6 +41,8 @@ end
 load_module("addon/KeystoneLensBridge/Core/CapturePolicy.lua")
 load_module("addon/KeystoneLensBridge/Core/TransportState.lua")
 
+load_module("addon/KeystoneLensBridge/Core/ScreenshotController.lua")
+
 local original_new = assert(KL.TransportState and KL.TransportState.New)
 KL.TransportState.New = function(...)
     state = original_new(...)
