@@ -136,6 +136,7 @@ for token in (
     "SafeDiag(",
     "_GetVisibleApplicationViewerKeystoneDiagnostics",
     "PrintRosterInspectBatchDiagnostics",
+    "PeekCachedEntryCreationKeystoneLevel",
 ):
     require(token not in transport, f"obsolete QR/debug support path returned: {token}")
 require("KeystoneLensBridgeDB.qrAlwaysVisible = nil" in transport, "legacy qrAlwaysVisible SavedVariable cleanup is missing")

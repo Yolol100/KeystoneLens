@@ -1291,12 +1291,6 @@ entryCreationKeyState.ResolveCachedEntryCreationKeystoneLevel = function(activit
     end
     return _NormalizeKeystoneLevel(cache.keyLevel), "used", false
 end
-
-entryCreationKeyState.PeekCachedEntryCreationKeystoneLevel = function(activityID, questID)
-    local level = entryCreationKeyState.ResolveCachedEntryCreationKeystoneLevel(activityID, questID)
-    return level
-end
-
 local function _GetCachedEntryCreationKeystoneLevel(activityID, questID)
     local level, decision, clearExpired =
         entryCreationKeyState.ResolveCachedEntryCreationKeystoneLevel(activityID, questID)
