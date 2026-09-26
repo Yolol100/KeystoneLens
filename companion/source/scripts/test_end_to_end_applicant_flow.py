@@ -65,7 +65,7 @@ def build_snapshot_payload(
     body += _text("KeystoneLens test")
     body += _text("phase 3")
     body += b"\x01"
-    body += _text("0.15.0")
+    body += _text("0.15.1")
     body += _text("12.0.5")
     body += bytes([3])
     body += _text("Leader-Draenor")
@@ -101,15 +101,6 @@ def make_qr_screenshot(path: Path, payload: bytes) -> None:
     finally:
         image.close()
 
-
-def wait_for(predicate, timeout: float = 6.0):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        value = predicate()
-        if value:
-            return value
-        time.sleep(0.02)
-    raise AssertionError("timed out waiting for applicant flow")
 
 
 def make_result(job, percentile: float | None = None, *, error: str = ""):
@@ -181,7 +172,7 @@ def snapshot_for(name: str, applicant_id: int, generation: int):
     return Snapshot(
         listing=Listing(key_level=12, dungeon_name="Altar of Fangs"),
         version=VersionInfo(
-            addon_version="0.15.0",
+            addon_version="0.15.1",
             game_version="12.0.5",
             region_id=3,
             player_name="Leader-Draenor",
