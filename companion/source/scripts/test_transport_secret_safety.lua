@@ -31,6 +31,36 @@ _G.C_Timer = {
 }
 _G.issecretvalue = function() return false end
 
+local TWO32 = 4294967296
+local function norm32(value)
+    value = math.floor(tonumber(value) or 0) % TWO32
+    if value < 0 then value = value + TWO32 end
+    return value
+end
+local function bit_loop(left, right, predicate)
+    left, right = norm32(left), norm32(right)
+    local result, bitValue = 0, 1
+    for _ = 1, 32 do
+        local leftBit, rightBit = left % 2, right % 2
+        if predicate(leftBit, rightBit) then result = result + bitValue end
+        left = math.floor(left / 2)
+        right = math.floor(right / 2)
+        bitValue = bitValue * 2
+    end
+    return result
+end
+_G.bit = {
+    bxor = function(left, right)
+        return bit_loop(left, right, function(a, b) return a ~= b end)
+    end,
+    band = function(left, right)
+        return bit_loop(left, right, function(a, b) return a == 1 and b == 1 end)
+    end,
+    rshift = function(value, bits)
+        return math.floor(norm32(value) / (2 ^ bits))
+    end,
+}
+
 local KL = {}
 
 local function load_module(path)
