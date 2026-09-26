@@ -3711,17 +3711,14 @@ local function BuildQRMatrix(
         local attempts = {}
         local hex = _HexEncode(payload)
         if #payload > entryCreationKeyState.QR_LARGE_PAYLOAD_BYTES then
-            table.insert(attempts, { kind = "hex", data = hex, ec_level = 1, size = #hex, unit = "hex" })
+            table.insert(attempts, { kind = "hex", data = hex, ec_level = 1 })
         else
-            table.insert(attempts, { kind = "hex", data = hex, ec_level = QR_EC_LEVEL, size = #hex, unit = "hex" })
+            table.insert(attempts, { kind = "hex", data = hex, ec_level = QR_EC_LEVEL })
             if QR_EC_LEVEL ~= 1 then
-                table.insert(attempts, { kind = "hex", data = hex, ec_level = 1, size = #hex, unit = "hex" })
+                table.insert(attempts, { kind = "hex", data = hex, ec_level = 1 })
             end
         end
 
-        local first_label = nil
-        local first_size = 0
-        local first_unit = nil
         local failure_parts = {}
         local attemptIndex = 1
 
@@ -3747,11 +3744,6 @@ local function BuildQRMatrix(
             end
 
             local label = _QREncodeModeLabel(attempt.kind, attempt.ec_level)
-            if not first_label then
-                first_label = label
-                first_size = attempt.size
-                first_unit = attempt.unit
-            end
             local matrix, err = _TryQrEncode(attempt.data, attempt.ec_level)
             if not matrix then
                 failure_parts[#failure_parts + 1] = label .. ": " .. tostring(err)
