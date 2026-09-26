@@ -3549,7 +3549,6 @@ local function PaintQR(matrix, runs, runCount, module_ui_size, jobGen, onComplet
 
     entryCreationKeyState.qrFrame:SetSize(frame_ui, frame_ui)
     entryCreationKeyState.qrCurrentSize = frame_ui
-    _ApplyQRFramePosition()
 
     entryCreationKeyState.qrTextureUsed = 0
     local runIndex = 1
@@ -4785,7 +4784,6 @@ local EVENT_HANDLERS = {
         entryCreationKeyState.screenshotCVarLeaseGeneration =
             (entryCreationKeyState.screenshotCVarLeaseGeneration or 0) + 1
         entryCreationKeyState.screenshotController:RestoreScreenshotCVars(true)
-        _SaveQRFramePositionFromFrame()
     end,
     PARTY_LEADER_CHANGED             = function()
         entryCreationKeyState.ClearLeaderKeystone()

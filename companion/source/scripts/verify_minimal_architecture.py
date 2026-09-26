@@ -125,6 +125,8 @@ transport_state = read(BRIDGE / "Core" / "TransportState.lua")
 bridge_toc = read(BRIDGE / "KeystoneLensBridge.toc")
 
 for token in (
+    "_ApplyQRFramePosition()",
+    "_SaveQRFramePositionFromFrame()",
     "ToggleQRMoveMode",
     "ResetQRPositionForSupport",
     "RequestForcedSnapshot",
