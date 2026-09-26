@@ -86,23 +86,28 @@ if type(state.CaptureAutoPauseReason) ~= "function" then
     fail("CaptureAutoPauseReason was not installed")
 end
 
-_G.GetNumGroupMembers = function()
-    error("synthetic group-size read failure")
-end
-_G.IsInRaid = function() return false end
 _G.C_ChallengeMode = {
     IsChallengeModeActive = function() return false end,
 }
 _G.IsInInstance = function() return false, "none" end
 
+-- Existing pre-fix IsInRaid handling is already guarded by pcall and must stay
+-- unchanged. Prove that this scenario is green before checking IsInGroup.
+_G.GetNumGroupMembers = function() return 4 end
+_G.IsInRaid = function()
+    error("synthetic raid-state read failure")
+end
 local ok, result = pcall(state.CaptureAutoPauseReason)
 if not ok then
-    fail("group-size API failure propagated: " .. tostring(result))
+    fail("existing raid-state guard regressed: " .. tostring(result))
 end
 if result ~= nil then
-    fail("unknown group size produced a pause reason: " .. tostring(result))
+    fail("raid-state API failure unexpectedly changed capture pause decision")
 end
+print("existing IsInRaid failure guard passed")
 
+-- This is the independent IsInGroup regression. On the original product code
+-- the API exception escapes CanUseOwnedKeystoneForListingFallback.
 if type(state.CanUseOwnedKeystoneForListingFallback) ~= "function" then
     fail("CanUseOwnedKeystoneForListingFallback was not installed")
 end
@@ -116,6 +121,19 @@ if not ok then
 end
 if result ~= false then
     fail("unknown grouped state must fail closed for owned-key fallback")
+end
+
+-- Historical group-size regression remains independently covered by run 268.
+_G.GetNumGroupMembers = function()
+    error("synthetic group-size read failure")
+end
+_G.IsInRaid = function() return false end
+ok, result = pcall(state.CaptureAutoPauseReason)
+if not ok then
+    fail("group-size API failure propagated: " .. tostring(result))
+end
+if result ~= nil then
+    fail("unknown group size produced a pause reason: " .. tostring(result))
 end
 
 print("KeystoneLens transport secret-safety contract passed.")
