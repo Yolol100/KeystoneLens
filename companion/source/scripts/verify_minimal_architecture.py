@@ -149,6 +149,7 @@ require("KeystoneLensBridgeDB.qrAlwaysVisible = nil" in transport, "legacy qrAlw
 require("KeystoneLensBridgeDB.qrFramePosition = nil" in transport, "legacy qrFramePosition SavedVariable cleanup is missing")
 require("qrAlwaysVisible" not in transport_state, "legacy qrAlwaysVisible state default returned")
 require("qrFramePosition" not in transport_state, "legacy qrFramePosition state default returned")
+require("SCREENSHOT_CVAR_RESTORE_DELAY_S" not in transport_state, "unused screenshot CVar restore delay state returned")
 require("debug = false" not in transport_state, "legacy debug state default returned")
 require("debugDefaultMigrated" not in transport_state, "legacy debug migration sentinel returned")
 require('SLASH_KEYSTONELENSBRIDGE1 = "/kl"' in transport, "public /kl command route changed")

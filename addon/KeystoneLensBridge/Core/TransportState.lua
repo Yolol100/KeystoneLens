@@ -110,7 +110,6 @@ function State.New(renderSettleSeconds)
         qrPaintDirtyDuringPaint = false,
         qrTransportJobStartedAt = nil,
         qrTransportJobTerminalClear = false,
-        SCREENSHOT_CVAR_RESTORE_DELAY_S = 0.05,
         screenshotCVarLeaseGeneration = 0,
         SCREENSHOT_FAILURE_MAX_ATTEMPTS = 2,
         screenshotFailureHash = nil,
