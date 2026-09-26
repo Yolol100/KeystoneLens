@@ -1,4 +1,4 @@
-KeystoneLens Portable 0.15.1
+KeystoneLens Portable 0.15.2
 
 Doel
 KeystoneLens toont Warcraft Logs Mythic+-data op twee plekken:

@@ -65,7 +65,7 @@ def build_snapshot_payload(
     body += _text("KeystoneLens test")
     body += _text("phase 3")
     body += b"\x01"
-    body += _text("0.15.1")
+    body += _text("0.15.2")
     body += _text("12.0.5")
     body += bytes([3])
     body += _text("Leader-Draenor")
@@ -172,7 +172,7 @@ def snapshot_for(name: str, applicant_id: int, generation: int):
     return Snapshot(
         listing=Listing(key_level=12, dungeon_name="Altar of Fangs"),
         version=VersionInfo(
-            addon_version="0.15.1",
+            addon_version="0.15.2",
             game_version="12.0.5",
             region_id=3,
             player_name="Leader-Draenor",
