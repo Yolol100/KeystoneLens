@@ -24,6 +24,7 @@ local currentPercentile = 97.4
 local currentOwner = nil
 local displayedUnit = nil
 local displayedRealm = "Draenor"
+local displayedGuid = nil
 local eventFrame = nil
 local unitPostCall = nil
 
@@ -31,10 +32,19 @@ _G.issecretvalue = function() return false end
 _G.time = function() return now end
 _G.GetNormalizedRealmName = function() return "Draenor" end
 _G.GetCurrentRegion = function() return 3 end
-_G.UnitIsPlayer = function(unit) return unit == "unit-player" end
+_G.UnitIsPlayer = function(unit) return unit == "unit-player" or unit == "party1" end
 _G.UnitFullName = function(unit)
-    if unit == "unit-player" then return "Alice", displayedRealm end
+    if unit == "unit-player" or unit == "party1" then return "Alice", displayedRealm end
 end
+_G.UnitGUID = function(unit)
+    if unit == "player" then return "Player-1-SELF" end
+    if unit == "party1" then return "Player-1-PARTY1" end
+    if unit == "unit-player" then return "Player-1-UNIT" end
+    return nil
+end
+_G.UnitTokenFromGUID = function() return nil end
+_G.GetNumGroupMembers = function() return 2 end
+_G.IsInRaid = function() return false end
 
 _G.TooltipUtil = {
     GetDisplayedUnit = function()
@@ -61,6 +71,9 @@ _G.GameTooltip = {
     IsShown = function(self) return self.shown end,
     GetOwner = function() return currentOwner end,
     GetUnit = function() return nil, displayedUnit end,
+    GetPrimaryTooltipData = function()
+        return displayedGuid and { guid = displayedGuid } or nil
+    end,
     HookScript = function(self, event, callback)
         tooltipScripts[event] = tooltipScripts[event] or {}
         table.insert(tooltipScripts[event], callback)
@@ -359,5 +372,19 @@ clearTooltip()
 GameTooltip:AddDoubleLine("Raider.IO M+ Score", "3090")
 assertEq(#GameTooltip.lines, 2, "accented applicant identity did not match preload")
 assertEq(GameTooltip.lines[2].right, "DPS 93%", "accented applicant percentile changed")
+
+-- 19. Retail 12.1 group-member tooltip fallback: the tooltip can expose a
+-- readable GUID while TooltipUtil/GetUnit temporarily provide no unit token.
+-- Existing unit-tooltip enrichment must still resolve the group member.
+currentFullName = "Alice-Draenor"
+displayedRealm = "Draenor"
+displayedUnit = nil
+displayedGuid = "Player-1-PARTY1"
+setCache(62, "DPS", 91.6, now, currentFullName)
+clearTooltip()
+unitPostCall(GameTooltip)
+assertEq(#GameTooltip.lines, 1, "group member GUID fallback did not resolve unit tooltip")
+assertEq(GameTooltip.lines[1].right, "DPS 92%", "group member GUID fallback value changed")
+displayedGuid = nil
 
 print("KeystoneLens tooltip integration contract passed.")
