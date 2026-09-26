@@ -88,19 +88,3 @@ def applicant_board_rows(rows) -> list[tuple[str, str, str]]:
     prepared.sort(key=lambda item: (item[0] < 0, -item[0], item[1].casefold()))
     return [(name, metric_text, grade) for _percentile, name, metric_text, grade in prepared]
 
-
-def percentile_hex(percentile: float) -> str:
-    value = safe_percentile(percentile) or 0.0
-    if value >= 100:
-        return "#e6cc80"
-    if value >= 99:
-        return "#e369a8"
-    if value >= 95:
-        return "#ff8000"
-    if value >= 75:
-        return "#a335ee"
-    if value >= 50:
-        return "#0070dd"
-    if value >= 25:
-        return "#1eff00"
-    return "#666666"
