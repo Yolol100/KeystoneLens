@@ -347,7 +347,8 @@ class WCLClient:
         self._token = ""
         self._token_expires = 0.0
         self.client_secret = ""
-        self._http.close()
+        with self._http_lock:
+            self._http.close()
 
     def _get_token(self) -> str:
         if self._closed.is_set():
