@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import time
 import types
 
@@ -123,7 +124,59 @@ def test_cleanup_is_bounded():
         assert any("wcl: cleanup timed out" in item for item in app._shutdown_warnings)
 
 
+def test_wcl_close_waits_for_inflight_http_boundary():
+    """Closing the shared HTTP session must not race an active WCL request."""
+    client = app_module.WCLClient.__new__(app_module.WCLClient)
+    client._closed = threading.Event()
+    client._token = "token"
+    client._token_expires = time.time() + 60
+    client.client_secret = "secret"
+    client._http_lock = threading.Lock()
+
+    in_flight = threading.Event()
+    release = threading.Event()
+    close_done = threading.Event()
+
+    class FakeHTTP:
+        def __init__(self):
+            self.closed_during_inflight = False
+
+        def close(self):
+            self.closed_during_inflight = in_flight.is_set()
+
+    http = FakeHTTP()
+    client._http = http
+
+    def hold_http_boundary():
+        with client._http_lock:
+            in_flight.set()
+            assert release.wait(timeout=2.0)
+            in_flight.clear()
+
+    worker = threading.Thread(target=hold_http_boundary)
+    worker.start()
+    assert in_flight.wait(timeout=1.0)
+
+    def close_client():
+        client.close()
+        close_done.set()
+
+    closer = threading.Thread(target=close_client)
+    closer.start()
+    time.sleep(0.02)
+    assert not close_done.is_set(), "WCL close raced an active HTTP operation"
+
+    release.set()
+    worker.join(timeout=1.0)
+    closer.join(timeout=1.0)
+    assert not worker.is_alive()
+    assert not closer.is_alive()
+    assert close_done.is_set()
+    assert not http.closed_during_inflight
+
+
 if __name__ == "__main__":
     test_close_path_is_idempotent()
     test_cleanup_is_bounded()
+    test_wcl_close_waits_for_inflight_http_boundary()
     print("KeystoneLens shutdown contract passed.")

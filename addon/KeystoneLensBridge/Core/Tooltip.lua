@@ -233,6 +233,47 @@ local function AppendEntryLine(tooltip, entry, key, specID)
     return true
 end
 
+local function CleanUnitGUID(unit)
+    if type(UnitGUID) ~= "function" then return nil end
+    local ok, guid = pcall(UnitGUID, unit)
+    if not ok or IsSecretValue(guid) or type(guid) ~= "string" or guid == "" then
+        return nil
+    end
+    return guid
+end
+
+local function GetTooltipGUID(tooltip)
+    if not tooltip or type(tooltip.GetPrimaryTooltipData) ~= "function" then
+        return nil
+    end
+    local ok, data = pcall(tooltip.GetPrimaryTooltipData, tooltip)
+    if not ok or IsSecretValue(data) or type(data) ~= "table" then return nil end
+    local guid = data.guid
+    if IsSecretValue(guid) or type(guid) ~= "string" or guid == "" then return nil end
+    return guid
+end
+
+local function GetGroupUnitTokenFromGUID(guid)
+    if not guid then return nil end
+    if CleanUnitGUID("player") == guid then return "player" end
+
+    local inRaid = false
+    if type(IsInRaid) == "function" then
+        local ok, value = pcall(IsInRaid)
+        if ok and not IsSecretValue(value) and value == true then
+            inRaid = true
+        end
+    end
+
+    local prefix = inRaid and "raid" or "party"
+    local limit = inRaid and 40 or 4
+    for index = 1, limit do
+        local unit = prefix .. tostring(index)
+        if CleanUnitGUID(unit) == guid then return unit end
+    end
+    return nil
+end
+
 local function GetDisplayedUnit(tooltip)
     if TooltipUtil and type(TooltipUtil.GetDisplayedUnit) == "function" then
         local ok, _, unit = pcall(TooltipUtil.GetDisplayedUnit, tooltip)
@@ -243,7 +284,15 @@ local function GetDisplayedUnit(tooltip)
         local ok, _, unit = pcall(tooltip.GetUnit, tooltip)
         if ok and unit and not IsSecretValue(unit) then return unit end
     end
-    return nil
+
+    local guid = GetTooltipGUID(tooltip)
+    if not guid then return nil end
+
+    if type(UnitTokenFromGUID) == "function" then
+        local ok, unit = pcall(UnitTokenFromGUID, guid)
+        if ok and unit and not IsSecretValue(unit) then return unit end
+    end
+    return GetGroupUnitTokenFromGUID(guid)
 end
 
 local function OnUnitTooltip(tooltip)
@@ -329,6 +378,10 @@ local function OnMemberEnter(self)
         if not self or not self.IsMouseOver or not self:IsMouseOver()
            or not GameTooltip or not GameTooltip:IsShown() then
             return
+        end
+        if type(GameTooltip.IsOwned) == "function" then
+            local okOwned, isOwned = pcall(GameTooltip.IsOwned, GameTooltip, self)
+            if not okOwned or not isOwned then return end
         end
 
         local entry, key, specID = GetApplicantEntry(self)
