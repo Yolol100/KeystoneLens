@@ -207,7 +207,9 @@ def parse_snapshot(raw: bytes) -> Snapshot:
         blizzard_best_dungeon_key = 0
         blizzard_best_key = 0
         if version >= 12:
-            application_member_count = max(1, min(5, r.u8()))
+            application_member_count = r.u8()
+            if application_member_count < 1 or application_member_count > 5:
+                raise APS1Error("invalid application member count")
             blizzard_score = r.u16()
             blizzard_best_dungeon_key = r.u8()
             blizzard_best_key = r.u8()
