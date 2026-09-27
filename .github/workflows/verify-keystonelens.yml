@@ -66,6 +66,9 @@ jobs:
       - name: Verify APS1 protocol contract
         run: python companion/source/scripts/test_aps1_protocol_contract.py
 
+      - name: Verify transport lifecycle contract
+        run: python companion/source/scripts/test_transport_lifecycle_contract.py
+
       - name: Verify preload database contract
         run: python companion/source/scripts/test_preload_contract.py
 
