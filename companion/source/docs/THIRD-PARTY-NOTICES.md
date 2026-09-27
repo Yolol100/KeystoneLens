@@ -1,4 +1,4 @@
-# Third-party notices — KeystoneLens Companion 0.15.7
+# Third-party notices — KeystoneLens Companion 0.15.8
 
 KeystoneLens Companion uses the following third-party runtime components from their official distributions:
 
