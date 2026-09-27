@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import heapq
 import threading
 import time
 from pathlib import Path
@@ -78,20 +79,31 @@ class ScreenshotWatcher:
     def _list_candidates(self) -> tuple[list[Path], bool]:
         # A screenshot can disappear between iterdir(), is_file() and stat()
         # (manual cleanup, sync tools, or our own committed transport cleanup).
-        # Keep one racing file from aborting the complete polling pass.
-        stamped: list[tuple[int, Path]] = []
-        for path in self.folder.iterdir():
+        # Keep one racing file from aborting the complete polling pass. Retain
+        # only the newest bounded window while scanning so a very large user
+        # Screenshots folder cannot force an unbounded sort/list allocation.
+        limit = INITIAL_BACKFILL_LIMIT if self._initial_backfill_pending else LIVE_WINDOW
+        newest: list[tuple[int, int, Path]] = []
+        for order, path in enumerate(self.folder.iterdir()):
             try:
-                if path.is_file() and path.suffix.casefold() in SUPPORTED_SUFFIXES:
-                    stamped.append((path.stat().st_mtime_ns, path))
+                if not path.is_file() or path.suffix.casefold() not in SUPPORTED_SUFFIXES:
+                    continue
+                item = (path.stat().st_mtime_ns, order, path)
             except OSError:
                 continue
-        files = [path for _mtime, path in sorted(stamped, key=lambda item: item[0])]
+
+            if len(newest) < limit:
+                heapq.heappush(newest, item)
+            elif item[:2] > newest[0][:2]:
+                heapq.heapreplace(newest, item)
+
+        selected = sorted(newest, key=lambda item: (item[0], item[1]))
+        files = [path for _mtime, _order, path in selected]
         if self._initial_backfill_pending:
             # Newest-first recovery prevents an older terminal clear from
             # overwriting a newer complete snapshot after Companion startup.
-            return list(reversed(files[-INITIAL_BACKFILL_LIMIT:])), True
-        return files[-LIVE_WINDOW:], False
+            return list(reversed(files)), True
+        return files, False
 
     def _settled_signature(self, path: Path, backfill: bool = False) -> FileSignature | None:
         try:
