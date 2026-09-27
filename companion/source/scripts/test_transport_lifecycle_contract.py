@@ -122,8 +122,61 @@ def test_older_listing_generation_is_rejected_without_replacing_state() -> None:
         assert engine.stop(timeout=2.0)
 
 
+class _CandidatePath:
+    def __init__(self, index: int):
+        self.index = index
+        self.suffix = ".png"
+
+    def is_file(self) -> bool:
+        return True
+
+    def stat(self):
+        return types.SimpleNamespace(st_mtime_ns=self.index)
+
+
+class _CandidateFolder:
+    def __init__(self, count: int):
+        self.paths = [_CandidatePath(index) for index in range(count)]
+
+    def iterdir(self):
+        return iter(self.paths)
+
+
+def test_candidate_selection_does_not_sort_unbounded_screenshot_history() -> None:
+    watcher = watcher_module.ScreenshotWatcher(_CandidateFolder(5000), lambda _snapshot: None)
+    original_sorted = getattr(watcher_module, "sorted", None)
+    had_override = hasattr(watcher_module, "sorted")
+    builtin_sorted = sorted
+
+    def bounded_sorted(iterable, *args, **kwargs):
+        materialized = list(iterable)
+        assert len(materialized) <= watcher_module.INITIAL_BACKFILL_LIMIT, (
+            "watcher sorted the full unbounded screenshot history before applying its backfill limit"
+        )
+        return builtin_sorted(materialized, *args, **kwargs)
+
+    watcher_module.sorted = bounded_sorted
+    try:
+        backfill, is_backfill = watcher._list_candidates()
+        assert is_backfill is True
+        assert len(backfill) == watcher_module.INITIAL_BACKFILL_LIMIT
+        assert [item.index for item in backfill[:3]] == [4999, 4998, 4997]
+
+        watcher._initial_backfill_pending = False
+        live, is_backfill = watcher._list_candidates()
+        assert is_backfill is False
+        assert len(live) == watcher_module.LIVE_WINDOW
+        assert [item.index for item in live[:3]] == [4970, 4971, 4972]
+    finally:
+        if had_override:
+            watcher_module.sorted = original_sorted
+        else:
+            delattr(watcher_module, "sorted")
+
+
 if __name__ == "__main__":
     test_watcher_stop_during_decode_drops_result_without_delivery()
     test_engine_stop_during_inflight_wcl_drops_late_result()
     test_older_listing_generation_is_rejected_without_replacing_state()
+    test_candidate_selection_does_not_sort_unbounded_screenshot_history()
     print("KeystoneLens transport lifecycle contract passed.")
