@@ -104,6 +104,29 @@ def test_crc_valid_trailing_byte_is_rejected() -> None:
     _assert_rejected(_wrap(12, bytes(body)), "CRC-valid trailing body byte")
 
 
+
+def test_one_byte_offset_drift_is_rejected() -> None:
+    raw = _v12_with_application_member_count(1)
+    body = raw[9:-4]
+    # In a v12 minimal payload the first applicant row starts at body offset 5;
+    # member_idx is the fifth byte of that row. Remove exactly that byte and
+    # rebuild a valid outer length/CRC so the inner cursor must detect the drift.
+    shifted = body[:9] + body[10:]
+    _assert_rejected(_wrap(12, shifted), "one-byte applicant cursor drift")
+
+
+def test_partial_second_applicant_never_returns_a_snapshot() -> None:
+    raw = _v12_with_application_member_count(1)
+    body = bytearray(raw[9:-4])
+    # Change applicant count from 1 to 2, keep the first row intact, then replace
+    # the roster tail with a deliberately truncated second row. parse_snapshot
+    # must fail after partially reading valid data instead of returning partial state.
+    body[3:5] = struct.pack(">H", 2)
+    del body[-2:]
+    body += struct.pack(">I", 202)
+    body += b"\x01"
+    _assert_rejected(_wrap(12, bytes(body)), "partially parsed second applicant")
+
 def test_application_member_count_must_match_encoder_contract() -> None:
     for invalid in (0, 6):
         _assert_rejected(
@@ -117,5 +140,7 @@ if __name__ == "__main__":
     test_unknown_versions_are_rejected()
     test_truncation_is_rejected_at_every_boundary()
     test_crc_valid_trailing_byte_is_rejected()
+    test_one_byte_offset_drift_is_rejected()
+    test_partial_second_applicant_never_returns_a_snapshot()
     test_application_member_count_must_match_encoder_contract()
     print("KeystoneLens APS1 protocol contract passed.")
