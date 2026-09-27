@@ -63,6 +63,9 @@ jobs:
       - name: Verify transport secret safety
         run: lua5.1 companion/source/scripts/test_transport_secret_safety.lua
 
+      - name: Verify APS1 protocol contract
+        run: python companion/source/scripts/test_aps1_protocol_contract.py
+
       - name: Verify preload database contract
         run: python companion/source/scripts/test_preload_contract.py
 
