@@ -26,6 +26,7 @@ from keystonelens_companion.models import Applicant, Listing, Snapshot  # noqa: 
 def _snapshot(name: str, generation: int) -> Snapshot:
     return Snapshot(
         listing=Listing(key_level=12, dungeon_name="Altar of Fangs"),
+        version=None,
         applicants=(Applicant(
             applicant_id=generation,
             member_idx=1,
