@@ -405,4 +405,24 @@ for _, timer in ipairs(timers) do timer.callback() end
 deferTimers = false
 assertEq(#GameTooltip.lines, 0, "stale applicant callback wrote into a re-owned tooltip")
 
+
+-- 21. Midnight tooltip post-calls can surface a tainted unit token that raises
+-- when passed into Unit APIs. Existing enrichment must fail closed without
+-- leaking a Lua error or writing a stale WCL line.
+clearTooltip()
+currentOwner = {}
+displayedUnit = "tainted-unit"
+local originalUnitIsPlayer = UnitIsPlayer
+_G.UnitIsPlayer = function(unit)
+    if unit == "tainted-unit" then
+        error("Secret values are only allowed during untainted execution")
+    end
+    return originalUnitIsPlayer(unit)
+end
+local okTainted, taintedError = pcall(unitPostCall, GameTooltip)
+_G.UnitIsPlayer = originalUnitIsPlayer
+displayedUnit = nil
+assertTrue(okTainted, "tainted unit tooltip error propagated: " .. tostring(taintedError))
+assertEq(#GameTooltip.lines, 0, "tainted unit tooltip wrote a WCL line")
+
 print("KeystoneLens tooltip integration contract passed.")
