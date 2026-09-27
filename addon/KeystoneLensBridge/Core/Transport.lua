@@ -1780,6 +1780,16 @@ entryCreationKeyState.ReadRosterInspectItemLevel = function(unit)
     if not ok or IsSecretValue(ilvl) then return 0 end
     return _ClampUInt16(SafeRoundedNumber(ilvl, 0))
 end
+
+local function _GetInspectSpecializationForRoster(unit)
+    local api = C_SpecializationInfo
+        and C_SpecializationInfo.GetInspectSpecialization
+        or GetInspectSpecialization
+    if type(api) ~= "function" then return 0 end
+    local ok, specID = pcall(api, unit)
+    if not ok then return 0 end
+    return _ClampUInt16(SafeNumber(specID, 0))
+end
 entryCreationKeyState.RosterUnitHasResolvedInspectData = function(unit, guid, isSelf)
     if isSelf == nil then isSelf = _UnitIsSelfForRoster(unit) end
     if isSelf then return true end
@@ -1790,9 +1800,8 @@ entryCreationKeyState.RosterUnitHasResolvedInspectData = function(unit, guid, is
     local cachedSpecID = _ClampUInt16(SafeNumber(rosterInspectSpecByGUID[guid], 0))
     if cachedSpecID > 0 then
         hasSpec = true
-    elseif GetInspectSpecialization then
-        local ok, specID = pcall(GetInspectSpecialization, unit)
-        specID = ok and _ClampUInt16(SafeNumber(specID, 0)) or 0
+    else
+        local specID = _GetInspectSpecializationForRoster(unit)
         if specID > 0 then
             rosterInspectSpecByGUID[guid] = specID
             hasSpec = true
@@ -2149,10 +2158,8 @@ local function _OnRosterInspectReady(guid)
         end
         return false
     end
-    if not GetInspectSpecialization then return false end
     local wasPendingInspect = rosterInspectPendingGUID == guid
-    local ok, specID = pcall(GetInspectSpecialization, unit)
-    specID = ok and _ClampUInt16(SafeNumber(specID, 0)) or 0
+    local specID = _GetInspectSpecializationForRoster(unit)
     local ilvl = entryCreationKeyState.ReadRosterInspectItemLevel(unit)
     local resolved = false
     if specID > 0 then
@@ -2199,13 +2206,10 @@ local function _UnitSpecIDForRoster(unit, guid, isSelf)
             end
         end
     end
-    if GetInspectSpecialization then
-        local ok, specID = pcall(GetInspectSpecialization, unit)
-        specID = ok and _ClampUInt16(SafeNumber(specID, 0)) or 0
-        if specID > 0 then
-            if guid ~= "" then rosterInspectSpecByGUID[guid] = specID end
-            return specID
-        end
+    local specID = _GetInspectSpecializationForRoster(unit)
+    if specID > 0 then
+        if guid ~= "" then rosterInspectSpecByGUID[guid] = specID end
+        return specID
     end
     _MaybeRequestRosterInspect(unit, guid, isSelf)
     return 0
