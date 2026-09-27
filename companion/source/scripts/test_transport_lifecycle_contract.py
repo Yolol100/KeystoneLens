@@ -7,10 +7,16 @@ import sys
 import tempfile
 import threading
 import time
+import types
 
 ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = ROOT / "companion" / "source" / "app"
 sys.path.insert(0, str(APP_ROOT))
+
+requests_stub = types.ModuleType("requests")
+requests_stub.RequestException = RuntimeError
+requests_stub.Session = object
+sys.modules.setdefault("requests", requests_stub)
 
 import keystonelens_companion.watcher as watcher_module  # noqa: E402
 from keystonelens_companion.engine import ApplicantEngine  # noqa: E402
