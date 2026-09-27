@@ -132,4 +132,36 @@ if result ~= nil then
     fail("raid-state API failure unexpectedly changed capture pause decision")
 end
 
+
+-- Midnight 12.1.0 can return secret values from several Unit APIs when unit
+-- identity is restricted. Prove the existing exported cleanse boundaries fail
+-- closed on a secret boolean/GUID instead of branching on or serializing it.
+local SECRET = {}
+_G.issecretvalue = function(value)
+    return value == SECRET
+end
+
+_G.UnitIsGroupLeader = function() return SECRET end
+ok, result = pcall(state.CleanUnitIsGroupLeader, "party1")
+if not ok then
+    fail("secret UnitIsGroupLeader return propagated: " .. tostring(result))
+end
+if result ~= nil then
+    fail("secret UnitIsGroupLeader return must resolve to unknown")
+end
+
+_G.UnitIsUnit = function() return SECRET end
+ok, result = pcall(state.CleanUnitAPIBoolean, UnitIsUnit, "party1", "player")
+if not ok then
+    fail("secret UnitIsUnit return propagated: " .. tostring(result))
+end
+if result ~= nil then
+    fail("secret UnitIsUnit return must resolve to unknown")
+end
+
+local cleanGUID, guidUnknown = state.CleanRosterGUIDValue(SECRET)
+if cleanGUID ~= "" or guidUnknown ~= true then
+    fail("secret roster GUID was not rejected as unknown")
+end
+
 print("KeystoneLens transport secret-safety contract passed.")
