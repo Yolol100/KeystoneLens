@@ -164,4 +164,24 @@ if cleanGUID ~= "" or guidUnknown ~= true then
     fail("secret roster GUID was not rejected as unknown")
 end
 
+
+-- Retail 12.1.0 moved inspect specialization to C_SpecializationInfo and keeps
+-- the old global only as a deprecated compatibility fallback. Existing roster
+-- inspection must continue to resolve spec data when that fallback disappears.
+_G.GetInspectSpecialization = nil
+_G.C_SpecializationInfo = {
+    GetInspectSpecialization = function(unit)
+        if unit == "party1" then return 62 end
+        return 0
+    end,
+}
+local resolvedWithCurrentSpecAPI = state.RosterUnitHasResolvedInspectData(
+    "party1",
+    "Player-1-PARTY1",
+    false
+)
+if resolvedWithCurrentSpecAPI ~= true then
+    fail("current C_SpecializationInfo inspect API did not resolve roster spec")
+end
+
 print("KeystoneLens transport secret-safety contract passed.")
