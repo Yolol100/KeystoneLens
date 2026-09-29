@@ -1,5 +1,9 @@
 # KeystoneLens
 
+> **Other engineering · Lua/Python · World of Warcraft add-on · Windows companion tooling**
+
+This project sits outside my primary WordPress portfolio and is included as additional engineering work.
+
 KeystoneLens is a small Warcraft Logs Mythic+ tooltip for World of Warcraft Retail, with a live Windows applicant board.
 
 ## In game
