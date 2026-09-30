@@ -4,6 +4,19 @@
 
 This project sits outside my primary WordPress portfolio and is included as additional engineering work.
 
+**Developer profile:** [Andrew Baeten](https://github.com/Yolol100) · [Portfolio cases](https://andrewbaeten.nl/category/cases)
+
+## What it demonstrates
+
+| Area | Implementation |
+| --- | --- |
+| WoW integration | Compact in-game Warcraft Logs Mythic+ tooltip data with Raider.IO-aware placement |
+| Companion tooling | Portable Windows companion for applicant lookup and preload generation |
+| Data integrity | Region/spec/dungeon/season validation, stale-data rejection and atomic persistence |
+| External API | OAuth, Warcraft Logs GraphQL readiness checks, quota handling and bounded refresh |
+| Performance | O(1) in-memory lookup with a validated 25,000-record preload contract |
+| Packaging | Reproducible portable builds and extracted ZIP verification |
+
 KeystoneLens is a small Warcraft Logs Mythic+ tooltip for World of Warcraft Retail, with a live Windows applicant board.
 
 ## In game
