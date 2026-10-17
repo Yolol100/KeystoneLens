@@ -4,7 +4,7 @@
 
 This project sits outside my primary WordPress portfolio and is included as additional engineering work.
 
-**Developer profile:** [Andrew Baeten](https://github.com/Yolol100) · [Portfolio cases](https://andrewbaeten.nl/category/cases)
+**Developer profile:** [Andrew Baeten](https://github.com/Yolol100) · [GitHub project index](https://github.com/Yolol100?tab=repositories)
 
 ## What it demonstrates
 
