@@ -2,8 +2,8 @@
 # Every package is explicit because the portable builder uses --no-deps --require-hashes.
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
-Pillow==12.3.0 \
-    --hash=sha256:1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8
+Pillow==13.0.0 \
+    --hash=sha256:9dda0788a9932776a75d8bcc020076edc308ce2508b51f6739a45e3158b3fc42
 zxing-cpp==3.1.1 \
     --hash=sha256:29f98a91148171460b47a942d137ecc90c4b8097636f23cca65263a56bb025d3
 charset-normalizer==3.4.9 \
