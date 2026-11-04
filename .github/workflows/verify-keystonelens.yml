@@ -63,6 +63,9 @@ jobs:
       - name: Verify transport secret safety
         run: lua5.1 companion/source/scripts/test_transport_secret_safety.lua
 
+      - name: Verify hashed Windows requirements match direct runtime pins
+        run: python companion/source/scripts/test_runtime_lock_parity.py
+
       - name: Verify APS1 protocol contract
         run: python companion/source/scripts/test_aps1_protocol_contract.py
 
@@ -110,7 +113,7 @@ jobs:
 
   portable-windows:
     name: Build Windows portable
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     needs: source
     runs-on: windows-2022
     steps:
