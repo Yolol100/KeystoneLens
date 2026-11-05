@@ -7,11 +7,13 @@ on:
       - "addon/**"
       - "companion/source/**"
       - ".github/workflows/verify-keystonelens.yml"
+      - ".github/dependabot.yml"
   pull_request:
     paths:
       - "addon/**"
       - "companion/source/**"
       - ".github/workflows/verify-keystonelens.yml"
+      - ".github/dependabot.yml"
   workflow_dispatch:
 
 concurrency:
@@ -32,6 +34,18 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
+
+      - name: Verify Dependabot runtime source directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s companion/source/runtime/requirements-runtime.txt
+          test -s companion/source/runtime/requirements-runtime.lock
+          grep -Fq 'directory: "/companion/source/runtime"' .github/dependabot.yml
+          if grep -Fq 'directory: "/companion/source/app"' .github/dependabot.yml; then
+            echo 'Dependabot points at a directory with no Python requirements'
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
